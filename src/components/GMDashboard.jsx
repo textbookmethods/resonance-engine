@@ -43,7 +43,7 @@ export default function GMDashboard({ encounter = {}, pushUpdate }) {
                 </div>
 
                 <div className="border-t border-gray-700 pt-4">
-                    <div className="text-gray-400 mb-2">Enemy Pool Tracker</div>
+                    <div className="text-gray-400 mb-2">Global Enemy Pool</div>
                     <div className="flex items-center justify-between bg-black border border-gray-600 p-2">
                         <button className="px-3 text-lg font-bold text-gray-400 hover:text-[#ff6600]" onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - 1)})}>-</button>
                         <span className="text-2xl text-[#ff6600] font-bold">{encounter?.enemyPoolTotal || 0}</span>
@@ -68,7 +68,7 @@ export default function GMDashboard({ encounter = {}, pushUpdate }) {
                     )}
                     
                     {enemiesList.map((enemy, idx) => (
-                        <div key={enemy.uid} className={`border p-3 flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
+                        <div key={enemy.uid} className={`border p-3 flex flex-col xl:flex-row xl:justify-between items-start xl:items-center gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
                             <div className="flex-1 w-full">
                                 <div className="font-bold text-white text-lg flex items-center gap-2 mb-2">
                                     {enemy.name || 'Unknown Entity'} 
@@ -79,19 +79,36 @@ export default function GMDashboard({ encounter = {}, pushUpdate }) {
                                 <div className="mt-2 space-y-1">
                                     {(enemy.abilities || []).map((ability, aIdx) => {
                                         const parts = (ability || '').split(':');
-                                        const name = parts[0];
+                                        const rawName = parts[0];
                                         const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
+                                        
+                                        // NEW: Regex to detect [X Res] or (X Res) in the string
+                                        const costMatch = rawName.match(/\[(\d+)\s*Res\]/i) || rawName.match(/\((\d+)\s*Res\)/i);
+                                        const cost = costMatch ? parseInt(costMatch[1]) : 0;
+                                        const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
+
                                         return (
                                             <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs">
-                                                <span className="font-bold text-[#00f0ff]">{name}</span>
-                                                {desc && <span className="text-gray-400">:{desc}</span>}
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-bold text-[#00f0ff]">{cleanName}</span>
+                                                    {cost > 0 && (
+                                                        <button 
+                                                            className="bg-black border border-[#ff6600] text-[#ff6600] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider hover:bg-[#ff6600] hover:text-black transition-colors shrink-0 ml-2"
+                                                            onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - cost) })}
+                                                            title="Deduct from Global Pool"
+                                                        >
+                                                            -{cost} Res
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {desc && <span className="text-gray-400 block leading-tight">{desc.trim()}</span>}
                                             </div>
                                         );
                                     })}
                                 </div>
                             </div>
                             
-                            <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                            <div className="flex items-center gap-4 w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0 shrink-0">
                                 <button 
                                     className={`text-xs p-1 px-2 border transition-colors whitespace-nowrap ${enemy.siphonActive ? 'bg-purple-900 border-purple-500 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'border-gray-600 text-gray-500 hover:text-white hover:border-gray-400'}`}
                                     onClick={() => {

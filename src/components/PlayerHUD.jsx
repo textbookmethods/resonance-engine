@@ -1,8 +1,17 @@
 /* eslint-disable react/prop-types */
 import { useState } from 'react';
 
+const ARMORY = [
+    { id: 'carbine', name: 'Assault Carbine', range: '1-5', baseDmg: 3, synergyClass: 'Rookie', bonusDesc: '+1 Base Dmg' },
+    { id: 'shotgun', name: 'Breach Shotgun', range: '1-2', baseDmg: 4, synergyClass: 'Vanguard', bonusDesc: '+1 Base Dmg, +1 Front Parry' },
+    { id: 'aegis', name: 'Aegis Pistol & Shield', range: '1-2', baseDmg: 2, synergyClass: 'Paladin', bonusDesc: '+1 Front Parry, +1 Support Intercept' },
+    { id: 'sniper', name: 'Anti-Materiel Rifle', range: '5-8', baseDmg: 4, synergyClass: 'Sniper', bonusDesc: '+2 Base Dmg' },
+    { id: 'amp', name: 'Resonance Catalyst', range: '2-4', baseDmg: 2, synergyClass: 'Conduit', bonusDesc: '+2 Support Intercept' },
+    { id: 'smg', name: 'Twin SMGs', range: '1-3', baseDmg: 3, synergyClass: 'Skirmisher', bonusDesc: '+1 Base Dmg, +1 Backline Evasion' }
+];
+
 export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
-    const [builder, setBuilder] = useState({ d: 0, u: 0, a: 0, alpha: 1.0 });
+    const [builder, setBuilder] = useState({ d: 0, u: 0, a: 0, alpha: 1 });
 
     const updatePlayer = (key, val) => pushUpdate(s => ({ ...s, player: { ...s.player, [key]: val } }));
     
@@ -24,17 +33,40 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
+    // Class Calculation
     let activeClass = "Rookie";
     const front = player.dpFront || 0;
     const supp = player.dpSupport || 0;
     const back = player.dpBack || 0;
-    const wpn = player.weaponBase || 3;
 
     if (front >= 10) activeClass = "Vanguard";
     else if (front >= 5 && supp >= 5) activeClass = "Paladin";
     else if (back >= 10) activeClass = "Sniper";
     else if (supp >= 10) activeClass = "Conduit";
     else if (front >= 5 && back >= 5) activeClass = "Skirmisher";
+
+    // Weapon Synergy Math
+    const activeWeapon = ARMORY.find(w => w.id === (player.weaponId || 'carbine')) || ARMORY[0];
+    const isSynergy = activeClass === activeWeapon.synergyClass;
+
+    let bonusDmg = 0;
+    let bonusFront = 0;
+    let bonusSupp = 0;
+    let bonusBack = 0;
+
+    if (isSynergy) {
+        if (activeWeapon.id === 'shotgun') { bonusDmg += 1; bonusFront += 1; }
+        else if (activeWeapon.id === 'sniper') { bonusDmg += 2; }
+        else if (activeWeapon.id === 'amp') { bonusSupp += 2; }
+        else if (activeWeapon.id === 'aegis') { bonusFront += 1; bonusSupp += 1; }
+        else if (activeWeapon.id === 'smg') { bonusDmg += 1; bonusBack += 1; }
+        else if (activeWeapon.id === 'carbine') { bonusDmg += 1; }
+    }
+
+    const calcBaseDmg = front + activeWeapon.baseDmg + bonusDmg;
+    const calcFrontParry = front + activeWeapon.baseDmg + bonusFront;
+    const calcSuppIntercept = supp + 3 + bonusSupp;
+    const calcBackEvasion = back + 3 + bonusBack;
 
     const activeEnemies = encounter?.enemies || [];
 
@@ -66,25 +98,60 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                         </div>
                     </div>
 
+                    {/* NEW: Armory & Loadout Selection */}
+                    <div className="mt-4 border-t border-gray-700 pt-4">
+                        <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Loadout</h3>
+                        <select 
+                            className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2"
+                            value={player.weaponId || 'carbine'}
+                            onChange={e => updatePlayer('weaponId', e.target.value)}
+                        >
+                            {ARMORY.map(w => (
+                                <option key={w.id} value={w.id}>{w.name} (Range: {w.range})</option>
+                            ))}
+                        </select>
+                        <div className={`p-2 text-xs border ${isSynergy ? 'bg-orange-950/30 border-[#ff6600] text-orange-200' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
+                            <div className="font-bold mb-1 uppercase tracking-wider">{isSynergy ? '✓ Synergy Active' : '⚠ No Class Synergy'}</div>
+                            <div className="flex justify-between">
+                                <span>Base Dmg: {activeWeapon.baseDmg}</span>
+                                <span>Range: {activeWeapon.range} Hexes</span>
+                            </div>
+                            {isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}
+                        </div>
+                    </div>
+
+                    {/* UPDATED: Defensive Actions Dynamic Outputs */}
                     <div className="mt-4 border-t border-gray-700 pt-4 space-y-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3>
                         
                         <div>
-                            <div className="flex justify-between text-gray-300"><span>Base Dmg (Wpn + Front):</span> <span className="font-bold">{wpn + front}</span></div>
+                            <div className="flex justify-between text-gray-300">
+                                <span>Base Dmg (Front + Wpn):</span> 
+                                <span className={bonusDmg > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcBaseDmg}</span>
+                            </div>
                         </div>
                         
                         <div>
-                            <div className="flex justify-between text-[#00f0ff]"><span>Front Parry (Front + Wpn):</span> <span className="font-bold text-white">{front + wpn}</span></div>
+                            <div className="flex justify-between text-[#00f0ff]">
+                                <span>Front Parry (Front + Wpn):</span> 
+                                <span className={bonusFront > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcFrontParry}</span>
+                            </div>
                             <div className="text-[10px] text-gray-500 leading-tight mt-1">Blocks damage originating within your 3-hex front arc.</div>
                         </div>
                         
                         <div>
-                            <div className="flex justify-between text-[#00f0ff]"><span>Support Intercept (Supp + 3):</span> <span className="font-bold text-white">{supp + 3}</span></div>
+                            <div className="flex justify-between text-[#00f0ff]">
+                                <span>Support Intercept (Supp + 3):</span> 
+                                <span className={bonusSupp > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcSuppIntercept}</span>
+                            </div>
                             <div className="text-[10px] text-gray-500 leading-tight mt-1">Mitigates damage targeted at an adjacent ally.</div>
                         </div>
                         
                         <div>
-                            <div className="flex justify-between text-[#00f0ff]"><span>Backline Evasion (Back + 3):</span> <span className="font-bold text-white">{back + 3}</span></div>
+                            <div className="flex justify-between text-[#00f0ff]">
+                                <span>Backline Evasion (Back + 3):</span> 
+                                <span className={bonusBack > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcBackEvasion}</span>
+                            </div>
                             <div className="text-[10px] text-gray-500 leading-tight mt-1">Dodges flanking attacks (rear 3 hexes) or AoE damage.</div>
                         </div>
                     </div>
@@ -121,26 +188,26 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                     <div className="flex justify-between items-center">
                         <span>Utility Weight (u):</span>
                         <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.u} onChange={e=>setBuilder({...builder, u: parseInt(e.target.value)})}>
-                            <option value="0">0</option>
-                            <option value="1">1 (Minor)</option>
-                            <option value="3">3 (Major)</option>
-                            <option value="5">5 (Severe)</option>
+                            <option value={0}>0</option>
+                            <option value={1}>1 (Minor)</option>
+                            <option value={3}>3 (Major)</option>
+                            <option value={5}>5 (Severe)</option>
                         </select>
                     </div>
                     <div className="flex justify-between items-center">
                         <span>AoE Radius (a):</span>
                         <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.a} onChange={e=>setBuilder({...builder, a: parseInt(e.target.value)})}>
-                            <option value="0">0</option>
-                            <option value="1">1 (Small)</option>
-                            <option value="2">2 (Large)</option>
+                            <option value={0}>0</option>
+                            <option value={1}>1 (Small)</option>
+                            <option value={2}>2 (Large)</option>
                         </select>
                     </div>
                     <div className="flex justify-between items-center">
                         <span>Affinity (α):</span>
                         <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.alpha} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value)})}>
-                            <option value="0.75">0.75 (Synergy)</option>
-                            <option value="1.0">1.0 (Neutral)</option>
-                            <option value="2.0">2.0 (Resist)</option>
+                            <option value={0.75}>0.75 (Synergy)</option>
+                            <option value={1}>1.0 (Neutral)</option>
+                            <option value={2}>2.0 (Resist)</option>
                         </select>
                     </div>
                 </div>
@@ -165,7 +232,7 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                 </div>
             </div>
 
-            {/* Active Targets Overlay (Read-Only for Players) */}
+            {/* Active Targets Overlay */}
             <div className="lg:col-span-3 bg-[#1a222c] p-4 border border-slate-700 mt-2">
                 <h2 className="text-[#ff6600] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Active Targets</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -7,7 +7,8 @@ export default function Rulebook() {
         { id: 'core', label: '1. Core Philosophy' },
         { id: 'combat', label: '2. Combat & Defense' },
         { id: 'resonance', label: '3. Resonance & Synthesis' },
-        { id: 'environment', label: '4. The Slate & Terrain' }
+        { id: 'environment', label: '4. The Slate & Terrain' },
+        { id: 'armory', label: '5. The Armory & Synergies' }
     ];
 
     return (
@@ -34,7 +35,7 @@ export default function Rulebook() {
                         <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">1. Core Philosophy</h1>
                         
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Tabula Rasa</h3>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">The Slate</h3>
                             <p className="leading-relaxed">
                                 The foundational rule of the Resonance Engine is negotiation through creation. All combat must start on featureless terrain. The GM will not pre-build walls, obstacles, or cover. Instead, players and GMs must negotiate and build the battlefield dynamically using their abilities, affinities, and Resonance synthesis as the encounter unfolds.
                             </p>
@@ -88,7 +89,7 @@ export default function Rulebook() {
                         <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">3. Resonance & Synthesis</h1>
                         
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Generating Resonance</h3>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Player Resonance</h3>
                             <p className="leading-relaxed mb-4">
                                 Resonance is the fuel for custom abilities. It is capped at 10 points per player. Players earn Resonance through narrative and tactical actions:
                             </p>
@@ -97,6 +98,18 @@ export default function Rulebook() {
                                 <li><strong>Banter / Roleplay:</strong> +1 Res</li>
                                 <li><strong>Tag-Team / Combo:</strong> +2 Res</li>
                                 <li><strong>Exploiting a Weakness:</strong> +2 Res</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">The Global Enemy Pool</h3>
+                            <p className="leading-relaxed mb-4">
+                                Hostiles do not track individual pools. The GM controls a singular <strong>Global Enemy Pool</strong> to execute signature abilities. This limits enemy spam and allows players to strategically weather heavy attacks.
+                            </p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
+                                <li><strong>Start of Encounter:</strong> The GM begins with 10 Resonance.</li>
+                                <li><strong>Per Round:</strong> The GM generates +1 Resonance for every hostile entity currently active on The Slate.</li>
+                                <li><strong>Execution:</strong> Click the Execute [-X Res] button next to an enemy's ability to instantly spend from the Global Pool.</li>
                             </ul>
                         </div>
 
@@ -152,6 +165,41 @@ export default function Rulebook() {
                                     Completely impassable. Breaks Line of Sight (LoS) for attacks.
                                 </li>
                             </ul>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'armory' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">5. The Armory & Synergies</h1>
+                        
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Loadout Flexibility</h3>
+                            <p className="leading-relaxed">
+                                Weapons are <strong>class-limited, but not class-restricted</strong>. This means any character can equip any weapon from the Armory. However, weapons are inherently designed to complement specific combat styles. 
+                            </p>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Class Synergy</h3>
+                            <p className="leading-relaxed mb-4">
+                                When a character equips a weapon that matches their current derived Class, they achieve <strong>Synergy</strong>. The Resonance Engine will automatically detect this link and instantly boost specific defensive actions or base damage thresholds.
+                            </p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
+                                <li><strong>Breach Shotgun:</strong> Synergy with <em>Vanguard</em>. High burst damage, close range, boosts frontline parries.</li>
+                                <li><strong>Aegis Pistol & Shield:</strong> Synergy with <em>Paladin</em>. Defensive focus, boosts both parries and interceptions.</li>
+                                <li><strong>Anti-Materiel Rifle:</strong> Synergy with <em>Sniper</em>. Maximum range, maximum raw damage output.</li>
+                                <li><strong>Resonance Catalyst:</strong> Synergy with <em>Conduit</em>. Mid-range projection, heavily boosts support intercepts.</li>
+                                <li><strong>Twin SMGs:</strong> Synergy with <em>Skirmisher</em>. Close-range mobility, boosts damage and backline evasion.</li>
+                                <li><strong>Assault Carbine:</strong> The reliable fallback. Grants a flat damage boost for <em>Rookies</em> still finding their specialization.</li>
+                            </ul>
+                        </div>
+                        
+                        <div className="bg-gray-900 border border-gray-700 p-4 mt-4">
+                            <span className="text-[#ff6600] font-bold block mb-1 uppercase tracking-wide">Tracking Range</span>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                A weapon's Range (e.g., 1-5 Hexes) strictly dictates the maximum distance a standard Base Attack can travel across The Slate. Custom abilities synthesized with Resonance are bound by the AoE radius ("a") you purchase during creation, not your weapon's default range.
+                            </p>
                         </div>
                     </div>
                 )}
