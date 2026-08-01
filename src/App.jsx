@@ -6,6 +6,7 @@ import PlayerHUD from './components/PlayerHUD';
 import GridBoard from './components/GridBoard';
 import GMDashboard from './components/GMDashboard';
 import Reference from './components/Reference';
+import Rulebook from './components/Rulebook'; // 1. Imported the Rulebook
 
 // REPLACE THESE WITH YOUR ACTUAL FIREBASE KEYS
 const firebaseConfig = {
@@ -24,7 +25,7 @@ if (isFirebaseConfigured && !firebase.apps.length) {
 const DEFAULT_STATE = {
     player: { name: '', title: '', weaponBase: 3, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [] },
     encounter: { round: 1, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10 },
-    grid: Array(150).fill({ type: 'empty', terrain: null }), // Defaults to featureless terrain
+    grid: Array(150).fill({ type: 'empty', terrain: null }),
     tokens: []
 };
 
@@ -69,11 +70,13 @@ export default function App() {
         });
     };
 
+    // 2. Added 'rules' to the tabs array
     const tabs = [
         { id: 'player', label: 'Combat HUD' },
         { id: 'gm', label: 'GM Dashboard' },
-        { id: 'grid', label: 'Tabula Rasa' },
-        { id: 'ref', label: 'Database' }
+        { id: 'grid', label: 'The Slate' },
+        { id: 'ref', label: 'Database' },
+        { id: 'rules', label: 'Rulebook' } 
     ];
 
     return (
@@ -93,11 +96,11 @@ export default function App() {
                             onChange={(e) => setSessionId(e.target.value.toUpperCase())}
                         />
                     </div>
-                    <nav className="flex gap-1 font-mono text-sm uppercase">
+                    <nav className="flex gap-1 font-mono text-sm uppercase overflow-x-auto max-w-[90vw] md:max-w-none pb-1 md:pb-0 scrollbar-hide">
                         {tabs.map(tab => (
                             <button 
                                 key={tab.id}
-                                className={`px-4 py-2 transition-colors border-t border-l border-r ${activeTab === tab.id ? 'bg-[#ff6600] text-black border-[#ff6600] font-bold' : 'bg-[#1a222c] text-gray-400 border-gray-700 hover:text-white'}`}
+                                className={`px-3 py-2 md:px-4 whitespace-nowrap transition-colors border-t border-l border-r ${activeTab === tab.id ? 'bg-[#ff6600] text-black border-[#ff6600] font-bold' : 'bg-[#1a222c] text-gray-400 border-gray-700 hover:text-white'}`}
                                 onClick={() => setActiveTab(tab.id)}
                             >
                                 {tab.label}
@@ -110,8 +113,9 @@ export default function App() {
             <main className="flex-1">
                 {activeTab === 'player' && <PlayerHUD player={gameState.player} encounter={gameState.encounter} pushUpdate={pushUpdate} />}
                 {activeTab === 'gm' && <GMDashboard encounter={gameState.encounter} pushUpdate={pushUpdate} />}
-                {activeTab === 'grid' && <GridBoard grid={gameState.grid} tokens={gameState.tokens} pushUpdate={pushUpdate} />}
+                {activeTab === 'grid' && <GridBoard grid={gameState.grid} tokens={gameState.tokens} encounter={gameState.encounter} pushUpdate={pushUpdate} />}
                 {activeTab === 'ref' && <Reference />}
+                {activeTab === 'rules' && <Rulebook />} {/* 3. Told the app to render the Rulebook component */}
             </main>
         </div>
     );

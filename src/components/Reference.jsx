@@ -69,7 +69,7 @@ export default function Reference() {
                 </div>
 
                 <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Tabula Rasa (Grid Rules)</span>
+                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">The Slate (Grid Rules)</span>
                     <p className="text-gray-400 leading-relaxed text-xs">All combat should start on featureless terrain to encourage player interaction. Players and GMs must negotiate and build the battlefield dynamically using their abilities.</p>
                 </div>
                 
@@ -81,6 +81,15 @@ export default function Reference() {
                 <div>
                     <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Facing Arcs</span>
                     <p className="text-gray-400 leading-relaxed text-xs">Tokens command a 3-hex front arc. Frontline parries only mitigate damage originating within this arc. Attacks from the rear 3 hexes count as Flanking and bypass base mitigation entirely.</p>
+                </div>
+
+                <div>
+                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Defensive Actions</span>
+                    <p className="text-gray-400 leading-relaxed text-xs">
+                        <strong>Front Parry:</strong> Blocks front-arc attacks.<br/>
+                        <strong>Support Intercept:</strong> Protects adjacent allies.<br/>
+                        <strong>Backline Evasion:</strong> Dodges Flanking (rear 3 hexes) and AoE.
+                    </p>
                 </div>
                 
                 <div>

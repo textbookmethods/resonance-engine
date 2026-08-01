@@ -1,6 +1,7 @@
+/* eslint-disable react/prop-types */
 import { useState } from 'react';
 
-export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
+export default function GridBoard({ grid = [], tokens = [], encounter = {}, pushUpdate }) {
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
     
@@ -8,7 +9,6 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
     const COLS = 15;
     const ROWS = 10;
     
-    // Ensure we have a working grid array even if Firebase is still syncing
     const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
     const activeTokens = tokens || [];
 
@@ -42,7 +42,7 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
         pushUpdate(s => {
             const newTokens = [...(s.tokens || [])];
             const idx = newTokens.findIndex(t => t.id === id);
-            if (idx !== -1) newTokens[idx].facing = (newTokens[idx].facing + 1) % 6; // 6-way hex facing
+            if (idx !== -1) newTokens[idx].facing = (newTokens[idx].facing + 1) % 6; 
             return { ...s, tokens: newTokens };
         });
     };
@@ -56,11 +56,10 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
         if (selectedToken === id) setSelectedToken(null);
     };
 
-    // --- HEXAGON RENDERING MATH ---
     const hexWidth = 60;
-    const hexHeight = 69.28; // width * 1.1547 for pointy-top hex
-    const rowHeightOffset = -17.32; // Pulls rows up to interlock (hexHeight * 0.25)
-    const colWidthOffset = 30; // Shifts odd rows right by half a hex (hexWidth / 2)
+    const hexHeight = 69.28; 
+    const rowHeightOffset = -17.32; 
+    const colWidthOffset = 30; 
 
     const renderHexes = () => {
         let hexElements = [];
@@ -71,11 +70,10 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
                 const cell = activeGrid[idx];
                 const tokensHere = activeTokens.filter(t => t.pos === idx);
                 
-                // Terrain Overlays
-                let bgColor = '#1e293b'; // Default empty slate
-                if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; // Yellow/Sand
-                if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; // Purple/Chrono
-                if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; // Blue/Wall
+                let bgColor = '#1e293b'; 
+                if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; 
+                if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; 
+                if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
 
                 rowHexes.push(
                     <div 
@@ -87,42 +85,61 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
                             height: `${hexHeight}px`,
                             backgroundColor: bgColor,
                             clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                            margin: '1px' // Creates the visual grid lines
+                            margin: '1px' 
                         }}
                     >
                         {/* Render Tokens in this Hex */}
-                        {tokensHere.map((t, i) => (
-                            <div 
-                                key={t.id} 
-                                className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold text-black z-10 transition-transform ${t.type === 'player' ? 'bg-[#00f0ff]' : 'bg-[#ff6600]'} ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50' : 'shadow-md shadow-black/80'}`}
-                                onClick={(e) => { e.stopPropagation(); setSelectedToken(selectedToken === t.id ? null : t.id); }}
-                                style={{
-                                    transform: `rotate(${t.facing * 60}deg)`, // 60 degrees per hex face
-                                    marginTop: i > 0 ? `${i * 10}px` : '0', // Slight offset if multiple tokens share a hex
-                                    marginLeft: i > 0 ? `${i * 10}px` : '0'
-                                }}
-                            >
-                                {/* Facing Indicator Arrow */}
-                                <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1" onClick={(e) => rotateToken(e, t.id)}></div>
+                        {tokensHere.map((t, i) => {
+                            let enemyHpDisplay = null;
+                            if (t.type === 'enemy') {
+                                // Match token creation order with GM dashboard roster order
+                                const enemyTokens = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
+                                const tokenIndex = enemyTokens.findIndex(tok => tok.id === t.id);
+                                const linkedEnemy = (encounter?.enemies || [])[tokenIndex];
                                 
-                                <span className="mt-1">{t.type === 'player' ? 'P' : 'E'}</span>
+                                if (linkedEnemy) {
+                                    enemyHpDisplay = (
+                                        <div 
+                                            className="absolute -bottom-6 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap shadow-md z-20"
+                                            style={{ transform: `rotate(-${t.facing * 60}deg)` }} // Counter-rotate so text stays upright
+                                        >
+                                            {linkedEnemy.currentHp} HP
+                                        </div>
+                                    );
+                                }
+                            }
 
-                                {/* Quick Delete Button (Only shows when selected) */}
-                                {selectedToken === t.id && (
-                                    <button 
-                                        className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold border-2 border-black hover:bg-red-500"
-                                        onClick={(e) => deleteToken(e, t.id)}
-                                    >
-                                        ✕
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                            return (
+                                <div 
+                                    key={t.id} 
+                                    className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold text-black z-10 transition-transform ${t.type === 'player' ? 'bg-[#00f0ff]' : 'bg-[#ff6600]'} ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50' : 'shadow-md shadow-black/80'}`}
+                                    onClick={(e) => { e.stopPropagation(); setSelectedToken(selectedToken === t.id ? null : t.id); }}
+                                    style={{
+                                        transform: `rotate(${t.facing * 60}deg)`,
+                                        marginTop: i > 0 ? `${i * 10}px` : '0',
+                                        marginLeft: i > 0 ? `${i * 10}px` : '0'
+                                    }}
+                                >
+                                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1" onClick={(e) => rotateToken(e, t.id)}></div>
+                                    
+                                    <span className="mt-1">{t.type === 'player' ? 'P' : 'E'}</span>
+                                    {enemyHpDisplay}
+
+                                    {selectedToken === t.id && (
+                                        <button 
+                                            className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold border-2 border-black hover:bg-red-500"
+                                            onClick={(e) => deleteToken(e, t.id)}
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 );
             }
             
-            // Apply row offsetting logic
             hexElements.push(
                 <div key={row} className="flex" style={{ 
                     marginLeft: row % 2 !== 0 ? `${colWidthOffset}px` : '0px', 
@@ -137,7 +154,6 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
 
     return (
         <div className="flex flex-col md:flex-row gap-6 h-[75vh]">
-            {/* Toolbox Sidebar */}
             <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0">
                 <div className="text-[#00f0ff] font-bold mb-2 tracking-widest uppercase">Terrain Brush</div>
                 <button 
@@ -181,9 +197,7 @@ export default function GridBoard({ grid = [], tokens = [], pushUpdate }) {
                 </div>
             </div>
 
-            {/* Hex Canvas Canvas */}
             <div className="flex-1 bg-[#05080a] border border-slate-700 overflow-auto p-10 flex items-start justify-center relative touch-none shadow-inner">
-                {/* Visual wrapper for the hexes */}
                 <div className="pt-4 pr-10">
                     {renderHexes()}
                 </div>

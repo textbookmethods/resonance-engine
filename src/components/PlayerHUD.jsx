@@ -66,12 +66,27 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                         </div>
                     </div>
 
-                    <div className="mt-4 border-t border-gray-700 pt-4 space-y-2">
-                        <h3 className="text-gray-400 mb-2">Free Actions Mitigation</h3>
-                        <div className="flex justify-between"><span>Base Dmg (Wpn + Front):</span> <span className="text-white">{wpn + front}</span></div>
-                        <div className="flex justify-between"><span>Front Mitig (Front + Wpn):</span> <span className="text-white">{front + wpn}</span></div>
-                        <div className="flex justify-between"><span>Support Mitig (Supp + 3):</span> <span className="text-white">{supp + 3}</span></div>
-                        <div className="flex justify-between"><span>Backline Mitig (Back + 3):</span> <span className="text-white">{back + 3}</span></div>
+                    <div className="mt-4 border-t border-gray-700 pt-4 space-y-4">
+                        <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3>
+                        
+                        <div>
+                            <div className="flex justify-between text-gray-300"><span>Base Dmg (Wpn + Front):</span> <span className="font-bold">{wpn + front}</span></div>
+                        </div>
+                        
+                        <div>
+                            <div className="flex justify-between text-[#00f0ff]"><span>Front Parry (Front + Wpn):</span> <span className="font-bold text-white">{front + wpn}</span></div>
+                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Blocks damage originating within your 3-hex front arc.</div>
+                        </div>
+                        
+                        <div>
+                            <div className="flex justify-between text-[#00f0ff]"><span>Support Intercept (Supp + 3):</span> <span className="font-bold text-white">{supp + 3}</span></div>
+                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Mitigates damage targeted at an adjacent ally.</div>
+                        </div>
+                        
+                        <div>
+                            <div className="flex justify-between text-[#00f0ff]"><span>Backline Evasion (Back + 3):</span> <span className="font-bold text-white">{back + 3}</span></div>
+                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Dodges flanking attacks (rear 3 hexes) or AoE damage.</div>
+                        </div>
                     </div>
                 </div>
             </div>
