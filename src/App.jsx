@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/database';
 
-// 1. We officially import all 4 of your components here
 import PlayerHUD from './components/PlayerHUD';
 import GridBoard from './components/GridBoard';
 import GMDashboard from './components/GMDashboard';
@@ -25,7 +24,7 @@ if (isFirebaseConfigured && !firebase.apps.length) {
 const DEFAULT_STATE = {
     player: { name: '', title: '', weaponBase: 3, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [] },
     encounter: { round: 1, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10 },
-    grid: Array(150).fill({ type: 'empty', terrain: null }),
+    grid: Array(150).fill({ type: 'empty', terrain: null }), // Defaults to featureless terrain
     tokens: []
 };
 
@@ -70,7 +69,6 @@ export default function App() {
         });
     };
 
-    // 2. We add the GM and Database tabs to the navigation array
     const tabs = [
         { id: 'player', label: 'Combat HUD' },
         { id: 'gm', label: 'GM Dashboard' },
@@ -110,8 +108,7 @@ export default function App() {
             </header>
 
             <main className="flex-1">
-                {/* 3. We tell the engine how to render all 4 components */}
-                {activeTab === 'player' && <PlayerHUD player={gameState.player} pushUpdate={pushUpdate} />}
+                {activeTab === 'player' && <PlayerHUD player={gameState.player} encounter={gameState.encounter} pushUpdate={pushUpdate} />}
                 {activeTab === 'gm' && <GMDashboard encounter={gameState.encounter} pushUpdate={pushUpdate} />}
                 {activeTab === 'grid' && <GridBoard grid={gameState.grid} tokens={gameState.tokens} pushUpdate={pushUpdate} />}
                 {activeTab === 'ref' && <Reference />}
