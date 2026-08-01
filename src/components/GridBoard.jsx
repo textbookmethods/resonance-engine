@@ -5,12 +5,31 @@ export default function GridBoard({ grid = [], tokens = [], encounter = {}, push
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
     
-    // 15x10 Hex Grid (150 total hexes)
+    // Grid Dimensions
     const COLS = 15;
     const ROWS = 10;
     
     const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
     const activeTokens = tokens || [];
+
+    // --- NEW FLAT-TOP HEX MATH ---
+    const R = 36; // Hex radius
+    const hexWidth = R * 2; // 72px
+    const hexHeight = R * Math.sqrt(3); // ~62.35px
+    const stepX = hexWidth * 0.75; // 54px horizontal step between columns
+    const stepY = hexHeight; // 62.35px vertical step between rows
+    
+    const boardWidth = (COLS - 1) * stepX + hexWidth;
+    const boardHeight = (ROWS - 1) * stepY + hexHeight + (stepY / 2);
+
+    const getHexCoords = (idx) => {
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        const x = col * stepX;
+        // Odd columns shift down by half a hex height to interlock
+        const y = row * stepY + (col % 2 === 1 ? stepY / 2 : 0);
+        return { x, y };
+    };
 
     const handleHexClick = (index) => {
         if (paintBrush) {
@@ -56,100 +75,92 @@ export default function GridBoard({ grid = [], tokens = [], encounter = {}, push
         if (selectedToken === id) setSelectedToken(null);
     };
 
-    const hexWidth = 60;
-    const hexHeight = 69.28; 
-    const rowHeightOffset = -17.32; 
-    const colWidthOffset = 30; 
-
-    const renderHexes = () => {
-        let hexElements = [];
-        for (let row = 0; row < ROWS; row++) {
-            let rowHexes = [];
-            for (let col = 0; col < COLS; col++) {
-                const idx = row * COLS + col;
-                const cell = activeGrid[idx];
-                const tokensHere = activeTokens.filter(t => t.pos === idx);
-                
-                let bgColor = '#1e293b'; 
-                if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; 
-                if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; 
-                if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
-
-                rowHexes.push(
-                    <div 
-                        key={idx} 
-                        onClick={() => handleHexClick(idx)}
-                        className="relative flex items-center justify-center cursor-pointer hover:bg-slate-500 transition-colors"
-                        style={{
-                            width: `${hexWidth}px`,
-                            height: `${hexHeight}px`,
-                            backgroundColor: bgColor,
-                            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                            margin: '1px' 
-                        }}
-                    >
-                        {/* Render Tokens in this Hex */}
-                        {tokensHere.map((t, i) => {
-                            let enemyHpDisplay = null;
-                            if (t.type === 'enemy') {
-                                // Match token creation order with GM dashboard roster order
-                                const enemyTokens = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
-                                const tokenIndex = enemyTokens.findIndex(tok => tok.id === t.id);
-                                const linkedEnemy = (encounter?.enemies || [])[tokenIndex];
-                                
-                                if (linkedEnemy) {
-                                    enemyHpDisplay = (
-                                        <div 
-                                            className="absolute -bottom-6 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap shadow-md z-20"
-                                            style={{ transform: `rotate(-${t.facing * 60}deg)` }} // Counter-rotate so text stays upright
-                                        >
-                                            {linkedEnemy.currentHp} HP
-                                        </div>
-                                    );
-                                }
-                            }
-
-                            return (
-                                <div 
-                                    key={t.id} 
-                                    className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold text-black z-10 transition-transform ${t.type === 'player' ? 'bg-[#00f0ff]' : 'bg-[#ff6600]'} ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50' : 'shadow-md shadow-black/80'}`}
-                                    onClick={(e) => { e.stopPropagation(); setSelectedToken(selectedToken === t.id ? null : t.id); }}
-                                    style={{
-                                        transform: `rotate(${t.facing * 60}deg)`,
-                                        marginTop: i > 0 ? `${i * 10}px` : '0',
-                                        marginLeft: i > 0 ? `${i * 10}px` : '0'
-                                    }}
-                                >
-                                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1" onClick={(e) => rotateToken(e, t.id)}></div>
-                                    
-                                    <span className="mt-1">{t.type === 'player' ? 'P' : 'E'}</span>
-                                    {enemyHpDisplay}
-
-                                    {selectedToken === t.id && (
-                                        <button 
-                                            className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold border-2 border-black hover:bg-red-500"
-                                            onClick={(e) => deleteToken(e, t.id)}
-                                        >
-                                            ✕
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                );
-            }
+    const renderHexBackgrounds = () => {
+        return activeGrid.map((cell, idx) => {
+            const { x, y } = getHexCoords(idx);
             
-            hexElements.push(
-                <div key={row} className="flex" style={{ 
-                    marginLeft: row % 2 !== 0 ? `${colWidthOffset}px` : '0px', 
-                    marginTop: row !== 0 ? `${rowHeightOffset}px` : '0px'
-                }}>
-                    {rowHexes}
+            let bgColor = '#1e293b'; 
+            if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; 
+            if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; 
+            if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
+
+            return (
+                <div 
+                    key={`bg-${idx}`} 
+                    onClick={() => handleHexClick(idx)}
+                    className="absolute cursor-pointer hover:bg-slate-500 transition-colors"
+                    style={{
+                        left: `${x}px`,
+                        top: `${y}px`,
+                        width: `${hexWidth}px`,
+                        height: `${hexHeight}px`,
+                        backgroundColor: bgColor,
+                        // NEW: Flat-Top Polygon Shape
+                        clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+                        transform: 'scale(0.95)' // Creates the visual grid lines between hexes
+                    }}
+                ></div>
+            );
+        });
+    };
+
+    const renderTokens = () => {
+        return activeTokens.map((t) => {
+            const { x, y } = getHexCoords(t.pos);
+            
+            // Handle visual offsets if multiple tokens share the same hex
+            const tokensInHex = activeTokens.filter(tok => tok.pos === t.pos);
+            const orderInHex = tokensInHex.findIndex(tok => tok.id === t.id);
+            const offsetX = orderInHex > 0 ? orderInHex * 10 : 0;
+            const offsetY = orderInHex > 0 ? orderInHex * 10 : 0;
+
+            let enemyHpDisplay = null;
+            if (t.type === 'enemy') {
+                const enemyTokens = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
+                const tokenIndex = enemyTokens.findIndex(tok => tok.id === t.id);
+                const linkedEnemy = (encounter?.enemies || [])[tokenIndex];
+                
+                if (linkedEnemy) {
+                    enemyHpDisplay = (
+                        <div 
+                            // pointer-events-none ensures you can still click the hex directly underneath the HP label
+                            className="absolute -bottom-8 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap shadow-md pointer-events-none z-50"
+                            style={{ transform: `rotate(-${t.facing * 60}deg)` }} 
+                        >
+                            {linkedEnemy.currentHp} HP
+                        </div>
+                    );
+                }
+            }
+
+            return (
+                <div 
+                    key={`tok-${t.id}`} 
+                    className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold text-black transition-transform ${t.type === 'player' ? 'bg-[#00f0ff]' : 'bg-[#ff6600]'} ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50 z-40' : 'shadow-md shadow-black/80 z-30'}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedToken(selectedToken === t.id ? null : t.id); }}
+                    style={{
+                        // Center the 40x40 token perfectly within the 72x62.35 hex
+                        left: `${x + (hexWidth / 2 - 20) + offsetX}px`,
+                        top: `${y + (hexHeight / 2 - 20) + offsetY}px`,
+                        transform: `rotate(${t.facing * 60}deg)`
+                    }}
+                >
+                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 cursor-pointer" onClick={(e) => rotateToken(e, t.id)}></div>
+                    
+                    <span className="mt-1">{t.type === 'player' ? 'P' : 'E'}</span>
+                    {enemyHpDisplay}
+
+                    {selectedToken === t.id && (
+                        <button 
+                            className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold border-2 border-black hover:bg-red-500 z-50"
+                            onClick={(e) => deleteToken(e, t.id)}
+                        >
+                            ✕
+                        </button>
+                    )}
                 </div>
             );
-        }
-        return hexElements;
+        });
     };
 
     return (
@@ -197,9 +208,11 @@ export default function GridBoard({ grid = [], tokens = [], encounter = {}, push
                 </div>
             </div>
 
-            <div className="flex-1 bg-[#05080a] border border-slate-700 overflow-auto p-10 flex items-start justify-center relative touch-none shadow-inner">
-                <div className="pt-4 pr-10">
-                    {renderHexes()}
+            <div className="flex-1 bg-[#05080a] border border-slate-700 overflow-auto p-4 md:p-10 touch-none shadow-inner">
+                {/* NEW: Decoupled Render Container */}
+                <div className="relative mx-auto" style={{ width: boardWidth, height: boardHeight }}>
+                    {renderHexBackgrounds()}
+                    {renderTokens()}
                 </div>
             </div>
         </div>
