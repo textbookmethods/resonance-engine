@@ -1,14 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState } from 'react';
-
-const ARMORY = [
-    { id: 'carbine', name: 'Assault Carbine', range: '1-5', baseDmg: 3, synergyClass: 'Rookie', bonusDesc: '+1 Base Dmg' },
-    { id: 'shotgun', name: 'Breach Shotgun', range: '1-2', baseDmg: 4, synergyClass: 'Vanguard', bonusDesc: '+1 Base Dmg, +1 Front Parry' },
-    { id: 'aegis', name: 'Aegis Pistol & Shield', range: '1-2', baseDmg: 2, synergyClass: 'Paladin', bonusDesc: '+1 Front Parry, +1 Support Intercept' },
-    { id: 'sniper', name: 'Anti-Materiel Rifle', range: '5-8', baseDmg: 4, synergyClass: 'Sniper', bonusDesc: '+2 Base Dmg' },
-    { id: 'amp', name: 'Resonance Catalyst', range: '2-4', baseDmg: 2, synergyClass: 'Conduit', bonusDesc: '+2 Support Intercept' },
-    { id: 'smg', name: 'Twin SMGs', range: '1-3', baseDmg: 3, synergyClass: 'Skirmisher', bonusDesc: '+1 Base Dmg, +1 Backline Evasion' }
-];
+import { armory } from '../data/armory';
 
 export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
     const [builder, setBuilder] = useState({ d: 0, u: 0, a: 0, alpha: 1 });
@@ -33,7 +25,6 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    // Class Calculation
     let activeClass = "Rookie";
     const front = player.dpFront || 0;
     const supp = player.dpSupport || 0;
@@ -45,8 +36,8 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
     else if (supp >= 10) activeClass = "Conduit";
     else if (front >= 5 && back >= 5) activeClass = "Skirmisher";
 
-    // Weapon Synergy Math
-    const activeWeapon = ARMORY.find(w => w.id === (player.weaponId || 'carbine')) || ARMORY[0];
+    // Safely extract the weapon or default to the first one in the armory
+    const activeWeapon = armory.find(w => w.id === (player.weaponId || 'w01')) || armory[0];
     const isSynergy = activeClass === activeWeapon.synergyClass;
 
     let bonusDmg = 0;
@@ -55,12 +46,10 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
     let bonusBack = 0;
 
     if (isSynergy) {
-        if (activeWeapon.id === 'shotgun') { bonusDmg += 1; bonusFront += 1; }
-        else if (activeWeapon.id === 'sniper') { bonusDmg += 2; }
-        else if (activeWeapon.id === 'amp') { bonusSupp += 2; }
-        else if (activeWeapon.id === 'aegis') { bonusFront += 1; bonusSupp += 1; }
-        else if (activeWeapon.id === 'smg') { bonusDmg += 1; bonusBack += 1; }
-        else if (activeWeapon.id === 'carbine') { bonusDmg += 1; }
+        bonusDmg = activeWeapon.bonusDmg || 0;
+        bonusFront = activeWeapon.bonusFront || 0;
+        bonusSupp = activeWeapon.bonusSupp || 0;
+        bonusBack = activeWeapon.bonusBack || 0;
     }
 
     const calcBaseDmg = front + activeWeapon.baseDmg + bonusDmg;
@@ -76,7 +65,35 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
             <div className="bg-[#1a222c] p-4 border border-slate-700">
                 <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Character Uplink</h2>
                 <div className="space-y-4">
-                    <input className="w-full bg-black border border-gray-600 p-2 text-white outline-none" placeholder="Callsign / Name" value={player.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
+                    
+                    <input 
+                        className="w-full bg-black border border-gray-600 p-2 text-white outline-none" 
+                        placeholder="Callsign / Name" 
+                        value={player.name || ''} 
+                        onChange={e => updatePlayer('name', e.target.value)} 
+                    />
+
+                    {/* NEW: Live HP Tracker */}
+                    <div className="flex gap-4">
+                        <div className="flex-1 bg-black border border-red-500 p-2">
+                            <label className="text-red-500 text-[10px] font-bold tracking-widest block mb-1 text-center">CURRENT HP</label>
+                            <input 
+                                type="number" 
+                                className="w-full bg-transparent text-white text-2xl font-bold outline-none text-center" 
+                                value={player.currentHp ?? 30} 
+                                onChange={e => updatePlayer('currentHp', parseInt(e.target.value) || 0)} 
+                            />
+                        </div>
+                        <div className="flex-1 bg-black border border-gray-600 p-2">
+                            <label className="text-gray-400 text-[10px] font-bold tracking-widest block mb-1 text-center">MAX HP</label>
+                            <input 
+                                type="number" 
+                                className="w-full bg-transparent text-gray-300 text-2xl font-bold outline-none text-center" 
+                                value={player.maxHp ?? 30} 
+                                onChange={e => updatePlayer('maxHp', parseInt(e.target.value) || 0)} 
+                            />
+                        </div>
+                    </div>
                     
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700">
                         <span>CLASS:</span>
@@ -98,15 +115,14 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                         </div>
                     </div>
 
-                    {/* NEW: Armory & Loadout Selection */}
                     <div className="mt-4 border-t border-gray-700 pt-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Loadout</h3>
                         <select 
                             className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2"
-                            value={player.weaponId || 'carbine'}
+                            value={player.weaponId || 'w01'}
                             onChange={e => updatePlayer('weaponId', e.target.value)}
                         >
-                            {ARMORY.map(w => (
+                            {armory.map(w => (
                                 <option key={w.id} value={w.id}>{w.name} (Range: {w.range})</option>
                             ))}
                         </select>
@@ -120,7 +136,6 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                         </div>
                     </div>
 
-                    {/* UPDATED: Defensive Actions Dynamic Outputs */}
                     <div className="mt-4 border-t border-gray-700 pt-4 space-y-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3>
                         
@@ -187,27 +202,27 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                     </div>
                     <div className="flex justify-between items-center">
                         <span>Utility Weight (u):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.u} onChange={e=>setBuilder({...builder, u: parseInt(e.target.value)})}>
-                            <option value={0}>0</option>
-                            <option value={1}>1 (Minor)</option>
-                            <option value={3}>3 (Major)</option>
-                            <option value={5}>5 (Severe)</option>
+                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.u)} onChange={e=>setBuilder({...builder, u: parseInt(e.target.value)})}>
+                            <option value="0">0</option>
+                            <option value="1">1 (Minor)</option>
+                            <option value="3">3 (Major)</option>
+                            <option value="5">5 (Severe)</option>
                         </select>
                     </div>
                     <div className="flex justify-between items-center">
                         <span>AoE Radius (a):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.a} onChange={e=>setBuilder({...builder, a: parseInt(e.target.value)})}>
-                            <option value={0}>0</option>
-                            <option value={1}>1 (Small)</option>
-                            <option value={2}>2 (Large)</option>
+                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: parseInt(e.target.value)})}>
+                            <option value="0">0</option>
+                            <option value="1">1 (Small)</option>
+                            <option value="2">2 (Large)</option>
                         </select>
                     </div>
                     <div className="flex justify-between items-center">
                         <span>Affinity (α):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={builder.alpha} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value)})}>
-                            <option value={0.75}>0.75 (Synergy)</option>
-                            <option value={1}>1.0 (Neutral)</option>
-                            <option value={2}>2.0 (Resist)</option>
+                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.alpha)} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value)})}>
+                            <option value="0.75">0.75 (Synergy)</option>
+                            <option value="1">1.0 (Neutral)</option>
+                            <option value="2">2.0 (Resist)</option>
                         </select>
                     </div>
                 </div>
@@ -220,7 +235,6 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
                     Install to HUD
                 </button>
 
-                {/* Saved Custom Cards */}
                 <div className="grid grid-cols-2 gap-2">
                     {(player.customCards || []).map(c => (
                         <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs cursor-pointer hover:bg-gray-900" onClick={() => updatePlayer('resPool', Math.max(0, (player.resPool || 0) - c.cost))}>

@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 import { useState } from 'react';
 
 export default function Rulebook() {
@@ -57,7 +58,7 @@ export default function Rulebook() {
                         <div>
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Facing Arcs & Flanking</h3>
                             <p className="leading-relaxed">
-                                Every entity commands a 3-hex front arc. Orientation matters. Attacks originating from the rear 3 hexes count as Flanking, which completely bypasses base mitigation stats. Position carefully and watch your token's facing indicator.
+                                Every entity commands a 3-hex front arc. Orientation matters. Attacks originating from the rear 3 hexes count as Flanking, which completely bypasses base mitigation stats. Position carefully and watch your token&apos;s facing indicator.
                             </p>
                         </div>
 
@@ -109,7 +110,7 @@ export default function Rulebook() {
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
                                 <li><strong>Start of Encounter:</strong> The GM begins with 10 Resonance.</li>
                                 <li><strong>Per Round:</strong> The GM generates +1 Resonance for every hostile entity currently active on The Slate.</li>
-                                <li><strong>Execution:</strong> Click the Execute [-X Res] button next to an enemy's ability to instantly spend from the Global Pool.</li>
+                                <li><strong>Execution:</strong> Click the Execute [-X Res] button next to an enemy&apos;s ability to instantly spend from the Global Pool.</li>
                             </ul>
                         </div>
 
@@ -146,7 +147,7 @@ export default function Rulebook() {
                         <div>
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
                             <p className="leading-relaxed mb-4">
-                                Because combat starts on a blank slate, the environment is painted by the abilities players and enemies use (determined by the Utility Weight "u").
+                                Because combat starts on a blank slate, the environment is painted by the abilities players and enemies use (determined by the Utility Weight &quot;u&quot;).
                             </p>
                             <ul className="space-y-4 list-none">
                                 <li className="bg-black border-l-4 border-yellow-500 p-3">
@@ -186,19 +187,19 @@ export default function Rulebook() {
                                 When a character equips a weapon that matches their current derived Class, they achieve <strong>Synergy</strong>. The Resonance Engine will automatically detect this link and instantly boost specific defensive actions or base damage thresholds.
                             </p>
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
-                                <li><strong>Breach Shotgun:</strong> Synergy with <em>Vanguard</em>. High burst damage, close range, boosts frontline parries.</li>
-                                <li><strong>Aegis Pistol & Shield:</strong> Synergy with <em>Paladin</em>. Defensive focus, boosts both parries and interceptions.</li>
-                                <li><strong>Anti-Materiel Rifle:</strong> Synergy with <em>Sniper</em>. Maximum range, maximum raw damage output.</li>
-                                <li><strong>Resonance Catalyst:</strong> Synergy with <em>Conduit</em>. Mid-range projection, heavily boosts support intercepts.</li>
-                                <li><strong>Twin SMGs:</strong> Synergy with <em>Skirmisher</em>. Close-range mobility, boosts damage and backline evasion.</li>
-                                <li><strong>Assault Carbine:</strong> The reliable fallback. Grants a flat damage boost for <em>Rookies</em> still finding their specialization.</li>
+                                <li><strong>Heavy Melee (e.g., Halberds, Zweihanders):</strong> Synergy with <em>Vanguard</em>. High damage, boosts frontline parries.</li>
+                                <li><strong>Shields & Maces:</strong> Synergy with <em>Paladin</em>. Defensive focus, heavily boosts both parries and interceptions.</li>
+                                <li><strong>Longbows & Muskets:</strong> Synergy with <em>Sniper</em>. Maximum range, maximum raw damage output.</li>
+                                <li><strong>Catalysts (e.g., Tomes, Censers):</strong> Synergy with <em>Conduit</em>. Mid-range projection, boosts support intercepts.</li>
+                                <li><strong>Agile Arms (e.g., Daggers, Pistols):</strong> Synergy with <em>Skirmisher</em>. Close-range mobility, boosts damage and backline evasion.</li>
+                                <li><strong>Standard Issue (e.g., Shortswords, Clubs):</strong> The reliable fallback. Grants a flat damage boost for <em>Rookies</em> still finding their specialization.</li>
                             </ul>
                         </div>
                         
                         <div className="bg-gray-900 border border-gray-700 p-4 mt-4">
                             <span className="text-[#ff6600] font-bold block mb-1 uppercase tracking-wide">Tracking Range</span>
                             <p className="text-xs text-gray-400 leading-relaxed">
-                                A weapon's Range (e.g., 1-5 Hexes) strictly dictates the maximum distance a standard Base Attack can travel across The Slate. Custom abilities synthesized with Resonance are bound by the AoE radius ("a") you purchase during creation, not your weapon's default range.
+                                A weapon&apos;s Range (e.g., 1-5 Hexes) strictly dictates the maximum distance a standard Base Attack can travel across The Slate. Custom abilities synthesized with Resonance are bound by the AoE radius (&quot;a&quot;) you purchase during creation, not your weapon&apos;s default range.
                             </p>
                         </div>
                     </div>
