@@ -4,14 +4,16 @@ import { armory } from '../data/armory';
 
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 
-export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pushUpdate }) {
+export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
     const [builder, setBuilder] = useState({ name: '', d: 0, u: 0, a: 0, alpha: 1 });
 
+    const player = players[localId] || {};
+
     const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
-    const updatePlayer = (key, val) => safePush(s => ({ ...s, player: { ...(s.player || {}), [key]: val } }));
+    const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
     const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
     
-    const front = safeInt(player?.dpFront); const supp = safeInt(player?.dpSupport); const back = safeInt(player?.dpBack);
+    const front = safeInt(player.dpFront); const supp = safeInt(player.dpSupport); const back = safeInt(player.dpBack);
 
     let activeClass = "Rookie";
     if (front >= 10) activeClass = "Vanguard"; else if (front >= 5 && supp >= 5) activeClass = "Paladin";
@@ -19,7 +21,7 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
     else if (front >= 5 && back >= 5) activeClass = "Skirmisher"; else if (supp >= 5 && back >= 5) activeClass = "Saboteur"; 
 
     const derivedMaxHp = 20 + (front * 3) + (supp * 2) + (back * 1);
-    const activeWeapon = safeArmory.find(w => w.id === (player?.weaponId || 'w01')) || safeArmory[0];
+    const activeWeapon = safeArmory.find(w => w.id === (player.weaponId || 'w01')) || safeArmory[0];
     const isSynergy = front >= (activeWeapon.reqF || 0) && supp >= (activeWeapon.reqS || 0) && back >= (activeWeapon.reqB || 0);
 
     let bonusDmg = 0; let bonusFront = 0; let bonusSupp = 0; let bonusBack = 0;
@@ -31,30 +33,30 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
     const calcBackEvasion = back + 3 + bonusBack;
     const calcCost = Math.ceil((builder.alpha || 1) * ((builder.d || 0) + (builder.u || 0) + Math.pow((builder.a || 0), 2)));
 
-    const myToken = tokens.find(t => t.type === 'player' && t.name === player?.name);
+    const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
 
     const refreshTurn = () => {
         safePush(s => {
-            const newP = { ...s.player, usedParry: false, usedIntercept: false, usedEvade: false };
+            const newP = { ...(s.players?.[localId] || {}), usedParry: false, usedIntercept: false, usedEvade: false };
             const newT = [...(s.tokens || [])];
-            const tIdx = newT.findIndex(t => t.type === 'player' && t.name === s.player?.name);
+            const tIdx = newT.findIndex(t => t.type === 'player' && t.refId === localId);
             if (tIdx !== -1) newT[tIdx].movementRemaining = newT[tIdx].speed ?? 3;
-            return { ...s, player: newP, tokens: newT };
+            return { ...s, players: { ...s.players, [localId]: newP }, tokens: newT };
         });
     };
 
     const saveToHUD = () => {
-        const cards = player?.customCards || [];
+        const cards = player.customCards || [];
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
         updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
     };
     const saveToSpellbook = () => {
-        const archived = player?.savedSkills || [];
+        const archived = player.savedSkills || [];
         updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
         alert("Ability archived to Spellbook!");
     };
     const rollImprovised = () => {
-        updatePlayer('resPool', Math.max(0, safeInt(player?.resPool) - 1));
+        updatePlayer('resPool', Math.max(0, safeInt(player.resPool) - 1));
         const roll = Math.floor(Math.random() * 6) + 1;
         let outcome = "";
         if (roll <= 2) outcome = "Backlash (Failure & Consequence)";
@@ -63,8 +65,9 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    const primeWeapon = () => { safePush(s => ({ ...s, activeAction: { source: player?.name || 'Player', isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } })); };
-    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player?.name || 'Player', isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range } })); };
+    const primeMove = () => { safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); };
+    const primeWeapon = () => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } })); };
+    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range } })); };
 
     const reqString = (w) => {
         if (!w.reqF && !w.reqS && !w.reqB) return 'No Req';
@@ -73,7 +76,7 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
         return `Req: ${r.join('/')}`;
     };
 
-    const customCards = player?.customCards || [];
+    const customCards = player.customCards || [];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
@@ -86,12 +89,12 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
                 </div>
 
                 <div className="space-y-4">
-                    <input className="w-full bg-black border border-gray-600 p-2 text-white outline-none" placeholder="Callsign / Name" value={player?.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
+                    <input className="w-full bg-black border border-gray-600 p-2 text-white outline-none" placeholder="Callsign / Name" value={player.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
 
                     <div className="flex gap-4">
                         <div className="flex-1 bg-black border border-red-500 p-2">
                             <label className="text-red-500 text-[10px] font-bold tracking-widest block mb-1 text-center">CURRENT HP</label>
-                            <input type="number" className="w-full bg-transparent text-white text-3xl font-bold outline-none text-center" value={player?.currentHp ?? derivedMaxHp} onChange={e => updatePlayer('currentHp', safeInt(e.target.value))} />
+                            <input type="number" className="w-full bg-transparent text-white text-3xl font-bold outline-none text-center" value={player.currentHp ?? derivedMaxHp} onChange={e => updatePlayer('currentHp', safeInt(e.target.value))} />
                         </div>
                         <div className="flex-1 bg-black border border-gray-600 p-2">
                             <label className="text-gray-400 text-[10px] font-bold tracking-widest block mb-1 text-center">MAX HP (DP SCALED)</label>
@@ -99,6 +102,10 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
                         </div>
                     </div>
                     
+                    <button className="w-full bg-[#22c55e] text-black font-bold p-2 uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_10px_rgba(34,197,94,0.3)]" onClick={primeMove}>
+                        + Prime Movement Array
+                    </button>
+
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700">
                         <span>CLASS:</span><span>{activeClass}</span>
                     </div>
@@ -120,7 +127,7 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
 
                     <div className="mt-4 border-t border-gray-700 pt-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Loadout</h3>
-                        <select className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2 text-xs" value={player?.weaponId || 'w01'} onChange={e => updatePlayer('weaponId', e.target.value)}>
+                        <select className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2 text-xs" value={player.weaponId || 'w01'} onChange={e => updatePlayer('weaponId', e.target.value)}>
                             {safeArmory.map(w => ( <option key={w.id} value={w.id}>{w.name} [{reqString(w)}]</option> ))}
                         </select>
                         <div className={`p-2 text-xs border relative ${isSynergy ? 'bg-orange-950/30 border-[#ff6600] text-orange-200' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
@@ -146,45 +153,46 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player?.usedParry ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Front Parry:</span>
-                                <span className={player?.usedParry ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcFrontParry}</span>
+                                <span className={player.usedParry ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Front Parry:</span>
+                                <span className={player.usedParry ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcFrontParry}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedParry ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedParry} onClick={() => updatePlayer('usedParry', true)}>
-                                {player?.usedParry ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedParry ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedParry} onClick={() => updatePlayer('usedParry', true)}>
+                                {player.usedParry ? 'EXHAUSTED' : 'AVAILABLE'}
                             </button>
                         </div>
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player?.usedIntercept ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Support Intercept:</span>
-                                <span className={player?.usedIntercept ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcSuppIntercept}</span>
+                                <span className={player.usedIntercept ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Support Intercept:</span>
+                                <span className={player.usedIntercept ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcSuppIntercept}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedIntercept ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedIntercept} onClick={() => updatePlayer('usedIntercept', true)}>
-                                {player?.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedIntercept ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedIntercept} onClick={() => updatePlayer('usedIntercept', true)}>
+                                {player.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE'}
                             </button>
                         </div>
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player?.usedEvade ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Backline Evasion:</span>
-                                <span className={player?.usedEvade ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcBackEvasion}</span>
+                                <span className={player.usedEvade ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Backline Evasion:</span>
+                                <span className={player.usedEvade ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcBackEvasion}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedEvade ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedEvade} onClick={() => updatePlayer('usedEvade', true)}>
-                                {player?.usedEvade ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedEvade ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedEvade} onClick={() => updatePlayer('usedEvade', true)}>
+                                {player.usedEvade ? 'EXHAUSTED' : 'AVAILABLE'}
                             </button>
                         </div>
+                        <div className="text-[10px] text-gray-500 pt-1 leading-tight text-right">App automatically tracks/exhausts Parry & Evasion on grid hit.</div>
                     </div>
                 </div>
             </div>
 
             <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col items-center justify-center">
                 <h2 className="text-[#ff6600] font-bold text-2xl tracking-widest mb-4">RESONANCE</h2>
-                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{player?.resPool || 0}<span className="text-3xl text-gray-500">/10</span></div>
+                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{player.resPool || 0}<span className="text-3xl text-gray-500">/10</span></div>
                 <div className="grid grid-cols-2 gap-2 w-full mb-4">
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 1))}>+1 Basic Atk</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 2))}>+2 Tag-Team</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 2))}>+2 Exploit</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 1))}>+1 Banter</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 1))}>+1 Basic Atk</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 2))}>+2 Tag-Team</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 2))}>+2 Exploit</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 1))}>+1 Banter</button>
                 </div>
                 <button className="w-full bg-[#00f0ff] text-black font-bold p-3 uppercase hover:bg-white transition-colors" onClick={rollImprovised}>Improvised Skill (-1 Res)</button>
             </div>

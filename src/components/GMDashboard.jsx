@@ -29,8 +29,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
         pushUpdate(s => {
             const newRound = (s.encounter?.round || 0) + 1;
             const newTokens = (s.tokens || []).map(t => ({ ...t, movementRemaining: t.speed ?? 3 }));
-            const newPlayer = { ...s.player, usedParry: false, usedIntercept: false, usedEvade: false };
-            return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, player: newPlayer };
+            
+            // Unlock all defensive toggles for all connected players
+            const newPlayers = { ...(s.players || {}) };
+            Object.keys(newPlayers).forEach(pid => {
+                newPlayers[pid] = { ...newPlayers[pid], usedParry: false, usedIntercept: false, usedEvade: false };
+            });
+
+            return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, players: newPlayers };
         });
     };
 
@@ -89,7 +95,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                     {enemiesList.length === 0 && <div className="text-gray-500 text-center mt-10 border border-dashed border-gray-700 p-8">No active entities on the grid.</div>}
                     
                     {enemiesList.map((enemy, idx) => {
-                        const myToken = enemyTokens[idx];
+                        const myToken = enemyTokens.find(t => t.refId === enemy.uid);
 
                         return (
                             <div key={enemy.uid} className={`border p-3 flex flex-col xl:flex-row gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
@@ -139,9 +145,10 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                                 const val = parseInt(e.target.value) || 0;
                                                 pushUpdate(s => {
                                                     const newE = [...(s.encounter?.enemies || [])];
-                                                    if (newE[idx]) {
-                                                        newE[idx].currentBarriers[bIdx] = val;
-                                                        if (val <= 0 && bar > 0) newE[idx].staggered = true;
+                                                    const eIdx = newE.findIndex(en => en.uid === enemy.uid);
+                                                    if (eIdx !== -1) {
+                                                        newE[eIdx].currentBarriers[bIdx] = val;
+                                                        if (val <= 0 && bar > 0) newE[eIdx].staggered = true;
                                                     }
                                                     return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                                 });
@@ -154,7 +161,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
                                                 const newE = [...(s.encounter?.enemies || [])];
-                                                if (newE[idx]) newE[idx].currentHp = val;
+                                                const eIdx = newE.findIndex(en => en.uid === enemy.uid);
+                                                if (eIdx !== -1) newE[eIdx].currentHp = val;
                                                 return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                             });
                                         }} />

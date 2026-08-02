@@ -27,13 +27,7 @@ if (isFirebaseConfigured && !firebase.apps.length) {
 }
 
 const DEFAULT_STATE = {
-    player: { 
-        name: '', title: '', weaponId: 'w01', 
-        currentHp: 30, maxHp: 30, 
-        dpFront: 0, dpSupport: 0, dpBack: 0, 
-        resPool: 3, customCards: [], savedSkills: [],
-        usedParry: false, usedIntercept: false, usedEvade: false
-    },
+    players: {}, 
     encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
     grid: Array(150).fill({ type: 'empty', terrain: null }),
     tokens: [],
@@ -49,6 +43,13 @@ export default function App() {
     const [gameState, setGameState] = useState(DEFAULT_STATE);
     const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only (Waiting for Firebase Keys)');
 
+    // Generate and persist a unique ID for this browser so players can reconnect to their sheets
+    const [localId] = useState(() => {
+        let id = localStorage.getItem('res_player_id');
+        if (!id) { id = Math.random().toString(36).substr(2, 9); localStorage.setItem('res_player_id', id); }
+        return id;
+    });
+
     useEffect(() => {
         if (!isFirebaseConfigured || !role) return;
         
@@ -58,14 +59,12 @@ export default function App() {
         roomRef.on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                if (data.player) {
-                    data.player.dpFront = Number(data.player.dpFront) || 0;
-                    data.player.dpSupport = Number(data.player.dpSupport) || 0;
-                    data.player.dpBack = Number(data.player.dpBack) || 0;
-                    data.player.currentHp = Number(data.player.currentHp) || 0;
-                    data.player.maxHp = Number(data.player.maxHp) || 0;
-                    data.player.customCards = data.player.customCards || [];
-                    data.player.savedSkills = data.player.savedSkills || [];
+                // Sanitize inbound Firebase data arrays
+                if (data.players) {
+                    Object.keys(data.players).forEach(pid => {
+                        data.players[pid].customCards = data.players[pid].customCards || [];
+                        data.players[pid].savedSkills = data.players[pid].savedSkills || [];
+                    });
                 }
                 setGameState(data);
             } else {
@@ -92,6 +91,17 @@ export default function App() {
         setSessionId(sessionIdInput.trim().toUpperCase());
         setRole(selectedRole);
         setActiveTab(selectedRole === 'gm' ? 'gm' : 'player');
+
+        // If joining as player, guarantee they have a sheet in the global dictionary
+        if (selectedRole === 'player') {
+            pushUpdate(s => {
+                if (!s.players || !s.players[localId]) {
+                    const newAgent = { name: 'Agent', title: '', weaponId: 'w01', currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [], savedSkills: [], usedParry: false, usedIntercept: false, usedEvade: false };
+                    return { ...s, players: { ...(s.players || {}), [localId]: newAgent } };
+                }
+                return s;
+            });
+        }
     };
 
     const leaveSession = () => {
@@ -157,10 +167,10 @@ export default function App() {
             </header>
 
             <main className="flex-1">
-                {activeTab === 'player' && role === 'player' && <PlayerHUD player={gameState?.player || {}} encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
-                {activeTab === 'spellbook' && role === 'player' && <Spellbook player={gameState?.player || {}} pushUpdate={pushUpdate} />} 
+                {activeTab === 'player' && role === 'player' && <PlayerHUD players={gameState?.players || {}} localId={localId} encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
+                {activeTab === 'spellbook' && role === 'player' && <Spellbook players={gameState?.players || {}} localId={localId} pushUpdate={pushUpdate} />} 
                 {activeTab === 'gm' && role === 'gm' && <GMDashboard encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
-                {activeTab === 'grid' && <GridBoard player={gameState?.player || {}} grid={gameState?.grid || []} tokens={gameState?.tokens || []} encounter={gameState?.encounter || {}} activeAction={gameState?.activeAction} pushUpdate={pushUpdate} />}
+                {activeTab === 'grid' && <GridBoard players={gameState?.players || {}} grid={gameState?.grid || []} tokens={gameState?.tokens || []} encounter={gameState?.encounter || {}} activeAction={gameState?.activeAction} pushUpdate={pushUpdate} />}
                 {activeTab === 'ref' && <Reference />}
                 {activeTab === 'rules' && <Rulebook />} 
             </main>

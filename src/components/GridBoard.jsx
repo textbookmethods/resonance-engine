@@ -9,11 +9,12 @@ const CLASS_COLORS = {
     Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff'      
 };
 
-export default function GridBoard({ player = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate }) {
+export default function GridBoard({ players = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate }) {
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
     const [hoveredHex, setHoveredHex] = useState(null);
-    const [draftPlayer, setDraftPlayer] = useState({ name: 'Agent', pClass: 'Rookie' });
+    const [draftPlayerId, setDraftPlayerId] = useState('');
+    const [draftEnemyId, setDraftEnemyId] = useState('');
     
     const COLS = 15; const ROWS = 10;
     const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
@@ -41,18 +42,12 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
         return { x, y };
     };
 
-    const findActiveTokenIndex = (action, tokenList, enc) => {
+    const findActiveTokenIndex = (action, tokenList) => {
         if (!action) return -1;
         if (action.isTokenId) {
             return tokenList.findIndex(t => t.id === action.sourceId);
-        } else if (action.isEnemy) {
-            const eTokens = tokenList.filter(t => t.type === 'enemy').sort((a,b) => a.id - b.id);
-            const eIndex = (enc?.enemies || []).findIndex(e => e.uid === action.sourceId);
-            if (eIndex !== -1 && eTokens[eIndex]) return tokenList.findIndex(t => t.id === eTokens[eIndex].id);
-        } else {
-            return tokenList.findIndex(t => t.type === 'player' && t.name === action.source);
         }
-        return -1;
+        return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && t.refId === action.sourceId);
     };
 
     const executeMove = (index) => {
@@ -60,7 +55,7 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
         
         pushUpdate(s => {
             const newTokens = [...(s.tokens || [])];
-            const tIdx = findActiveTokenIndex(activeAction, newTokens, s.encounter);
+            const tIdx = findActiveTokenIndex(activeAction, newTokens);
             
             if (tIdx !== -1) {
                 const t = newTokens[tIdx];
@@ -106,14 +101,14 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
     const resolveCombat = (targetHex) => {
         const radius = activeAction.a || 0;
         const rawDmg = parseInt(activeAction.d) || 0;
-        let newPlayer = { ...player };
+        let newPlayers = { ...players };
         let newEnemies = [...(encounter?.enemies || [])];
         let newTokens = JSON.parse(JSON.stringify(activeTokens));
         let log = `--- COMBAT LOG: ${activeAction.name} ---\nBase Damage: ${rawDmg}\n`;
         let hitCount = 0;
         let attackerPos = null;
         
-        const attIdx = findActiveTokenIndex(activeAction, newTokens, encounter);
+        const attIdx = findActiveTokenIndex(activeAction, newTokens);
         if (attIdx !== -1) attackerPos = getHexCoords(newTokens[attIdx].pos);
 
         newTokens.forEach(t => {
@@ -122,11 +117,9 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                 const targetCoords = getHexCoords(t.pos);
                 
                 if (t.type === 'enemy') {
-                    const enemyTokens = newTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
-                    const tokenIndex = enemyTokens.findIndex(tok => tok.id === t.id);
-                    const enemy = newEnemies[tokenIndex];
-                    
-                    if (enemy) {
+                    const eIndex = newEnemies.findIndex(e => e.uid === t.refId);
+                    if (eIndex !== -1) {
+                        const enemy = newEnemies[eIndex];
                         let dmgRemaining = rawDmg;
                         let barriers = [...(enemy.currentBarriers || [])];
                         for (let i = 0; i < barriers.length; i++) {
@@ -139,66 +132,63 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                         let staggered = enemy.staggered;
                         if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
 
-                        newEnemies[tokenIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered };
+                        newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered };
                         log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg (Mitigated ${rawDmg - dmgRemaining} via Barriers). HP is now ${newHp}.`;
                         if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
                     }
                 } 
                 else if (t.type === 'player') {
-                    let activeClass = t.pClass || "Rookie";
-                    const fDP = parseInt(newPlayer.dpFront) || 0;
-                    const sDP = parseInt(newPlayer.dpSupport) || 0;
-                    const bDP = parseInt(newPlayer.dpBack) || 0;
-                    
-                    const wpn = safeArmory.find(w => w.id === (newPlayer.weaponId || 'w01')) || safeArmory[0];
-                    let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
-                    let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
+                    const p = newPlayers[t.refId];
+                    if (p) {
+                        const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
+                        const wpn = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
+                        let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
+                        let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
 
-                    let mitigation = 0; let mitType = "None"; let isFlanking = false;
-                    
-                    if (radius > 0) {
-                        isFlanking = true; mitType = "AoE Target";
-                    } else if (attackerPos) {
-                        const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
-                        let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
-                        if (angle < 0) angle += 360; 
-                        const facingAngle = t.facing * 60; 
-                        let diff = Math.abs(angle - facingAngle);
-                        if (diff > 180) diff = 360 - diff;
-                        if (diff > 60) isFlanking = true; 
-                    }
-
-                    const matchesHUD = (t.name === (newPlayer.name || ''));
-                    if (isFlanking) {
-                        if (matchesHUD && newPlayer.usedEvade) {
-                            mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]";
-                        } else {
-                            mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0);
-                            mitType = "Backline Evasion";
-                            if (matchesHUD) newPlayer.usedEvade = true; 
+                        let mitigation = 0; let mitType = "None"; let isFlanking = false;
+                        
+                        if (radius > 0) {
+                            isFlanking = true; mitType = "AoE Target";
+                        } else if (attackerPos) {
+                            const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
+                            let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                            if (angle < 0) angle += 360; 
+                            const facingAngle = t.facing * 60; 
+                            let diff = Math.abs(angle - facingAngle);
+                            if (diff > 180) diff = 360 - diff;
+                            if (diff > 60) isFlanking = true; 
                         }
-                    } else {
-                        if (matchesHUD && newPlayer.usedParry) {
-                            mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]";
-                        } else {
-                            mitigation = fDP + (wpn.baseDmg||0) + wpnBonus;
-                            mitType = "Front Parry";
-                            if (matchesHUD) newPlayer.usedParry = true; 
-                        }
-                    }
 
-                    const finalDmg = Math.max(0, rawDmg - mitigation);
-                    const newHp = Math.max(0, (t.hp ?? 30) - finalDmg);
-                    t.hp = newHp; 
-                    if (matchesHUD) newPlayer.currentHp = newHp;
-                    
-                    log += `\nAgent [${t.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${newHp}.`;
+                        if (isFlanking) {
+                            if (p.usedEvade) {
+                                mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]";
+                            } else {
+                                mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0);
+                                mitType = "Backline Evasion";
+                                p.usedEvade = true; 
+                            }
+                        } else {
+                            if (p.usedParry) {
+                                mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]";
+                            } else {
+                                mitigation = fDP + (wpn.baseDmg||0) + wpnBonus;
+                                mitType = "Front Parry";
+                                p.usedParry = true; 
+                            }
+                        }
+
+                        const finalDmg = Math.max(0, rawDmg - mitigation);
+                        const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+                        p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
+                        
+                        log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
+                    }
                 }
             }
         });
 
         if (hitCount === 0) log += `\nNo valid targets in radius.`;
-        pushUpdate(s => ({ ...s, player: newPlayer, encounter: { ...(s.encounter || {}), enemies: newEnemies }, tokens: newTokens, activeAction: null }));
+        pushUpdate(s => ({ ...s, players: newPlayers, encounter: { ...(s.encounter || {}), enemies: newEnemies }, tokens: newTokens, activeAction: null }));
         alert(log);
     };
 
@@ -216,12 +206,13 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
     };
 
     const primeTokenMove = (t) => {
-        let srcName = t.name || 'Unknown';
+        let srcName = 'Unknown';
         if (t.type === 'enemy') {
-            const eToks = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
-            const eIdx = eToks.findIndex(tok => tok.id === t.id);
-            const e = (encounter?.enemies || [])[eIdx];
+            const e = (encounter?.enemies || []).find(en => en.uid === t.refId);
             if (e) srcName = e.name;
+        } else if (t.type === 'player') {
+            const p = players[t.refId];
+            if (p) srcName = p.name;
         }
         
         const rem = t.movementRemaining ?? t.speed ?? 3;
@@ -232,19 +223,11 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
         pushUpdate(s => ({ ...s, activeAction: { type: 'move', source: srcName, sourceId: t.id, isEnemy: t.type === 'enemy', isTokenId: true } }));
     };
 
-    const addToken = (type) => { 
+    const addToken = (type, refId) => { 
+        if (!refId) return alert("Select an entity to deploy first.");
         pushUpdate(s => {
             const startPos = type === 'enemy' ? 7 : 142; 
-            const newToken = { id: Date.now(), type, pos: startPos, facing: type === 'enemy' ? 3 : 0, speed: 3, movementRemaining: 3 }; 
-            if (type === 'player') {
-                newToken.name = draftPlayer.name || 'Agent';
-                newToken.pClass = draftPlayer.pClass || 'Rookie';
-                const isMatching = (player?.name === newToken.name);
-                const fDP = isMatching ? (parseInt(player?.dpFront) || 0) : 0;
-                const sDP = isMatching ? (parseInt(player?.dpSupport) || 0) : 0;
-                const bDP = isMatching ? (parseInt(player?.dpBack) || 0) : 0;
-                newToken.hp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
-            }
+            const newToken = { id: Date.now(), type, pos: startPos, facing: type === 'enemy' ? 3 : 0, speed: 3, movementRemaining: 3, refId }; 
             return { ...s, tokens: [...(s.tokens || []), newToken] };
         }); 
     };
@@ -271,7 +254,7 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
         let originToken = null; let minR = 1; let maxR = 1;
 
         if (activeAction) {
-            const tIdx = findActiveTokenIndex(activeAction, activeTokens, encounter);
+            const tIdx = findActiveTokenIndex(activeAction, activeTokens);
             if (tIdx !== -1) originToken = activeTokens[tIdx];
 
             if (activeAction.type === 'move') {
@@ -341,9 +324,7 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             let hpDisplay = null; let displayChar = 'E'; let tBg = '#ff6600'; let txtColor = '#000000';
 
             if (t.type === 'enemy') {
-                const enemyTokens = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
-                const tokenIndex = enemyTokens.findIndex(tok => tok.id === t.id);
-                const linkedEnemy = (encounter?.enemies || [])[tokenIndex];
+                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === t.refId);
                 if (linkedEnemy) {
                     hpDisplay = (
                         <div className="absolute -bottom-8 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap pointer-events-none z-50 shadow-md" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
@@ -354,14 +335,20 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             }
             
             if (t.type === 'player') {
-                const pColor = CLASS_COLORS[t.pClass] || '#00f0ff';
-                tBg = pColor;
-                txtColor = ['Vanguard', 'Conduit', 'Sniper'].includes(t.pClass) ? '#ffffff' : '#000000';
-                displayChar = t.name ? t.name.substring(0,2).toUpperCase() : 'P1';
+                const p = players[t.refId] || {};
+                const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
+                let pClass = "Rookie";
+                if (fDP >= 10) pClass = "Vanguard"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (bDP >= 10) pClass = "Sniper"; else if (sDP >= 10) pClass = "Conduit"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
+
+                const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+                
+                tBg = CLASS_COLORS[pClass] || '#00f0ff';
+                txtColor = ['Vanguard', 'Conduit', 'Sniper'].includes(pClass) ? '#ffffff' : '#000000';
+                displayChar = p.name ? p.name.substring(0,2).toUpperCase() : 'P1';
                 hpDisplay = (
-                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md" style={{ borderColor: pColor, color: pColor, transform: `rotate(-${t.facing * 60}deg)` }}>
-                        <span className="text-white mb-0.5">{t.name || 'Agent'}</span>
-                        <span>{t.pClass} | {t.hp ?? 30} HP</span>
+                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md" style={{ borderColor: tBg, color: tBg, transform: `rotate(-${t.facing * 60}deg)` }}>
+                        <span className="text-white mb-0.5">{p.name || 'Agent'}</span>
+                        <span>{pClass} | {p.currentHp ?? derivedMaxHp} HP</span>
                     </div>
                 );
             }
@@ -400,10 +387,14 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             if (!activeT) return null;
 
             if (activeT.type === 'player') {
-                const activeWeapon = safeArmory.find(w => w.id === (player?.weaponId || 'w01')) || safeArmory[0];
-                const pColor = CLASS_COLORS[activeT.pClass] || '#00f0ff';
+                const p = players[activeT.refId] || {};
+                const activeWeapon = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
                 
-                const fDP = parseInt(player?.dpFront) || 0; const sDP = parseInt(player?.dpSupport) || 0; const bDP = parseInt(player?.dpBack) || 0;
+                const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
+                let pClass = "Rookie";
+                if (fDP >= 10) pClass = "Vanguard"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (bDP >= 10) pClass = "Sniper"; else if (sDP >= 10) pClass = "Conduit"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
+
+                const pColor = CLASS_COLORS[pClass] || '#00f0ff';
                 let isSynergy = fDP >= (activeWeapon.reqF||0) && sDP >= (activeWeapon.reqS||0) && bDP >= (activeWeapon.reqB||0);
                 const calcBaseDmg = fDP + (activeWeapon.baseDmg || 0) + (isSynergy ? (activeWeapon.bonusDmg || 0) : 0);
 
@@ -414,23 +405,16 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                             <button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button>
                         </div>
                         <div className="text-white text-xl font-bold uppercase flex justify-between items-center">
-                            {activeT.name}
-                            <span className="text-[10px] px-2 py-0.5 bg-black border font-bold" style={{ borderColor: pColor, color: pColor }}>{activeT.pClass}</span>
+                            {p.name || 'Agent'}
+                            <span className="text-[10px] px-2 py-0.5 bg-black border font-bold" style={{ borderColor: pColor, color: pColor }}>{pClass}</span>
                         </div>
                         
                         <div className="bg-black border border-gray-700 p-2 text-center font-bold flex items-center justify-center gap-2" style={{ color: pColor }}>
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase">Hit Points</div>
-                                <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" style={{ color: pColor }} value={activeT.hp ?? 30} onChange={(e) => {
+                                <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" style={{ color: pColor }} value={p.currentHp ?? 30} onChange={(e) => {
                                     const val = parseInt(e.target.value) || 0;
-                                    pushUpdate(s => {
-                                        const newT = [...(s.tokens || [])];
-                                        const tIdx = newT.findIndex(tok => tok.id === activeT.id);
-                                        if (tIdx !== -1) newT[tIdx].hp = val;
-                                        let newP = { ...s.player };
-                                        if (newP.name === activeT.name) newP.currentHp = val;
-                                        return { ...s, tokens: newT, player: newP };
-                                    });
+                                    pushUpdate(s => ({ ...s, players: { ...s.players, [activeT.refId]: { ...p, currentHp: val } } }));
                                 }}/> 
                             </div>
                             <div className="w-px h-8 bg-gray-700"></div>
@@ -462,16 +446,16 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
 
                         <div className="flex gap-2 mt-2">
                             <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
-                            <button className="flex-1 bg-black text-white font-bold py-1 uppercase text-xs hover:bg-white hover:text-black border transition-colors" style={{ borderColor: pColor }} onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: activeT.name || 'Player', isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } }))}>Target</button>
+                            <button className="flex-1 bg-black text-white font-bold py-1 uppercase text-xs hover:bg-white hover:text-black border transition-colors" style={{ borderColor: pColor }} onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } }))}>Target</button>
                         </div>
                         
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Active Custom Cards</div>
-                        {(player?.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
-                        {(player?.customCards || []).map(c => (
+                        {(p.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
+                        {(p.customCards || []).map(c => (
                             <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm">
                                 <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
                                 <div className="text-gray-400 text-xs mb-2">Cost: {c.cost} Res | d:{c.d} a:{c.a}</div>
-                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: activeT.name || 'Player', isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range } }))}>Target</button>
+                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range } }))}>Target</button>
                             </div>
                         ))}
                     </div>
@@ -479,9 +463,7 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             }
 
             if (activeT.type === 'enemy') {
-                const enemyTokens = activeTokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
-                const tokenIndex = enemyTokens.findIndex(tok => tok.id === activeT.id);
-                const linkedEnemy = (encounter?.enemies || [])[tokenIndex];
+                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === activeT.refId);
 
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
@@ -497,9 +479,11 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase">Hit Points</div>
                                 <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" value={linkedEnemy.currentHp} onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
                                     pushUpdate(s => {
                                         const newE = [...(s.encounter?.enemies || [])];
-                                        if (newE[tokenIndex]) newE[tokenIndex].currentHp = parseInt(e.target.value) || 0;
+                                        const eIdx = newE.findIndex(en => en.uid === activeT.refId);
+                                        if (eIdx !== -1) newE[eIdx].currentHp = val;
                                         return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                     });
                                 }}/> 
@@ -568,20 +552,22 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                 <div className="text-[#ff6600] font-bold mt-6 mb-2 tracking-widest uppercase">Deploy Tokens</div>
                 
                 <div className="bg-gray-900 border border-gray-700 p-2 flex flex-col gap-2">
-                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Configure Agent</div>
-                    <input className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" placeholder="Agent Name" value={draftPlayer.name} onChange={e=>setDraftPlayer({...draftPlayer, name: e.target.value})} />
-                    <select className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" value={draftPlayer.pClass} onChange={e=>setDraftPlayer({...draftPlayer, pClass: e.target.value})}>
-                        <option value="Rookie">Rookie (Cyan)</option>
-                        <option value="Vanguard">Vanguard (Red)</option>
-                        <option value="Paladin">Paladin (Yellow)</option>
-                        <option value="Sniper">Sniper (Green)</option>
-                        <option value="Conduit">Conduit (Purple)</option>
-                        <option value="Skirmisher">Skirmisher (Orange)</option>
-                        <option value="Saboteur">Saboteur (Pink)</option>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Deploy Linked Agent</div>
+                    <select className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" value={draftPlayerId} onChange={e=>setDraftPlayerId(e.target.value)}>
+                        <option value="">-- Select Player --</option>
+                        {Object.entries(players).map(([id, p]) => <option key={id} value={id}>{p.name || 'Unnamed Agent'}</option>)}
                     </select>
-                    <button className="w-full bg-[#00f0ff] text-black p-1.5 font-bold text-xs uppercase hover:bg-white transition-colors" onClick={()=>addToken('player')}>+ Deploy Player</button>
+                    <button className="w-full bg-[#00f0ff] text-black p-1.5 font-bold text-xs uppercase hover:bg-white transition-colors" onClick={()=>addToken('player', draftPlayerId)}>+ Deploy Player</button>
                 </div>
-                <button className="w-full bg-[#ff6600] text-black p-2 font-bold text-sm uppercase hover:bg-white transition-colors" onClick={()=>addToken('enemy')}>+ Deploy Enemy</button>
+
+                <div className="bg-gray-900 border border-gray-700 p-2 flex flex-col gap-2 mt-2">
+                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Deploy Hostile</div>
+                    <select className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" value={draftEnemyId} onChange={e=>setDraftEnemyId(e.target.value)}>
+                        <option value="">-- Select Hostile --</option>
+                        {(encounter?.enemies || []).map(e => <option key={e.uid} value={e.uid}>{e.name}</option>)}
+                    </select>
+                    <button className="w-full bg-[#ff6600] text-black p-1.5 font-bold text-xs uppercase hover:bg-white transition-colors" onClick={()=>addToken('enemy', draftEnemyId)}>+ Deploy Enemy</button>
+                </div>
             </div>
         );
     };
