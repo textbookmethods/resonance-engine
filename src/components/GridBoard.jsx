@@ -29,8 +29,8 @@ const STATE_DICTIONARY = {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const match = input.match(/\[(.*?)\]/);
-    const clean = (match ? match[1] : input).toLowerCase().trim();
+    const match = String(input).match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : String(input)).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
@@ -122,7 +122,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         
         const dispRaw = activeAction.elementRaw || activeAction.element || 'Kinetic';
         const dispCore = activeAction.elementCore || activeAction.element || 'Kinetic';
-        const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+        const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
 
         let newPlayers = { ...players };
         let newEnemies = [...(encounter?.enemies || [])];
@@ -443,7 +443,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     
                     let maxRange = 1;
                     (linkedEnemy.abilities || []).forEach(ability => {
-                        const rangeMatch = ability.match(/range\s+(\d+)(?:-(\d+))?/i);
+                        const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
                         if (rangeMatch) {
                             const r = rangeMatch[2] ? parseInt(rangeMatch[2]) : parseInt(rangeMatch[1]);
                             if (r > maxRange) maxRange = r;
@@ -659,7 +659,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
 
                                     pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: activeWeapon.element || 'Kinetic', isBasic: true, cost: 0 } }))
-                                }}>{(disableAttacks ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'Target'))}</button>
+                                }}>{(disableAttacks ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK'))}</button>
                             </div>
                         )}
                         
@@ -668,7 +668,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         {(p.customCards || []).map(c => {
                             const dispRaw = c.elementRaw || c.element || 'Kinetic';
                             const dispCore = c.elementCore || c.element || 'Kinetic';
-                            const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+                            const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                             
                             const pRes = parseInt(p.resPool) || 0;
                             const isNoFuel = pRes < c.cost;
@@ -686,12 +686,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                                 if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                                 if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
                                                 
-                                                let finalRange = isBlind ? '1' : c.range;
-                                                let finalAoe = isBlind ? 0 : c.a;
+                                                // FIX: Safely parses range from activeWeapon, bypassing undefined c.range completely
+                                                let finalRange = isBlind ? '1' : activeWeapon.range; 
+                                                let finalAoe = isBlind ? 0 : (c.a || 0);
                                                 if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
                                                 pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: finalAoe, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc, isBasic: false, cost: c.cost } }))
-                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'Target')}</button>
+                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}</button>
                                         </>
                                     )}
                                 </div>
@@ -832,7 +833,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const pEff = effMatch ? effMatch[1] : null;
 
                             let eRange = "1";
-                            const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
+                            const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
                             if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
                             
                             return (
@@ -852,7 +853,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                                             pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))
                                         }}>
-                                            {disableAttacks ? 'LOCKED' : 'Target'}
+                                            {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
                                         </button>
                                     )}
                                 </div>
@@ -925,9 +926,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400">
                                     {activeAction.d !== undefined && <span>DMG: {activeAction.d}</span>}
                                     
+                                    {/* FIX: Wraps toLowerCase payload in native Strings to guarantee safety */}
                                     {activeAction.elementCore && (
                                         <span className="text-[#ff6600]">
-                                            TYPE: {(activeAction.elementRaw && activeAction.elementRaw.toLowerCase() !== activeAction.elementCore.toLowerCase()) 
+                                            TYPE: {(activeAction.elementRaw && String(activeAction.elementRaw).toLowerCase() !== String(activeAction.elementCore).toLowerCase()) 
                                                 ? `${activeAction.elementRaw} [Core: ${activeAction.elementCore}]` 
                                                 : activeAction.elementCore}
                                         </span>
@@ -935,9 +937,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                                     {activeAction.a !== undefined && <span>AoE: {activeAction.a}</span>}
                                     
+                                    {/* FIX: Wraps toLowerCase payload in native Strings to guarantee safety */}
                                     {activeAction.effectName && (
                                         <span className="text-purple-400">
-                                            STATE: [{(activeAction.effectName.toLowerCase() !== (activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : activeAction.effectName}]
+                                            STATE: [{(String(activeAction.effectName).toLowerCase() !== String(activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : activeAction.effectName}]
                                         </span>
                                     )}
                                 </div>

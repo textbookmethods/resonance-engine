@@ -89,6 +89,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
 
     const front = safeInt(player.dpFront); const supp = safeInt(player.dpSupport); const back = safeInt(player.dpBack);
+
     const xp = safeInt(player.xp);
     const earnedDp = 5 + Math.floor(xp / 10);
     const spentDp = front + supp + back;
@@ -128,9 +129,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const activeCoreStates = statuses.map(st => getCoreState(st));
     const isStunned = activeCoreStates.includes('Stunned');
     const isShocked = activeCoreStates.includes('Shocked');
+    const isImmobilized = activeCoreStates.includes('Immobilized');
     const isBlind = activeCoreStates.includes('Blind');
 
     const disableDefenses = isStunned || isShocked;
+    const disableMovement = isStunned || isImmobilized;
     const disableAttacks = isStunned;
 
     const refreshTurn = () => {
@@ -165,7 +168,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         else outcome = "Cascade (Total Success)";
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
-
+    
     const primeWeapon = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         if (player.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
@@ -185,7 +188,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
         let finalRange = isBlind ? '1' : activeWeapon.range;
-        let finalAoe = isBlind ? 0 : c.a;
+        let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
@@ -321,7 +324,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     {isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}
                                 </div>
                                 <button className={`font-bold px-3 py-1 uppercase transition-colors ${(isMyTurn && !player.usedBasicAttack && !disableAttacks) ? 'bg-[#00f0ff] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || player.usedBasicAttack || disableAttacks} onClick={primeWeapon}>
-                                    {disableAttacks ? 'LOCKED' : (player.usedBasicAttack ? 'EXHAUSTED' : 'Target')}
+                                    {disableAttacks ? 'LOCKED' : (player.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK')}
                                 </button>
                             </div>
                         </div>
@@ -449,7 +452,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
-                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'Target')}
+                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}
                                     </button>
                                 </div>
                                 <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
