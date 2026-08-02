@@ -1,22 +1,61 @@
-/* eslint-disable react/prop-types */
-import { useState } from 'react';
+/* eslint-disable */
+import React, { useState } from 'react';
 import { armory } from '../data/armory';
 
-export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
-    const [builder, setBuilder] = useState({ d: 0, u: 0, a: 0, alpha: 1 });
+const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 
-    const updatePlayer = (key, val) => pushUpdate(s => ({ ...s, player: { ...s.player, [key]: val } }));
+export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pushUpdate }) {
+    const [builder, setBuilder] = useState({ name: '', d: 0, u: 0, a: 0, alpha: 1 });
+
+    const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
+    const updatePlayer = (key, val) => safePush(s => ({ ...s, player: { ...(s.player || {}), [key]: val } }));
+    const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
     
-    const calcCost = Math.ceil(builder.alpha * (builder.d + builder.u + Math.pow(builder.a, 2)));
+    const front = safeInt(player?.dpFront); const supp = safeInt(player?.dpSupport); const back = safeInt(player?.dpBack);
 
-    const saveCard = () => {
-        const cards = player.customCards || [];
-        if (cards.length >= 4) return alert("Max 4 custom cards.");
-        updatePlayer('customCards', [...cards, { ...builder, cost: calcCost, id: Date.now() }]);
+    let activeClass = "Rookie";
+    if (front >= 10) activeClass = "Vanguard"; else if (front >= 5 && supp >= 5) activeClass = "Paladin";
+    else if (back >= 10) activeClass = "Sniper"; else if (supp >= 10) activeClass = "Conduit";
+    else if (front >= 5 && back >= 5) activeClass = "Skirmisher"; else if (supp >= 5 && back >= 5) activeClass = "Saboteur"; 
+
+    const derivedMaxHp = 20 + (front * 3) + (supp * 2) + (back * 1);
+    const activeWeapon = safeArmory.find(w => w.id === (player?.weaponId || 'w01')) || safeArmory[0];
+    const isSynergy = front >= (activeWeapon.reqF || 0) && supp >= (activeWeapon.reqS || 0) && back >= (activeWeapon.reqB || 0);
+
+    let bonusDmg = 0; let bonusFront = 0; let bonusSupp = 0; let bonusBack = 0;
+    if (isSynergy) { bonusDmg = activeWeapon.bonusDmg || 0; bonusFront = activeWeapon.bonusFront || 0; bonusSupp = activeWeapon.bonusSupp || 0; bonusBack = activeWeapon.bonusBack || 0; }
+
+    const calcBaseDmg = front + (activeWeapon.baseDmg || 0) + bonusDmg;
+    const calcFrontParry = front + (activeWeapon.baseDmg || 0) + bonusFront;
+    const calcSuppIntercept = supp + 3 + bonusSupp;
+    const calcBackEvasion = back + 3 + bonusBack;
+    const calcCost = Math.ceil((builder.alpha || 1) * ((builder.d || 0) + (builder.u || 0) + Math.pow((builder.a || 0), 2)));
+
+    // FIND THE LINKED TOKEN
+    const myToken = tokens.find(t => t.type === 'player' && t.name === player?.name);
+
+    const refreshTurn = () => {
+        safePush(s => {
+            const newP = { ...s.player, usedParry: false, usedIntercept: false, usedEvade: false };
+            const newT = [...(s.tokens || [])];
+            const tIdx = newT.findIndex(t => t.type === 'player' && t.name === s.player?.name);
+            if (tIdx !== -1) newT[tIdx].movementRemaining = newT[tIdx].speed ?? 3;
+            return { ...s, player: newP, tokens: newT };
+        });
     };
 
+    const saveToHUD = () => {
+        const cards = player?.customCards || [];
+        if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
+        updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
+    };
+    const saveToSpellbook = () => {
+        const archived = player?.savedSkills || [];
+        updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
+        alert("Ability archived to Spellbook!");
+    };
     const rollImprovised = () => {
-        updatePlayer('resPool', Math.max(0, (player.resPool || 0) - 1));
+        updatePlayer('resPool', Math.max(0, safeInt(player?.resPool) - 1));
         const roll = Math.floor(Math.random() * 6) + 1;
         let outcome = "";
         if (roll <= 2) outcome = "Backlash (Failure & Consequence)";
@@ -25,246 +64,161 @@ export default function PlayerHUD({ player = {}, encounter = {}, pushUpdate }) {
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    let activeClass = "Rookie";
-    const front = player.dpFront || 0;
-    const supp = player.dpSupport || 0;
-    const back = player.dpBack || 0;
+    const primeWeapon = () => { safePush(s => ({ ...s, activeAction: { source: player?.name || 'Player', isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } })); };
+    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player?.name || 'Player', isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range } })); };
 
-    if (front >= 10) activeClass = "Vanguard";
-    else if (front >= 5 && supp >= 5) activeClass = "Paladin";
-    else if (back >= 10) activeClass = "Sniper";
-    else if (supp >= 10) activeClass = "Conduit";
-    else if (front >= 5 && back >= 5) activeClass = "Skirmisher";
+    const reqString = (w) => {
+        if (!w.reqF && !w.reqS && !w.reqB) return 'No Req';
+        let r = [];
+        if (w.reqF) r.push(`${w.reqF}F`); if (w.reqS) r.push(`${w.reqS}S`); if (w.reqB) r.push(`${w.reqB}B`);
+        return `Req: ${r.join('/')}`;
+    };
 
-    // Safely extract the weapon or default to the first one in the armory
-    const activeWeapon = armory.find(w => w.id === (player.weaponId || 'w01')) || armory[0];
-    const isSynergy = activeClass === activeWeapon.synergyClass;
-
-    let bonusDmg = 0;
-    let bonusFront = 0;
-    let bonusSupp = 0;
-    let bonusBack = 0;
-
-    if (isSynergy) {
-        bonusDmg = activeWeapon.bonusDmg || 0;
-        bonusFront = activeWeapon.bonusFront || 0;
-        bonusSupp = activeWeapon.bonusSupp || 0;
-        bonusBack = activeWeapon.bonusBack || 0;
-    }
-
-    const calcBaseDmg = front + activeWeapon.baseDmg + bonusDmg;
-    const calcFrontParry = front + activeWeapon.baseDmg + bonusFront;
-    const calcSuppIntercept = supp + 3 + bonusSupp;
-    const calcBackEvasion = back + 3 + bonusBack;
-
-    const activeEnemies = encounter?.enemies || [];
+    const customCards = player?.customCards || [];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
-            {/* Stats Panel */}
             <div className="bg-[#1a222c] p-4 border border-slate-700">
-                <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Character Uplink</h2>
-                <div className="space-y-4">
-                    
-                    <input 
-                        className="w-full bg-black border border-gray-600 p-2 text-white outline-none" 
-                        placeholder="Callsign / Name" 
-                        value={player.name || ''} 
-                        onChange={e => updatePlayer('name', e.target.value)} 
-                    />
+                <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-4">
+                    <h2 className="text-[#00f0ff] font-bold text-xl">Character Uplink</h2>
+                    <div className="text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-900 px-2 py-1 border border-gray-700">
+                        Movement: <span className="text-white">{myToken ? `${myToken.movementRemaining ?? myToken.speed ?? 3} / ${myToken.speed ?? 3}` : 'Off Grid'}</span>
+                    </div>
+                </div>
 
-                    {/* NEW: Live HP Tracker */}
+                <div className="space-y-4">
+                    <input className="w-full bg-black border border-gray-600 p-2 text-white outline-none" placeholder="Callsign / Name" value={player?.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
+
                     <div className="flex gap-4">
                         <div className="flex-1 bg-black border border-red-500 p-2">
                             <label className="text-red-500 text-[10px] font-bold tracking-widest block mb-1 text-center">CURRENT HP</label>
-                            <input 
-                                type="number" 
-                                className="w-full bg-transparent text-white text-2xl font-bold outline-none text-center" 
-                                value={player.currentHp ?? 30} 
-                                onChange={e => updatePlayer('currentHp', parseInt(e.target.value) || 0)} 
-                            />
+                            <input type="number" className="w-full bg-transparent text-white text-3xl font-bold outline-none text-center" value={player?.currentHp ?? derivedMaxHp} onChange={e => updatePlayer('currentHp', safeInt(e.target.value))} />
                         </div>
                         <div className="flex-1 bg-black border border-gray-600 p-2">
-                            <label className="text-gray-400 text-[10px] font-bold tracking-widest block mb-1 text-center">MAX HP</label>
-                            <input 
-                                type="number" 
-                                className="w-full bg-transparent text-gray-300 text-2xl font-bold outline-none text-center" 
-                                value={player.maxHp ?? 30} 
-                                onChange={e => updatePlayer('maxHp', parseInt(e.target.value) || 0)} 
-                            />
+                            <label className="text-gray-400 text-[10px] font-bold tracking-widest block mb-1 text-center">MAX HP (DP SCALED)</label>
+                            <div className="w-full bg-transparent text-gray-400 text-3xl font-bold text-center mt-1 cursor-not-allowed" title="Max HP automatically scales via Discipline Points.">{derivedMaxHp}</div>
                         </div>
                     </div>
                     
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700">
-                        <span>CLASS:</span>
-                        <span>{activeClass}</span>
+                        <span>CLASS:</span><span>{activeClass}</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-center">
                         <div>
                             <label className="text-gray-400 text-xs block mb-1">Front DP</label>
-                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={front} onChange={e=>updatePlayer('dpFront', parseInt(e.target.value)||0)} />
+                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={front} onChange={e=>updatePlayer('dpFront', safeInt(e.target.value))} />
                         </div>
                         <div>
                             <label className="text-gray-400 text-xs block mb-1">Support DP</label>
-                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={supp} onChange={e=>updatePlayer('dpSupport', parseInt(e.target.value)||0)} />
+                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={supp} onChange={e=>updatePlayer('dpSupport', safeInt(e.target.value))} />
                         </div>
                         <div>
                             <label className="text-gray-400 text-xs block mb-1">Back DP</label>
-                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={back} onChange={e=>updatePlayer('dpBack', parseInt(e.target.value)||0)} />
+                            <input type="number" className="w-full bg-black border border-gray-600 p-1 text-center text-white" value={back} onChange={e=>updatePlayer('dpBack', safeInt(e.target.value))} />
                         </div>
                     </div>
 
                     <div className="mt-4 border-t border-gray-700 pt-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Loadout</h3>
-                        <select 
-                            className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2"
-                            value={player.weaponId || 'w01'}
-                            onChange={e => updatePlayer('weaponId', e.target.value)}
-                        >
-                            {armory.map(w => (
-                                <option key={w.id} value={w.id}>{w.name} (Range: {w.range})</option>
-                            ))}
+                        <select className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2 text-xs" value={player?.weaponId || 'w01'} onChange={e => updatePlayer('weaponId', e.target.value)}>
+                            {safeArmory.map(w => ( <option key={w.id} value={w.id}>{w.name} [{reqString(w)}]</option> ))}
                         </select>
-                        <div className={`p-2 text-xs border ${isSynergy ? 'bg-orange-950/30 border-[#ff6600] text-orange-200' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
-                            <div className="font-bold mb-1 uppercase tracking-wider">{isSynergy ? '✓ Synergy Active' : '⚠ No Class Synergy'}</div>
-                            <div className="flex justify-between">
-                                <span>Base Dmg: {activeWeapon.baseDmg}</span>
-                                <span>Range: {activeWeapon.range} Hexes</span>
+                        <div className={`p-2 text-xs border relative ${isSynergy ? 'bg-orange-950/30 border-[#ff6600] text-orange-200' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
+                            <div className="font-bold mb-1 uppercase tracking-wider">{isSynergy ? '✓ DP Req Met (Synergy Active)' : '⚠ DP Req Not Met'}</div>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <div className="font-bold text-white mb-1">Base Dmg: {calcBaseDmg}</div>
+                                    <div>Range: {activeWeapon.range} Hexes</div>
+                                    {isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}
+                                </div>
+                                <button className="bg-[#00f0ff] text-black font-bold px-3 py-1 uppercase hover:bg-white transition-colors" onClick={primeWeapon}>Target</button>
                             </div>
-                            {isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}
                         </div>
                     </div>
 
-                    <div className="mt-4 border-t border-gray-700 pt-4 space-y-4">
-                        <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3>
-                        
-                        <div>
-                            <div className="flex justify-between text-gray-300">
-                                <span>Base Dmg (Front + Wpn):</span> 
-                                <span className={bonusDmg > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcBaseDmg}</span>
-                            </div>
+                    <div className="mt-4 border-t border-gray-700 pt-4 space-y-3">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-gray-400 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3>
+                            <button className="text-[10px] bg-gray-800 border border-gray-600 px-2 py-0.5 text-white hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={refreshTurn}>
+                                ↻ Refresh Turn
+                            </button>
                         </div>
                         
-                        <div>
-                            <div className="flex justify-between text-[#00f0ff]">
-                                <span>Front Parry (Front + Wpn):</span> 
-                                <span className={bonusFront > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcFrontParry}</span>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
+                            <div>
+                                <span className={player?.usedParry ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Front Parry:</span>
+                                <span className={player?.usedParry ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcFrontParry}</span>
                             </div>
-                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Blocks damage originating within your 3-hex front arc.</div>
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedParry ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedParry} onClick={() => updatePlayer('usedParry', true)}>
+                                {player?.usedParry ? 'EXHAUSTED' : 'AVAILABLE'}
+                            </button>
                         </div>
                         
-                        <div>
-                            <div className="flex justify-between text-[#00f0ff]">
-                                <span>Support Intercept (Supp + 3):</span> 
-                                <span className={bonusSupp > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcSuppIntercept}</span>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
+                            <div>
+                                <span className={player?.usedIntercept ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Support Intercept:</span>
+                                <span className={player?.usedIntercept ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcSuppIntercept}</span>
                             </div>
-                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Mitigates damage targeted at an adjacent ally.</div>
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedIntercept ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedIntercept} onClick={() => updatePlayer('usedIntercept', true)}>
+                                {player?.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE'}
+                            </button>
                         </div>
                         
-                        <div>
-                            <div className="flex justify-between text-[#00f0ff]">
-                                <span>Backline Evasion (Back + 3):</span> 
-                                <span className={bonusBack > 0 ? "font-bold text-[#ff6600]" : "font-bold text-white"}>{calcBackEvasion}</span>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
+                            <div>
+                                <span className={player?.usedEvade ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Backline Evasion:</span>
+                                <span className={player?.usedEvade ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcBackEvasion}</span>
                             </div>
-                            <div className="text-[10px] text-gray-500 leading-tight mt-1">Dodges flanking attacks (rear 3 hexes) or AoE damage.</div>
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${player?.usedEvade ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player?.usedEvade} onClick={() => updatePlayer('usedEvade', true)}>
+                                {player?.usedEvade ? 'EXHAUSTED' : 'AVAILABLE'}
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Resonance Pool */}
             <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col items-center justify-center">
                 <h2 className="text-[#ff6600] font-bold text-2xl tracking-widest mb-4">RESONANCE</h2>
-                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">
-                    {player.resPool || 0}<span className="text-3xl text-gray-500">/10</span>
-                </div>
-                
+                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{player?.resPool || 0}<span className="text-3xl text-gray-500">/10</span></div>
                 <div className="grid grid-cols-2 gap-2 w-full mb-4">
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, (player.resPool || 0) + 1))}>+1 Basic Atk</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, (player.resPool || 0) + 2))}>+2 Tag-Team</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, (player.resPool || 0) + 2))}>+2 Exploit</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, (player.resPool || 0) + 1))}>+1 Banter</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 1))}>+1 Basic Atk</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 2))}>+2 Tag-Team</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 2))}>+2 Exploit</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player?.resPool) + 1))}>+1 Banter</button>
                 </div>
-                
-                <button className="w-full bg-[#00f0ff] text-black font-bold p-3 uppercase hover:bg-white transition-colors" onClick={rollImprovised}>
-                    Improvised Skill (-1 Res)
-                </button>
+                <button className="w-full bg-[#00f0ff] text-black font-bold p-3 uppercase hover:bg-white transition-colors" onClick={rollImprovised}>Improvised Skill (-1 Res)</button>
             </div>
 
-            {/* Ability Builder */}
             <div className="bg-[#1a222c] p-4 border border-slate-700">
                 <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Synthesis Matrix</h2>
                 <div className="space-y-3 mb-4">
-                    <div className="flex justify-between items-center">
-                        <span>Damage (d):</span>
-                        <input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white" value={builder.d} onChange={e=>setBuilder({...builder, d: parseInt(e.target.value)||0})} />
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span>Utility Weight (u):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.u)} onChange={e=>setBuilder({...builder, u: parseInt(e.target.value)})}>
-                            <option value="0">0</option>
-                            <option value="1">1 (Minor)</option>
-                            <option value="3">3 (Major)</option>
-                            <option value="5">5 (Severe)</option>
-                        </select>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span>AoE Radius (a):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: parseInt(e.target.value)})}>
-                            <option value="0">0</option>
-                            <option value="1">1 (Small)</option>
-                            <option value="2">2 (Large)</option>
-                        </select>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span>Affinity (α):</span>
-                        <select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.alpha)} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value)})}>
-                            <option value="0.75">0.75 (Synergy)</option>
-                            <option value="1">1.0 (Neutral)</option>
-                            <option value="2">2.0 (Resist)</option>
-                        </select>
-                    </div>
+                    <div className="flex justify-between items-center mb-4"><span className="text-gray-300">Skill Name:</span><input type="text" className="w-40 bg-black border border-[#00f0ff] p-1 text-white outline-none font-bold" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} /></div>
+                    <div className="flex justify-between items-center"><span>Damage (d):</span><input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white" value={builder.d} onChange={e=>setBuilder({...builder, d: safeInt(e.target.value)})} /></div>
+                    <div className="flex justify-between items-center"><span>Utility (u):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.u)} onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}>
+                        <option value="0">0</option><option value="1">1 (Minor)</option><option value="3">3 (Major)</option><option value="5">5 (Severe)</option>
+                    </select></div>
+                    <div className="flex justify-between items-center"><span>AoE Radius (a):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: safeInt(e.target.value)})}>
+                        <option value="0">0</option><option value="1">1 (Small)</option><option value="2">2 (Large)</option>
+                    </select></div>
+                    <div className="flex justify-between items-center"><span>Affinity (α):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.alpha)} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value) || 1})}>
+                        <option value="0.75">0.75 (Synergy)</option><option value="1">1.0 (Neutral)</option><option value="2">2.0 (Resist)</option>
+                    </select></div>
                 </div>
-                
-                <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4">
-                    <span>COST:</span><span>{calcCost} RES</span>
+                <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4"><span>COST:</span><span>{calcCost} RES</span></div>
+                <div className="flex gap-2 mb-4">
+                    <button className="flex-1 bg-[#00f0ff] text-black font-bold border border-[#00f0ff] p-2 hover:bg-white text-xs uppercase" onClick={saveToHUD}>Equip</button>
+                    <button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase" onClick={saveToSpellbook}>Archive</button>
                 </div>
-                
-                <button className="w-full bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white mb-4" onClick={saveCard}>
-                    Install to HUD
-                </button>
-
                 <div className="grid grid-cols-2 gap-2">
-                    {(player.customCards || []).map(c => (
-                        <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs cursor-pointer hover:bg-gray-900" onClick={() => updatePlayer('resPool', Math.max(0, (player.resPool || 0) - c.cost))}>
-                            <div className="font-bold text-[#00f0ff] mb-1">Custom Action</div>
-                            <div className="text-white">Cost: -{c.cost} Res</div>
-                            <div className="text-gray-500">d:{c.d} u:{c.u} a:{c.a}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Active Targets Overlay */}
-            <div className="lg:col-span-3 bg-[#1a222c] p-4 border border-slate-700 mt-2">
-                <h2 className="text-[#ff6600] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Active Targets</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {activeEnemies.length === 0 && (
-                        <div className="text-gray-500 text-sm">No hostile entities currently detected.</div>
-                    )}
-                    {activeEnemies.map(enemy => (
-                        <div key={enemy.uid} className={`bg-black border p-3 ${enemy.staggered ? 'border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.2)]' : 'border-gray-700'}`}>
-                            <div className="font-bold text-white mb-2 flex justify-between items-start">
-                                <span className="uppercase tracking-wide">{enemy.name || 'Unknown Entity'} <span className="text-[10px] text-gray-400 bg-gray-800 px-1 ml-1 border border-gray-600">T{enemy.tier || 1}</span></span>
-                                {enemy.staggered && <span className="text-[10px] bg-yellow-500 text-black px-1 font-bold">STAGGERED</span>}
+                    {customCards.map(c => (
+                        <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
+                            <div className="flex-1 pr-6 pb-2">
+                                <div className="font-bold text-[#00f0ff] mb-1 truncate">{c.name || 'Custom Action'}</div>
+                                <div className="text-white font-bold mb-1">Cost: -{c.cost} Res</div>
                             </div>
-                            <div className="flex flex-wrap gap-2 text-xs font-bold">
-                                {(enemy.currentBarriers || []).map((bar, i) => (
-                                    <div key={i} className="bg-gray-900 border border-[#00f0ff] px-2 py-1 text-[#00f0ff]">BARRIER {i+1}: {bar}</div>
-                                ))}
-                                <div className="bg-gray-900 border border-[#ff6600] px-2 py-1 text-[#ff6600]">HP: {enemy.currentHp || 0}</div>
-                            </div>
+                            <button className="mt-auto w-full bg-[#00f0ff] text-black font-bold py-1 hover:bg-white uppercase" onClick={() => primeCard(c)}>Target</button>
+                            <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
                         </div>
                     ))}
                 </div>

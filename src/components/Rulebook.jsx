@@ -1,26 +1,27 @@
 /* eslint-disable react/no-unescaped-entities */
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 export default function Rulebook() {
     const [activeChapter, setActiveChapter] = useState('core');
 
     const chapters = [
-        { id: 'core', label: '1. Core Philosophy' },
-        { id: 'combat', label: '2. Combat & Defense' },
-        { id: 'resonance', label: '3. Resonance & Synthesis' },
-        { id: 'environment', label: '4. The Slate & Terrain' },
-        { id: 'armory', label: '5. The Armory & Synergies' }
+        { id: 'core', label: '1. The Resonance Engine (VTT)' },
+        { id: 'flow', label: '2. Encounter Flow & Deployment' },
+        { id: 'grid', label: '3. Grid Movement & Terrain' },
+        { id: 'combat', label: '4. Automated Combat & Defense' },
+        { id: 'armory', label: '5. Classes, HP & Synergy' },
+        { id: 'synthesis', label: '6. The Synthesis Matrix' }
     ];
 
     return (
         <div className="flex flex-col md:flex-row gap-6 h-[75vh] font-mono text-sm">
-            {/* Table of Contents Sidebar */}
-            <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-slate-700 flex flex-col gap-2 shrink-0 overflow-y-auto">
+            {/* Sidebar */}
+            <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-slate-700 flex flex-col gap-2 shrink-0 overflow-y-auto shadow-xl">
                 <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Manual</h2>
                 {chapters.map(chap => (
                     <button 
                         key={chap.id}
-                        className={`p-3 text-left transition-colors border-l-4 ${activeChapter === chap.id ? 'bg-black border-[#ff6600] text-[#ff6600] font-bold' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                        className={`p-3 text-left transition-colors border-l-4 ${activeChapter === chap.id ? 'bg-black border-[#ff6600] text-[#ff6600] font-bold shadow-inner' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}
                         onClick={() => setActiveChapter(chap.id)}
                     >
                         {chap.label}
@@ -28,72 +29,152 @@ export default function Rulebook() {
                 ))}
             </div>
 
-            {/* Rulebook Content Area */}
-            <div className="flex-1 bg-[#1a222c] p-6 md:p-10 border border-slate-700 overflow-y-auto text-gray-300 space-y-6">
+            {/* Content Area */}
+            <div className="flex-1 bg-[#1a222c] p-6 md:p-10 border border-slate-700 overflow-y-auto text-gray-300 space-y-6 shadow-inner">
                 
                 {activeChapter === 'core' && (
                     <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">1. Core Philosophy</h1>
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">1. The Resonance Engine</h1>
                         
-                        <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">The Slate</h3>
-                            <p className="leading-relaxed">
-                                The foundational rule of the Resonance Engine is negotiation through creation. All combat must start on featureless terrain. The GM will not pre-build walls, obstacles, or cover. Instead, players and GMs must negotiate and build the battlefield dynamically using their abilities, affinities, and Resonance synthesis as the encounter unfolds.
-                            </p>
+                        <div className="bg-gray-900 border border-[#00f0ff] p-4 mb-6">
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 uppercase tracking-widest">Fully Automated System</h3>
+                            <p className="leading-relaxed">Players do not calculate damage, distances, line-of-sight, or flanking angles. The VTT handles all vector math automatically. When a player or GM clicks "TARGET" on a weapon or ability, and clicks an enemy token on the grid, the Engine automatically calculates the trajectory, applies synergy bonuses, deducts the specific defensive stats, shatters barriers, and updates the token's HP instantly.</p>
                         </div>
 
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">System Overload</h3>
-                            <p className="leading-relaxed">
-                                Combat is designed to be fast, lethal, and escalating. At the start of <strong>Round 4</strong>, atmospheric Resonance reaches critical mass. All Resonance generation doubles, and all damage sources (both player and enemy) are multiplied by 1.5x. Encounters are not meant to drag on; they are meant to detonate.
-                            </p>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2">The Blank Slate</h3>
+                            <p className="leading-relaxed">The foundational rule of the system is negotiation through creation. Combat starts on a completely featureless grid. The GM does not pre-build walls, obstacles, or cover. Instead, players and GMs dynamically paint the battlefield using the Utility ("u") values of the abilities they synthesize.</p>
                         </div>
                     </div>
                 )}
 
-                {activeChapter === 'combat' && (
+                {activeChapter === 'flow' && (
                     <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">2. Combat & Defense</h1>
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">2. Encounter Flow & Deployment</h1>
                         
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Facing Arcs & Flanking</h3>
-                            <p className="leading-relaxed">
-                                Every entity commands a 3-hex front arc. Orientation matters. Attacks originating from the rear 3 hexes count as Flanking, which completely bypasses base mitigation stats. Position carefully and watch your token&apos;s facing indicator.
-                            </p>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Round 0: Deployment Phase</h3>
+                            <p className="leading-relaxed mb-4">Every encounter begins in Round 0. During this phase, the grid visually splits into two sectors:</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-4">
+                                <li><strong>Northern Sector (Red):</strong> Hostile drop zone.</li>
+                                <li><strong>Southern Sector (Blue):</strong> Agent drop zone.</li>
+                            </ul>
+                            <p className="leading-relaxed">The GM utilizes the Active Turn Tracker on their dashboard to pass priority back and forth. Players click their token, click the floating "Move" button, and place themselves anywhere within their designated zone. Once all units are deployed, the GM advances the tracker to Round 1.</p>
                         </div>
 
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Defensive Actions</h3>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">System Overload</h3>
+                            <p className="leading-relaxed">Combat is designed to detonate, not drag. At the start of <strong>Round 4</strong>, the Engine initiates System Overload. All Resonance generation doubles, and all damage sources across the board are multiplied by 1.5x.</p>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'grid' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">3. Grid Movement & Terrain</h1>
+                        
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Speed (SPD) & Facing</h3>
+                            <p className="leading-relaxed mb-4">Tokens have an intrinsic Speed stat (default 3), editable via the Token Inspector. Priming a move visually highlights all accessible hexes. Moving costs 1 point per hex. Tokens can freely rotate their front facing arc at the end of their movement by clicking the arrow indicator on their token.</p>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
+                            <p className="leading-relaxed mb-4">The environment is painted dynamically based on the Utility Weight (u) of synthesized abilities:</p>
                             <ul className="space-y-4 list-none">
-                                <li className="bg-black p-4 border border-gray-700">
-                                    <strong className="text-white text-base">Front Parry</strong><br/>
-                                    <span className="text-xs text-gray-400">Formula: Front DP + Weapon Base</span><br/>
-                                    Mitigates incoming damage that originates specifically within your 3-hex front arc. Represents actively striking away or absorbing blows.
+                                <li className="bg-black border-l-4 border-yellow-500 p-3">
+                                    <strong className="text-yellow-500">Minor Terrain (u=1)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Mud, Caltrops</span><br/>
+                                    Doubles the movement cost to enter the hex.
                                 </li>
-                                <li className="bg-black p-4 border border-gray-700">
-                                    <strong className="text-white text-base">Support Intercept</strong><br/>
-                                    <span className="text-xs text-gray-400">Formula: Support DP + 3</span><br/>
-                                    Allows you to project a shield or physically step in to mitigate damage targeted at an allied unit in an adjacent hex.
+                                <li className="bg-black border-l-4 border-purple-500 p-3">
+                                    <strong className="text-purple-500">Major Terrain (u=3)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Void Rifts, Magma</span><br/>
+                                    Blocks shift/dash abilities. Deals environmental damage if a token ends their turn inside it.
                                 </li>
-                                <li className="bg-black p-4 border border-gray-700">
-                                    <strong className="text-white text-base">Backline Evasion</strong><br/>
-                                    <span className="text-xs text-gray-400">Formula: Back DP + 3</span><br/>
-                                    Used to dodge Flanking attacks (originating in your rear 3 hexes) or to mitigate Area of Effect (AoE) damage by diving out of the blast radius.
+                                <li className="bg-black border-l-4 border-blue-500 p-3">
+                                    <strong className="text-blue-500">Severe Terrain (u=5)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
+                                    Completely impassable. Blocks line-of-sight for targeting.
                                 </li>
                             </ul>
                         </div>
                     </div>
                 )}
 
-                {activeChapter === 'resonance' && (
+                {activeChapter === 'combat' && (
                     <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">3. Resonance & Synthesis</h1>
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">4. Automated Combat & Defense</h1>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2">The "Once Per Turn" Limitation</h3>
+                            <p className="leading-relaxed mb-4">Defensive actions (Parry, Intercept, Evade) can only be utilized <strong>ONCE per turn</strong>. The Resonance Engine automates this: if you are attacked from the front, the engine calculates your Parry, mitigates the damage, and <em>automatically sets your Parry to "USED" on your HUD</em>. If you are attacked from the front again before clicking "Refresh Turn", you will take raw, unmitigated damage.</p>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Automated Vector Resolutions</h3>
+                            <ul className="space-y-4 list-none">
+                                <li className="bg-black p-4 border border-gray-700">
+                                    <strong className="text-white text-base">Front Parry (Front DP + Wpn Base)</strong><br/>
+                                    <span className="text-xs text-gray-400">Trigger: Attack originates inside your 3-hex front arc.</span><br/>
+                                    The Engine calculates the angle. If the attacker is in front of you, Parry is automatically applied.
+                                </li>
+                                <li className="bg-black p-4 border border-gray-700">
+                                    <strong className="text-white text-base">Backline Evasion (Back DP + 3)</strong><br/>
+                                    <span className="text-xs text-gray-400">Trigger: Attack originates in your rear 3 hexes, OR is an AoE blast.</span><br/>
+                                    If the Engine detects a flanking angle or a radius blast, it bypasses your weapon and uses Evasion to mitigate.
+                                </li>
+                                <li className="bg-black p-4 border border-gray-700">
+                                    <strong className="text-white text-base">Support Intercept (Supp DP + 3)</strong><br/>
+                                    <span className="text-xs text-gray-400">Trigger: Proactive</span><br/>
+                                    Unlike Parry/Evade, Interception is manual. A player can spend their Intercept to jump in and mitigate damage targeting an adjacent ally.
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Hostile Barriers & Staggering</h3>
+                            <p className="leading-relaxed">Enemies do not use DP. They possess raw HP and layered Barriers. The Engine automatically routes incoming damage to shatter barriers first. Once an enemy's final barrier is reduced to 0, the Engine marks them as <strong>STAGGERED</strong> (highlighted in yellow), meaning subsequent attacks deal full damage directly to their HP pool.</p>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'armory' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">5. Classes, HP & Synergy</h1>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2">Automated HP Scaling</h3>
+                            <p className="leading-relaxed mb-4">Max HP is dynamically calculated based on your Discipline Point (DP) build. Every Agent starts with 20 Base HP, automatically increased by the following ratios:</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-4 font-bold text-white">
+                                <li>+3 Max HP per point of Frontline DP.</li>
+                                <li>+2 Max HP per point of Support DP.</li>
+                                <li>+1 Max HP per point of Backline DP.</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">DP Weapon Requirements</h3>
+                            <p className="leading-relaxed mb-4">Any character can equip any weapon, but to unlock its <strong>Synergy Bonus</strong>, you must meet the exact DP thresholds listed on the HUD dropdown.</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
+                                <li><strong>Vanguard Synergy [Req 10F/0S/0B]:</strong> Heavy Melee. Massive damage, boosts frontline parries.</li>
+                                <li><strong>Paladin Synergy [Req 5F/5S/0B]:</strong> Shields & Maces. Heavily boosts both parries and interceptions.</li>
+                                <li><strong>Sniper Synergy [Req 0F/0S/10B]:</strong> Longbows & Muskets. Max range, massive raw damage.</li>
+                                <li><strong>Conduit Synergy [Req 0F/10S/0B]:</strong> Catalysts. Mid-range magic, heavily boosts support intercepts.</li>
+                                <li><strong>Skirmisher Synergy [Req 5F/0S/5B]:</strong> Agile Arms. Mobility, boosts damage and backline evasion.</li>
+                                <li><strong>Saboteur Synergy [Req 0F/5S/5B]:</strong> Traps & Alchemy. Control tools, boosts intercepts and evasion.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'synthesis' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">6. The Synthesis Matrix</h1>
                         
                         <div>
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Player Resonance</h3>
-                            <p className="leading-relaxed mb-4">
-                                Resonance is the fuel for custom abilities. It is capped at 10 points per player. Players earn Resonance through narrative and tactical actions:
-                            </p>
+                            <p className="leading-relaxed mb-4">Resonance is fuel. It is capped at 10 points per player. Earn Resonance through tactical actions:</p>
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
                                 <li><strong>Basic Attack:</strong> +1 Res</li>
                                 <li><strong>Banter / Roleplay:</strong> +1 Res</li>
@@ -103,104 +184,16 @@ export default function Rulebook() {
                         </div>
 
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">The Global Enemy Pool</h3>
-                            <p className="leading-relaxed mb-4">
-                                Hostiles do not track individual pools. The GM controls a singular <strong>Global Enemy Pool</strong> to execute signature abilities. This limits enemy spam and allows players to strategically weather heavy attacks.
-                            </p>
-                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
-                                <li><strong>Start of Encounter:</strong> The GM begins with 10 Resonance.</li>
-                                <li><strong>Per Round:</strong> The GM generates +1 Resonance for every hostile entity currently active on The Slate.</li>
-                                <li><strong>Execution:</strong> Click the Execute [-X Res] button next to an enemy&apos;s ability to instantly spend from the Global Pool.</li>
-                            </ul>
-                        </div>
-
-                        <div>
-                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">The Synthesis Matrix</h3>
-                            <p className="leading-relaxed mb-4">
-                                Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the Synthesis Matrix formula:
-                            </p>
-                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">
-                                R_cost = ⌈ α × (d + u + a²) ⌉
-                            </div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Building Abilities</h3>
+                            <p className="leading-relaxed mb-4">Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the mathematical Engine formula:</p>
+                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + a²) ⌉</div>
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
                                 <li><strong>d (Damage):</strong> Raw damage output.</li>
                                 <li><strong>u (Utility):</strong> Status effects (1 = Minor, 3 = Major, 5 = Severe).</li>
                                 <li><strong>a (AoE Radius):</strong> Hex blast radius.</li>
                                 <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
                             </ul>
-                            <p className="text-xs text-gray-500 mt-4"><em>*The system automatically rounds fractions up to the nearest whole number (⌈ ⌉).</em></p>
-                        </div>
-                    </div>
-                )}
-
-                {activeChapter === 'environment' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">4. The Slate & Terrain</h1>
-                        
-                        <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Hex Movement</h3>
-                            <p className="leading-relaxed">
-                                Shifting to any adjacent standard hex costs 1 movement point. Tokens can freely rotate their facing arc at any point during their movement at no additional cost.
-                            </p>
-                        </div>
-
-                        <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
-                            <p className="leading-relaxed mb-4">
-                                Because combat starts on a blank slate, the environment is painted by the abilities players and enemies use (determined by the Utility Weight &quot;u&quot;).
-                            </p>
-                            <ul className="space-y-4 list-none">
-                                <li className="bg-black border-l-4 border-yellow-500 p-3">
-                                    <strong className="text-yellow-500">Minor Terrain (u=1)</strong><br/>
-                                    <span className="text-gray-400 text-xs">Examples: Mud, Ice, Caltrops</span><br/>
-                                    Doubles the movement cost to enter the hex.
-                                </li>
-                                <li className="bg-black border-l-4 border-purple-500 p-3">
-                                    <strong className="text-purple-500">Major Terrain (u=3)</strong><br/>
-                                    <span className="text-gray-400 text-xs">Examples: Deep Water, Void Rifts, Magma</span><br/>
-                                    Blocks shift/dash abilities. Deals environmental damage or applies status effects if a token ends their turn inside it.
-                                </li>
-                                <li className="bg-black border-l-4 border-blue-500 p-3">
-                                    <strong className="text-blue-500">Severe Terrain (u=5)</strong><br/>
-                                    <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
-                                    Completely impassable. Breaks Line of Sight (LoS) for attacks.
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                )}
-
-                {activeChapter === 'armory' && (
-                    <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">5. The Armory & Synergies</h1>
-                        
-                        <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Loadout Flexibility</h3>
-                            <p className="leading-relaxed">
-                                Weapons are <strong>class-limited, but not class-restricted</strong>. This means any character can equip any weapon from the Armory. However, weapons are inherently designed to complement specific combat styles. 
-                            </p>
-                        </div>
-
-                        <div>
-                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Class Synergy</h3>
-                            <p className="leading-relaxed mb-4">
-                                When a character equips a weapon that matches their current derived Class, they achieve <strong>Synergy</strong>. The Resonance Engine will automatically detect this link and instantly boost specific defensive actions or base damage thresholds.
-                            </p>
-                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
-                                <li><strong>Heavy Melee (e.g., Halberds, Zweihanders):</strong> Synergy with <em>Vanguard</em>. High damage, boosts frontline parries.</li>
-                                <li><strong>Shields & Maces:</strong> Synergy with <em>Paladin</em>. Defensive focus, heavily boosts both parries and interceptions.</li>
-                                <li><strong>Longbows & Muskets:</strong> Synergy with <em>Sniper</em>. Maximum range, maximum raw damage output.</li>
-                                <li><strong>Catalysts (e.g., Tomes, Censers):</strong> Synergy with <em>Conduit</em>. Mid-range projection, boosts support intercepts.</li>
-                                <li><strong>Agile Arms (e.g., Daggers, Pistols):</strong> Synergy with <em>Skirmisher</em>. Close-range mobility, boosts damage and backline evasion.</li>
-                                <li><strong>Standard Issue (e.g., Shortswords, Clubs):</strong> The reliable fallback. Grants a flat damage boost for <em>Rookies</em> still finding their specialization.</li>
-                            </ul>
-                        </div>
-                        
-                        <div className="bg-gray-900 border border-gray-700 p-4 mt-4">
-                            <span className="text-[#ff6600] font-bold block mb-1 uppercase tracking-wide">Tracking Range</span>
-                            <p className="text-xs text-gray-400 leading-relaxed">
-                                A weapon&apos;s Range (e.g., 1-5 Hexes) strictly dictates the maximum distance a standard Base Attack can travel across The Slate. Custom abilities synthesized with Resonance are bound by the AoE radius (&quot;a&quot;) you purchase during creation, not your weapon&apos;s default range.
-                            </p>
+                            <p className="mt-4 leading-relaxed">Once built, abilities can be Equipped to the active HUD (max 4), or Archived permanently in your Grimoire / Spellbook tab for later use.</p>
                         </div>
                     </div>
                 )}
