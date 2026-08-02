@@ -2,7 +2,6 @@
 import React from 'react';
 import { bestiary } from '../data/bestiary';
 
-// NEW: Shared Synonym Dictionary for the GM parsing engine
 const ELEMENT_DICTIONARY = {
     'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'],
     'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'],
@@ -11,6 +10,23 @@ const ELEMENT_DICTIONARY = {
     'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'],
     'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'],
     'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood']
+};
+
+const STATE_DICTIONARY = {
+    'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
+    'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
+    'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
+    'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
+    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor'],
+    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce'],
+    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam'],
+    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash'],
+    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash'],
+    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple'],
+    'Shocked': ['shock', 'glitch', 'short', 'jolt'],
+    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase'],
+    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable']
 };
 
 const getCoreElement = (input) => {
@@ -22,7 +38,16 @@ const getCoreElement = (input) => {
     return 'Kinetic'; 
 };
 
-export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, hardResetSession }) {
+const getCoreState = (input) => {
+    if (!input) return '';
+    const clean = input.toLowerCase().replace(/\[|\]/g, '').trim();
+    for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
+        if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
+    }
+    return input; 
+};
+
+export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
     const updateEnc = (updates) => pushUpdate(s => ({ ...s, encounter: { ...s.encounter, ...updates } }));
 
     const addEnemy = (bestiaryId) => {
@@ -33,7 +58,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
     };
 
     const primeEnemyAbility = (enemy, cleanName, desc) => {
-        // NEW: Upgraded Regex mapping to extract raw element concepts
         const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
         const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
         const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
@@ -43,12 +67,13 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
         const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
         const parsedAoe = aoeMatch ? parseInt(aoeMatch[1]) : 0;
         const parsedEff = effMatch ? effMatch[1] : null;
+        const coreEff = getCoreState(parsedEff);
         
         let eRange = "1";
         const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
         
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, elementRaw: rawMatch, elementCore: coreMatch } }));
+        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch } }));
     };
 
     const handleNextRound = () => {
@@ -58,7 +83,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
             
             const newPlayers = { ...(s.players || {}) };
             Object.keys(newPlayers).forEach(pid => {
-                newPlayers[pid] = { ...newPlayers[pid], usedParry: false, usedIntercept: false, usedEvade: false };
+                // NEW: Wipes the basic attack exhaust locks so players can fire again
+                newPlayers[pid] = { ...newPlayers[pid], usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false };
             });
 
             return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, players: newPlayers };
@@ -75,7 +101,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                         resPool: 3, 
                         usedParry: false, 
                         usedIntercept: false, 
-                        usedEvade: false 
+                        usedEvade: false,
+                        usedBasicAttack: false 
                     };
                 });
                 return {
@@ -88,6 +115,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                 };
             });
         }
+    };
+
+    const grantGlobalXP = (amount) => {
+        pushUpdate(s => {
+            const newP = { ...(s.players || {}) };
+            Object.keys(newP).forEach(pid => {
+                newP[pid].xp = (parseInt(newP[pid].xp) || 0) + amount;
+            });
+            return { ...s, players: newP };
+        });
+        alert(`Global Event: +${amount} XP distributed to all Agents.`);
     };
 
     const isOverload = (encounter?.round || 0) >= 4;
@@ -123,6 +161,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-700">
+                    <div className="text-gray-400 mb-2 text-xs tracking-widest uppercase">Experience Uplink</div>
+                    <div className="flex gap-2 mb-4">
+                        <button className="flex-1 bg-black border border-[#00f0ff] text-[#00f0ff] font-bold p-2 hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => grantGlobalXP(5)}>+5 XP ALL</button>
+                        <button className="flex-1 bg-black border border-[#00f0ff] text-[#00f0ff] font-bold p-2 hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => grantGlobalXP(10)}>+10 XP ALL</button>
+                    </div>
+
                     <button className="w-full bg-red-950 border border-red-500 text-red-500 font-bold p-2 hover:bg-red-500 hover:text-white transition-colors" onClick={handleNewEncounter}>
                         ⚠ INITIALIZE NEW ENCOUNTER
                     </button>
@@ -154,7 +198,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                     {enemiesList.length === 0 && <div className="text-gray-500 text-center mt-10 border border-dashed border-gray-700 p-8">No active entities on the grid.</div>}
                     
                     {enemiesList.map((enemy, idx) => {
-                        const myToken = enemyTokens.find(t => t.refId === enemy.uid);
+                        const myToken = enemyTokens.find(t => t.refId == enemy.uid);
 
                         return (
                             <div key={enemy.uid} className={`border p-3 flex flex-col xl:flex-row gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
@@ -189,22 +233,32 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                                             const rawName = parts[0];
                                             const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
-                                            const costMatch = rawName.match(/\[(\d+)\s*Res\]/i) || rawName.match(/\((\d+)\s*Res\)/i);
-                                            const cost = costMatch ? parseInt(costMatch[1]) : 0;
+                                            
+                                            const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
+                                            const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
+                                            const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
+                                            const coreMatch = getCoreElement(rawMatch);
+
+                                            const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
+                                            const coreEff = getCoreState(pEff);
 
+                                            let eRange = "1";
+                                            const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
+                                            if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
+                                            
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs flex justify-between items-start gap-2 relative">
                                                     <div>
                                                         <span className="font-bold text-[#00f0ff]">{cleanName}</span>
-                                                        {pEff && <span className="text-purple-400 text-[10px] ml-2">[{pEff}]</span>}
+                                                        {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
                                                         {desc && <span className="text-gray-400 block mt-1">{desc.trim()}</span>}
                                                     </div>
                                                     <div className="flex gap-2 shrink-0">
-                                                        {cost > 0 && (
-                                                            <button className="bg-black border border-[#ff6600] text-[#ff6600] px-2 py-1 text-[10px] font-bold uppercase hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - cost) })}>
-                                                                -{cost} Res
+                                                        {rawName.match(/\[(\d+)\s*Res\]/i) && (
+                                                            <button className="bg-black border border-[#ff6600] text-[#ff6600] px-2 py-1 text-[10px] font-bold uppercase hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - parseInt(rawName.match(/\[(\d+)\s*Res\]/i)[1])) })}>
+                                                                -{rawName.match(/\[(\d+)\s*Res\]/i)[1]} Res
                                                             </button>
                                                         )}
                                                         <button className="bg-[#00f0ff] text-black px-2 py-1 text-[10px] font-bold uppercase hover:bg-white transition-colors" onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>Target</button>

@@ -9,13 +9,15 @@ const CLASS_COLORS = {
     Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff'      
 };
 
-export default function GridBoard({ players = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate }) {
+export default function GridBoard({ players = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate, role, localId }) {
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
     const [hoveredHex, setHoveredHex] = useState(null);
     const [draftPlayerId, setDraftPlayerId] = useState('');
     const [draftEnemyId, setDraftEnemyId] = useState('');
     
+    const isGM = role === 'gm';
+
     const COLS = 15; const ROWS = 10;
     const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
     const activeTokens = tokens || [];
@@ -45,7 +47,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const findActiveTokenIndex = (action, tokenList) => {
         if (!action) return -1;
         if (action.isTokenId) return tokenList.findIndex(t => t.id === action.sourceId);
-        return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && t.refId === action.sourceId);
+        return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && t.refId == action.sourceId);
     };
 
     const executeMove = (index) => {
@@ -104,36 +106,53 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const attIdx = findActiveTokenIndex(activeAction, newTokens);
         if (attIdx !== -1) attackerPos = getHexCoords(newTokens[attIdx].pos);
 
+        const isExecute = activeAction.effectCore === 'Execute';
+        let deadEnemyUids = new Set();
+
         newTokens.forEach(t => {
             if (getHexDistance(t.pos, targetHex) <= radius) {
                 hitCount++;
                 const targetCoords = getHexCoords(t.pos);
                 
                 if (t.type === 'enemy') {
-                    const eIndex = newEnemies.findIndex(e => e.uid === t.refId);
+                    const eIndex = newEnemies.findIndex(e => e.uid == t.refId);
                     if (eIndex !== -1) {
                         const enemy = newEnemies[eIndex];
-                        let dmgRemaining = rawDmg;
+                        let newHp = enemy.currentHp;
                         let barriers = [...(enemy.currentBarriers || [])];
-                        for (let i = 0; i < barriers.length; i++) {
-                            if (barriers[i] > 0 && dmgRemaining > 0) {
-                                if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
-                                else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
-                            }
-                        }
-                        const newHp = Math.max(0, (enemy.currentHp || 0) - dmgRemaining);
                         let staggered = enemy.staggered;
-                        if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
+
+                        if (isExecute) {
+                            barriers.fill(0);
+                            newHp = 0;
+                            staggered = true;
+                            log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`;
+                        } else {
+                            let dmgRemaining = rawDmg;
+                            for (let i = 0; i < barriers.length; i++) {
+                                if (barriers[i] > 0 && dmgRemaining > 0) {
+                                    if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
+                                    else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
+                                }
+                            }
+                            newHp = Math.max(0, (enemy.currentHp || 0) - dmgRemaining);
+                            if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
+                            log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg (Mitigated ${rawDmg - dmgRemaining} via Barriers). HP is now ${newHp}.`;
+                            if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
+                        }
 
                         let updatedStatuses = [...(enemy.statuses || [])];
-                        if (activeAction.effectName) {
+                        if (activeAction.effectName && !isExecute) {
                             updatedStatuses.push(activeAction.effectName);
                             log += `\n>> State [${activeAction.effectName}] applied to ${enemy.name}!`;
                         }
 
-                        newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered, statuses: updatedStatuses };
-                        log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg (Mitigated ${rawDmg - dmgRemaining} via Barriers). HP is now ${newHp}.`;
-                        if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
+                        if (newHp <= 0) {
+                            log += `\n>> TARGET DESTROYED! Entity purged from grid.`;
+                            deadEnemyUids.add(enemy.uid);
+                        } else {
+                            newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered, statuses: updatedStatuses };
+                        }
                     }
                 } 
                 else if (t.type === 'player') {
@@ -144,46 +163,75 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
                         let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
 
-                        let mitigation = 0; let mitType = "None"; let isFlanking = false;
-                        
-                        if (radius > 0) {
-                            isFlanking = true; mitType = "AoE Target";
-                        } else if (attackerPos) {
-                            const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
-                            let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
-                            if (angle < 0) angle += 360; 
-                            const facingAngle = t.facing * 60; 
-                            let diff = Math.abs(angle - facingAngle);
-                            if (diff > 180) diff = 360 - diff;
-                            if (diff > 60) isFlanking = true; 
-                        }
-
-                        if (isFlanking) {
-                            if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
-                            else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
+                        if (isExecute) {
+                            p.currentHp = 0;
+                            log += `\n>> AGENT EXECUTED! [Critical System Failure]`;
                         } else {
-                            if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } 
-                            else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
-                        }
+                            let mitigation = 0; let mitType = "None"; let isFlanking = false;
+                            
+                            if (radius > 0) {
+                                isFlanking = true; mitType = "AoE Target";
+                            } else if (attackerPos) {
+                                const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
+                                let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                                if (angle < 0) angle += 360; 
+                                const facingAngle = t.facing * 60; 
+                                let diff = Math.abs(angle - facingAngle);
+                                if (diff > 180) diff = 360 - diff;
+                                if (diff > 60) isFlanking = true; 
+                            }
 
-                        const finalDmg = Math.max(0, rawDmg - mitigation);
-                        const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
-                        p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
-                        
-                        if (activeAction.effectName) {
-                            p.statuses = [...(p.statuses || []), activeAction.effectName];
-                            log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
+                            if (isFlanking) {
+                                if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
+                                else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
+                            } else {
+                                if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } 
+                                else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
+                            }
+
+                            const finalDmg = Math.max(0, rawDmg - mitigation);
+                            const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+                            p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
+                            
+                            if (activeAction.effectName) {
+                                p.statuses = [...(p.statuses || []), activeAction.effectName];
+                                log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
+                            }
+                            log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
                         }
-                        
-                        log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
                     }
                 }
             }
         });
 
         if (hitCount === 0) log += `\nNo valid targets in radius.`;
+
+        if (deadEnemyUids.size > 0) {
+            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
+            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+        }
+
+        if (!activeAction.isEnemy && activeAction.sourceId) {
+            const p = newPlayers[activeAction.sourceId];
+            if (p) {
+                if (activeAction.isBasic) {
+                    p.usedBasicAttack = true;
+                    p.resPool = Math.min(10, (parseInt(p.resPool) || 0) + 1);
+                    log += `\n>> [+1 Res] Basic Attack executed.`;
+                } else if (activeAction.cost > 0) {
+                    p.resPool = Math.max(0, (parseInt(p.resPool) || 0) - activeAction.cost);
+                    log += `\n>> [-${activeAction.cost} Res] Skill executed.`;
+                }
+            }
+        }
+
         pushUpdate(s => ({ ...s, players: newPlayers, encounter: { ...(s.encounter || {}), enemies: newEnemies }, tokens: newTokens, activeAction: null }));
         alert(log);
+
+        if (selectedToken && deadEnemyUids.size > 0) {
+            const stillExists = newTokens.some(t => t.id === selectedToken);
+            if (!stillExists) setSelectedToken(null);
+        }
     };
 
     const handleHexClick = (index) => {
@@ -200,9 +248,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     };
 
     const primeTokenMove = (t) => {
+        if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot move Hostile entities.");
+        if (!isGM && t.type === 'player' && t.refId !== localId) return alert("Access Denied: Cannot reposition other Agents.");
+
         let srcName = 'Unknown';
         if (t.type === 'enemy') {
-            const e = (encounter?.enemies || []).find(en => en.uid === t.refId);
+            const e = (encounter?.enemies || []).find(en => en.uid == t.refId);
             if (e) srcName = e.name;
         } else if (t.type === 'player') {
             const p = players[t.refId];
@@ -215,9 +266,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
     const addToken = (type, refId) => { 
         if (!refId) return alert("Select an entity to deploy first.");
+        const finalRef = type === 'enemy' ? Number(refId) : refId;
+
         pushUpdate(s => {
             const startPos = type === 'enemy' ? 7 : 142; 
-            const newToken = { id: Date.now(), type, pos: startPos, facing: type === 'enemy' ? 3 : 0, speed: 3, movementRemaining: 3, refId }; 
+            const newToken = { id: Date.now(), type, pos: startPos, facing: type === 'enemy' ? 3 : 0, speed: 3, movementRemaining: 3, refId: finalRef }; 
             return { ...s, tokens: [...(s.tokens || []), newToken] };
         }); 
     };
@@ -315,11 +368,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             let activeStatusList = [];
 
             if (t.type === 'enemy') {
-                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === t.refId);
+                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == t.refId);
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
                     
-                    // NEW: Automatically parse max attack range from the hostile's abilities array
                     let maxRange = 1;
                     (linkedEnemy.abilities || []).forEach(ability => {
                         const rangeMatch = ability.match(/range\s+(\d+)(?:-(\d+))?/i);
@@ -329,7 +381,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
                     });
 
-                    // NEW: Format display abbreviation
                     displayChar = linkedEnemy.name ? linkedEnemy.name.substring(0,2).toUpperCase() : 'E';
 
                     hpDisplay = (
@@ -345,8 +396,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const p = players[t.refId] || {};
                 activeStatusList = p.statuses || [];
                 const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
+                
                 let pClass = "Rookie";
-                if (fDP >= 10) pClass = "Vanguard"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (bDP >= 10) pClass = "Sniper"; else if (sDP >= 10) pClass = "Conduit"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
+                if (fDP >= 10) pClass = "Vanguard"; 
+                else if (sDP >= 10) pClass = "Conduit"; 
+                else if (bDP >= 10) pClass = "Sniper"; 
+                else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; 
+                else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; 
+                else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
 
                 const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
                 
@@ -361,6 +418,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 );
             }
 
+            const showHoverControls = selectedToken === t.id && (isGM || (t.type === 'player' && t.refId === localId));
+
             return (
                 <div 
                     key={`tok-${t.id}`} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold transition-transform cursor-pointer ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50 z-40' : 'shadow-md shadow-black/80 z-30'}`}
@@ -374,7 +433,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     }}
                     style={{ backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, transform: `rotate(${t.facing * 60}deg)`, cursor: activeAction ? 'crosshair' : 'pointer' }}
                 >
-                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 hover:border-b-white transition-colors" onClick={(e) => rotateToken(e, t.id)} title="Rotate Facing Arc"></div>
+                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 hover:border-b-white transition-colors" onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot rotate Hostile facing arc.");
+                        rotateToken(e, t.id);
+                    }} title="Rotate Facing Arc"></div>
+                    
                     <span className="mt-1">{displayChar}</span>
                     {hpDisplay}
                     
@@ -384,7 +448,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         </div>
                     )}
 
-                    {selectedToken === t.id && ( 
+                    {showHoverControls && ( 
                         <div className="absolute -top-10 flex gap-2 z-50" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
                             <button className="bg-[#22c55e] text-black rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-white hover:border-[#22c55e] transition-colors shadow-lg" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button>
                             <button className="bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-white hover:text-red-600 hover:border-red-600 transition-colors shadow-lg" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>
@@ -406,7 +470,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 
                 const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
                 let pClass = "Rookie";
-                if (fDP >= 10) pClass = "Vanguard"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (bDP >= 10) pClass = "Sniper"; else if (sDP >= 10) pClass = "Conduit"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
+                if (fDP >= 10) pClass = "Vanguard"; 
+                else if (sDP >= 10) pClass = "Conduit"; 
+                else if (bDP >= 10) pClass = "Sniper"; 
+                else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; 
+                else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; 
+                else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
 
                 const pColor = CLASS_COLORS[pClass] || '#00f0ff';
                 let isSynergy = fDP >= (activeWeapon.reqF||0) && sDP >= (activeWeapon.reqS||0) && bDP >= (activeWeapon.reqB||0);
@@ -426,34 +495,46 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         <div className="bg-black border border-gray-700 p-2 text-center font-bold flex items-center justify-center gap-2" style={{ color: pColor }}>
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase">Hit Points</div>
-                                <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" style={{ color: pColor }} value={p.currentHp ?? 30} onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    pushUpdate(s => ({ ...s, players: { ...s.players, [activeT.refId]: { ...p, currentHp: val } } }));
-                                }}/> 
+                                {isGM || (activeT.refId === localId) ? (
+                                    <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" style={{ color: pColor }} value={p.currentHp ?? 30} onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        pushUpdate(s => ({ ...s, players: { ...s.players, [activeT.refId]: { ...p, currentHp: val } } }));
+                                    }}/> 
+                                ) : (
+                                    <div className="text-2xl" style={{ color: pColor }}>{p.currentHp ?? 30}</div>
+                                )}
                             </div>
                             <div className="w-px h-8 bg-gray-700"></div>
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div>
                                 <div className="flex justify-center items-center gap-1">
-                                    <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl" style={{ color: pColor }} value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        pushUpdate(s => {
-                                            const newT = [...(s.tokens || [])];
-                                            const tIdx = newT.findIndex(tok => tok.id === activeT.id);
-                                            if (tIdx !== -1) newT[tIdx].movementRemaining = val;
-                                            return { ...s, tokens: newT };
-                                        });
-                                    }}/> 
+                                    {isGM || (activeT.refId === localId) ? (
+                                        <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl" style={{ color: pColor }} value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            pushUpdate(s => {
+                                                const newT = [...(s.tokens || [])];
+                                                const tIdx = newT.findIndex(tok => tok.id === activeT.id);
+                                                if (tIdx !== -1) newT[tIdx].movementRemaining = val;
+                                                return { ...s, tokens: newT };
+                                            });
+                                        }}/> 
+                                    ) : (
+                                        <div className="text-2xl" style={{ color: pColor }}>{activeT.movementRemaining ?? activeT.speed ?? 3}</div>
+                                    )}
                                     <span className="text-gray-600 text-lg">/</span>
-                                    <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        pushUpdate(s => {
-                                            const newT = [...(s.tokens || [])];
-                                            const tIdx = newT.findIndex(tok => tok.id === activeT.id);
-                                            if (tIdx !== -1) newT[tIdx].speed = val;
-                                            return { ...s, tokens: newT };
-                                        });
-                                    }}/>
+                                    {isGM || (activeT.refId === localId) ? (
+                                        <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            pushUpdate(s => {
+                                                const newT = [...(s.tokens || [])];
+                                                const tIdx = newT.findIndex(tok => tok.id === activeT.id);
+                                                if (tIdx !== -1) newT[tIdx].speed = val;
+                                                return { ...s, tokens: newT };
+                                            });
+                                        }}/>
+                                    ) : (
+                                        <div className="text-lg text-gray-500">{activeT.speed ?? 3}</div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -464,46 +545,74 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 {(p.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(p.statuses || []).map((st, i) => (
                                     <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
-                                        {st} <button className="text-red-400 hover:text-white" onClick={() => {
-                                            const newS = [...p.statuses]; newS.splice(i, 1);
-                                            pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: newS } } }));
-                                        }}>✕</button>
+                                        {st} 
+                                        {(isGM || activeT.refId === localId) && (
+                                            <button className="text-red-400 hover:text-white" onClick={() => {
+                                                const newS = [...p.statuses]; newS.splice(i, 1);
+                                                pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: newS } } }));
+                                            }}>✕</button>
+                                        )}
                                     </span>
                                 ))}
                             </div>
-                            <div className="flex gap-1">
-                                <input type="text" id="pState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
-                                <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
-                                    const val = document.getElementById('pState').value;
-                                    if (val) {
-                                        pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: [...(p.statuses||[]), val] } } }));
-                                        document.getElementById('pState').value = '';
-                                    }
-                                }}>+</button>
-                            </div>
+                            {(isGM || activeT.refId === localId) && (
+                                <div className="flex gap-1">
+                                    <input type="text" id="pState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
+                                    <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
+                                        const val = document.getElementById('pState').value;
+                                        if (val) {
+                                            pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: [...(p.statuses||[]), val] } } }));
+                                            document.getElementById('pState').value = '';
+                                        }
+                                    }}>+</button>
+                                </div>
+                            )}
                         </div>
 
-                        <div className="flex gap-2 mt-2">
-                            <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
-                            <button className="flex-1 bg-black text-white font-bold py-1 uppercase text-xs hover:bg-white hover:text-black border transition-colors" style={{ borderColor: pColor }} onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, element: 'Kinetic' } }))}>Target</button>
-                        </div>
+                        {(isGM || activeT.refId === localId) && (
+                            <div className="flex gap-2 mt-2">
+                                <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
+                                <button className={`flex-1 font-bold py-1 uppercase text-xs border transition-colors ${p.usedBasicAttack ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: p.usedBasicAttack ? 'gray' : pColor }} disabled={p.usedBasicAttack && !isGM} onClick={() => {
+                                    if (p.usedBasicAttack && !isGM) return alert("System Locked: Basic attack already executed this turn.");
+                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, elementRaw: activeWeapon.element || 'Kinetic', elementCore: activeWeapon.element || 'Kinetic', isBasic: true, cost: 0 } }))
+                                }}>{p.usedBasicAttack ? 'EXHAUSTED' : 'Target'}</button>
+                            </div>
+                        )}
                         
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Active Custom Cards</div>
                         {(p.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
-                        {(p.customCards || []).map(c => (
-                            <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
-                                <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
-                                <div className="text-gray-400 text-xs mb-2">Cost: {c.cost} Res | d:{c.d} a:{c.a}</div>
-                                {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
-                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range, effectName: c.effectName, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc } }))}>Target</button>
-                            </div>
-                        ))}
+                        {(p.customCards || []).map(c => {
+                            const dispRaw = c.elementRaw || c.element || 'Kinetic';
+                            const dispCore = c.elementCore || c.element || 'Kinetic';
+                            const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+                            
+                            // CLEANUP FIXED HERE: Safely evaluate p.resPool to prevent white screens
+                            const pRes = parseInt(p.resPool) || 0;
+
+                            return (
+                                <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
+                                    <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
+                                    <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
+                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
+                                    {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
+                                    
+                                    {(isGM || activeT.refId === localId) && (
+                                        <>
+                                            <button className={`w-full font-bold py-1 uppercase text-xs border border-gray-600 transition-colors ${pRes < c.cost ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={pRes < c.cost && !isGM} onClick={() => {
+                                                if (pRes < c.cost && !isGM) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
+                                                pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc, isBasic: false, cost: c.cost } }))
+                                            }}>{pRes < c.cost ? 'NO FUEL' : 'Target'}</button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 );
             }
 
             if (activeT.type === 'enemy') {
-                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === activeT.refId);
+                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == activeT.refId);
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
                 return (
@@ -517,39 +626,51 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         <div className="bg-black border border-gray-700 p-2 text-center font-bold flex items-center justify-center gap-2 text-[#ff6600]">
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase">Hit Points</div>
-                                <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" value={linkedEnemy.currentHp} onChange={(e) => {
-                                    const val = parseInt(e.target.value) || 0;
-                                    pushUpdate(s => {
-                                        const newE = [...(s.encounter?.enemies || [])];
-                                        const eIdx = newE.findIndex(en => en.uid === activeT.refId);
-                                        if (eIdx !== -1) newE[eIdx].currentHp = val;
-                                        return { ...s, encounter: { ...s.encounter, enemies: newE }};
-                                    });
-                                }}/> 
+                                {isGM ? (
+                                    <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" value={linkedEnemy.currentHp} onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 0;
+                                        pushUpdate(s => {
+                                            const newE = [...(s.encounter?.enemies || [])];
+                                            const eIdx = newE.findIndex(en => en.uid == activeT.refId);
+                                            if (eIdx !== -1) newE[eIdx].currentHp = val;
+                                            return { ...s, encounter: { ...s.encounter, enemies: newE }};
+                                        });
+                                    }}/> 
+                                ) : (
+                                    <div className="text-2xl text-white">{linkedEnemy.currentHp}</div>
+                                )}
                             </div>
                             <div className="w-px h-8 bg-gray-700"></div>
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div>
                                 <div className="flex justify-center items-center gap-1">
-                                    <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl text-[#ff6600]" value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        pushUpdate(s => {
-                                            const newT = [...(s.tokens || [])];
-                                            const tIdx = newT.findIndex(tok => tok.id === activeT.id);
-                                            if (tIdx !== -1) newT[tIdx].movementRemaining = val;
-                                            return { ...s, tokens: newT };
-                                        });
-                                    }}/> 
+                                    {isGM ? (
+                                        <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl text-[#ff6600]" value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            pushUpdate(s => {
+                                                const newT = [...(s.tokens || [])];
+                                                const tIdx = newT.findIndex(tok => tok.id === activeT.id);
+                                                if (tIdx !== -1) newT[tIdx].movementRemaining = val;
+                                                return { ...s, tokens: newT };
+                                            });
+                                        }}/> 
+                                    ) : (
+                                        <div className="text-2xl text-[#ff6600]">{activeT.movementRemaining ?? activeT.speed ?? 3}</div>
+                                    )}
                                     <span className="text-gray-600 text-lg">/</span>
-                                    <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        pushUpdate(s => {
-                                            const newT = [...(s.tokens || [])];
-                                            const tIdx = newT.findIndex(tok => tok.id === activeT.id);
-                                            if (tIdx !== -1) newT[tIdx].speed = val;
-                                            return { ...s, tokens: newT };
-                                        });
-                                    }}/>
+                                    {isGM ? (
+                                        <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            pushUpdate(s => {
+                                                const newT = [...(s.tokens || [])];
+                                                const tIdx = newT.findIndex(tok => tok.id === activeT.id);
+                                                if (tIdx !== -1) newT[tIdx].speed = val;
+                                                return { ...s, tokens: newT };
+                                            });
+                                        }}/>
+                                    ) : (
+                                        <div className="text-lg text-gray-500">{activeT.speed ?? 3}</div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -560,35 +681,43 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 {(linkedEnemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(linkedEnemy.statuses || []).map((st, i) => (
                                     <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
-                                        {st} <button className="text-red-400 hover:text-white" onClick={() => {
-                                            pushUpdate(s => {
-                                                const newE = [...(s.encounter?.enemies || [])];
-                                                const eIdx = newE.findIndex(en => en.uid === linkedEnemy.uid);
-                                                if (eIdx !== -1) newE[eIdx].statuses.splice(i, 1);
-                                                return { ...s, encounter: { ...s.encounter, enemies: newE } };
-                                            });
-                                        }}>✕</button>
+                                        {st} 
+                                        {isGM && (
+                                            <button className="text-red-400 hover:text-white" onClick={() => {
+                                                pushUpdate(s => {
+                                                    const newE = [...(s.encounter?.enemies || [])];
+                                                    const eIdx = newE.findIndex(en => en.uid == linkedEnemy.uid);
+                                                    if (eIdx !== -1) newE[eIdx].statuses.splice(i, 1);
+                                                    return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                                });
+                                            }}>✕</button>
+                                        )}
                                     </span>
                                 ))}
                             </div>
-                            <div className="flex gap-1">
-                                <input type="text" id="eState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
-                                <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
-                                    const val = document.getElementById('eState').value;
-                                    if (val) {
-                                        pushUpdate(s => {
-                                            const newE = [...(s.encounter?.enemies || [])];
-                                            const eIdx = newE.findIndex(en => en.uid === linkedEnemy.uid);
-                                            if (eIdx !== -1) newE[eIdx].statuses.push(val);
-                                            return { ...s, encounter: { ...s.encounter, enemies: newE } };
-                                        });
-                                        document.getElementById('eState').value = '';
-                                    }
-                                }}>+</button>
-                            </div>
+                            
+                            {isGM && (
+                                <div className="flex gap-1">
+                                    <input type="text" id="eState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
+                                    <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
+                                        const val = document.getElementById('eState').value;
+                                        if (val) {
+                                            pushUpdate(s => {
+                                                const newE = [...(s.encounter?.enemies || [])];
+                                                const eIdx = newE.findIndex(en => en.uid == linkedEnemy.uid);
+                                                if (eIdx !== -1) newE[eIdx].statuses.push(val);
+                                                return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                            });
+                                            document.getElementById('eState').value = '';
+                                        }
+                                    }}>+</button>
+                                </div>
+                            )}
                         </div>
 
-                        <button className="w-full bg-[#22c55e] text-black font-bold py-2 mt-2 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Prime Movement</button>
+                        {isGM && (
+                            <button className="w-full bg-[#22c55e] text-black font-bold py-2 mt-2 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Prime Movement</button>
+                        )}
 
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Abilities</div>
                         {(linkedEnemy.abilities || []).map((ability, aIdx) => {
@@ -615,13 +744,24 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
                                         {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
                                     </div>
-                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))}>Target</button>
+                                    
+                                    {isGM && (
+                                        <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))}>Target</button>
+                                    )}
                                 </div>
                             );
                         })}
                     </div>
                 );
             }
+        }
+
+        if (!isGM) {
+            return (
+                <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full">
+                    <div className="text-gray-500 text-xs text-center mt-10 p-4 border border-dashed border-gray-700">Select a token on the grid to view its bio-scan.</div>
+                </div>
+            );
         }
 
         return (
@@ -687,7 +827,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     )}
 
                                     {activeAction.a !== undefined && <span>AoE: {activeAction.a}</span>}
-                                    {activeAction.effectName && <span className="text-purple-400">STATE: [{activeAction.effectName}]</span>}
+                                    
+                                    {activeAction.effectName && (
+                                        <span className="text-purple-400">
+                                            STATE: [{(activeAction.effectName.toLowerCase() !== (activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : activeAction.effectName}]
+                                        </span>
+                                    )}
                                 </div>
                             )}
                         </div>

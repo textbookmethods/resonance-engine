@@ -41,7 +41,6 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {savedSkills.map(skill => {
-                        // Card Element Rendering Logic
                         const dispRaw = skill.elementRaw || skill.element || 'Kinetic';
                         const dispCore = skill.elementCore || skill.element || 'Kinetic';
                         const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
@@ -53,7 +52,6 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                 <div className="flex-1 mb-4 pr-4">
                                     <h3 className="font-bold text-white text-lg mb-1 text-[#00f0ff] uppercase tracking-wider truncate">{skill.name}</h3>
                                     
-                                    {/* Updated Dynamic Type Rendering */}
                                     <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-800 pb-1" title={showType}>
                                         TYPE: [{showType}]
                                     </div>
@@ -64,16 +62,15 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                         <div><span className="text-gray-500">Damage:</span> {skill.d}</div>
                                         <div><span className="text-gray-500">AoE:</span> {skill.a} Hex</div>
                                         <div><span className="text-gray-500">Utility:</span> {skill.u}</div>
-                                        <div><span className="text-gray-500">Affinity:</span> {skill.alpha}</div>
+                                        <div><span className="text-gray-500">Affinity:</span> {skill.alpha || 1}</div>
                                     </div>
                                     
                                     {skill.effectName && (
                                         <div className="mb-3 bg-purple-900 border border-purple-500 text-white text-[10px] px-2 py-1 font-bold inline-block">
-                                            Effect: [{skill.effectName}]
+                                            Effect: [{(skill.effectName.toLowerCase() !== (skill.effectCore || '').toLowerCase() && skill.effectCore) ? `${skill.effectName} : ${skill.effectCore}` : skill.effectName}]
                                         </div>
                                     )}
 
-                                    {/* Player Narrative Description */}
                                     {skill.desc && (
                                         <div className="bg-gray-900 border-l-2 border-gray-600 p-2 text-gray-400 text-xs italic line-clamp-3">
                                             "{skill.desc}"

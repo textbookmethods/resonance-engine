@@ -106,7 +106,13 @@ export default function App() {
         if (selectedRole === 'player') {
             pushUpdate(s => {
                 if (!s.players || !s.players[localId]) {
-                    const newAgent = { name: 'Agent', title: '', weaponId: 'w01', currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [], savedSkills: [], statuses: [], usedParry: false, usedIntercept: false, usedEvade: false };
+                    const newAgent = { 
+                        name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
+                        currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, 
+                        resPool: 3, customCards: [], savedSkills: [], statuses: [], 
+                        usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false,
+                        affinityRaw: '', affinity: 'Kinetic', affinityLocked: false
+                    };
                     return { ...s, players: { ...(s.players || {}), [localId]: newAgent } };
                 }
                 return s;
@@ -179,8 +185,8 @@ export default function App() {
             <main className="flex-1">
                 {activeTab === 'player' && role === 'player' && <PlayerHUD players={gameState?.players || {}} localId={localId} encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
                 {activeTab === 'spellbook' && role === 'player' && <Spellbook players={gameState?.players || {}} localId={localId} pushUpdate={pushUpdate} />} 
-                {activeTab === 'gm' && role === 'gm' && <GMDashboard encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} hardResetSession={hardResetSession} />}
-                {activeTab === 'grid' && <GridBoard players={gameState?.players || {}} grid={gameState?.grid || []} tokens={gameState?.tokens || []} encounter={gameState?.encounter || {}} activeAction={gameState?.activeAction} pushUpdate={pushUpdate} />}
+                {activeTab === 'gm' && role === 'gm' && <GMDashboard encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} players={gameState?.players || {}} pushUpdate={pushUpdate} hardResetSession={hardResetSession} />}
+                {activeTab === 'grid' && <GridBoard players={gameState?.players || {}} grid={gameState?.grid || []} tokens={gameState?.tokens || []} encounter={gameState?.encounter || {}} activeAction={gameState?.activeAction} pushUpdate={pushUpdate} role={role} localId={localId} />}
                 {activeTab === 'ref' && <Reference />}
                 {activeTab === 'rules' && <Rulebook />} 
             </main>
