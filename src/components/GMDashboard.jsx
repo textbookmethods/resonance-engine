@@ -15,7 +15,8 @@ const ELEMENT_DICTIONARY = {
 const STATE_DICTIONARY = {
     'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
     'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
-    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char', 'fire'],
+    'Poisoned': ['poison', 'venom', 'decay', 'rot', 'corrode', 'acid', 'plague', 'blight', 'infection', 'toxic'],
     'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
     'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
     'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
@@ -87,7 +88,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch } }));
     };
 
-    // NEW: Fully automated environmental physics
     const handleNextRound = () => {
         pushUpdate(s => {
             const newRound = (s.encounter?.round || 0) + 1;
@@ -99,21 +99,30 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
             newEnemies.forEach(e => {
                 let coreStates = (e.statuses || []).map(st => getCoreState(st));
-                if (coreStates.includes('Bleed') || coreStates.includes('Burn')) {
-                    e.currentHp = Math.max(0, e.currentHp - 3);
-                    log.push(`Hostile [${e.name}] took 3 damage from environmental physics.`);
+                
+                // NEW: Automated, stacking Environmental Physics for DoT states
+                let dotStates = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
+                if (dotStates.length > 0) {
+                    const dmg = dotStates.length * 3;
+                    e.currentHp = Math.max(0, e.currentHp - dmg);
+                    log.push(`Hostile [${e.name}] took ${dmg} damage from active states (${dotStates.join(', ')}).`);
                     if (e.currentHp <= 0) deadEnemyUids.add(e.uid);
                 }
+                
                 e.statuses = (e.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
             });
 
             Object.keys(newPlayers).forEach(pid => {
                 let p = newPlayers[pid];
                 let coreStates = (p.statuses || []).map(st => getCoreState(st));
-                if (coreStates.includes('Bleed') || coreStates.includes('Burn')) {
-                    p.currentHp = Math.max(0, p.currentHp - 3);
-                    log.push(`Agent [${p.name}] took 3 damage from environmental physics.`);
+                
+                let dotStates = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
+                if (dotStates.length > 0) {
+                    const dmg = dotStates.length * 3;
+                    p.currentHp = Math.max(0, p.currentHp - dmg);
+                    log.push(`Agent [${p.name}] took ${dmg} damage from active states (${dotStates.join(', ')}).`);
                 }
+
                 p.statuses = (p.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
                 p.usedParry = false; p.usedIntercept = false; p.usedEvade = false; p.usedBasicAttack = false;
             });

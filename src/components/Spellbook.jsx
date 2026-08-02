@@ -1,6 +1,24 @@
 /* eslint-disable */
 import React from 'react';
 
+const STATE_DICTIONARY = {
+    'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
+    'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char', 'fire'],
+    'Poisoned': ['poison', 'venom', 'decay', 'rot', 'corrode', 'acid', 'plague', 'blight', 'infection', 'toxic'],
+    'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
+    'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
+    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
+    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce', 'fracture'],
+    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam', 'prone'],
+    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash', 'darkness'],
+    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash', 'swift'],
+    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple', 'chill'],
+    'Shocked': ['shock', 'glitch', 'short', 'jolt', 'electrocute'],
+    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase', 'agile'],
+    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
+};
+
 export default function Spellbook({ players = {}, localId, pushUpdate }) {
     const player = players[localId] || {};
     const savedSkills = player.savedSkills || [];

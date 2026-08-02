@@ -169,8 +169,8 @@ export default function Rulebook() {
                                 </li>
 
                                 <li className="bg-gray-900 border border-gray-700 p-3">
-                                    <strong className="text-[#22c55e] text-lg uppercase tracking-wider block mb-1">Environmental Physics</strong>
-                                    <strong>Bleed / Burn:</strong> A DoT (Damage over Time) state. When the GM clicks "Next Round," all afflicted entities automatically take 3 direct HP damage.
+                                    <strong className="text-[#22c55e] text-lg uppercase tracking-wider block mb-1">Environmental Physics (DoTs Stack!)</strong>
+                                    <strong>Bleed / Burn / Poisoned:</strong> Damage over Time states. When the GM advances to the next round, the Engine automatically applies 3 direct HP damage per active state. <em>(e.g., If a target is Bleeding AND Poisoned, they take 6 damage).</em>
                                 </li>
                             </ul>
                         </div>

@@ -17,7 +17,8 @@ const ELEMENT_DICTIONARY = {
 const STATE_DICTIONARY = {
     'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
     'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
-    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char', 'fire'],
+    'Poisoned': ['poison', 'venom', 'decay', 'rot', 'corrode', 'acid', 'plague', 'blight', 'infection', 'toxic'],
     'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
     'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
     'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
@@ -36,7 +37,7 @@ const CLASS_AFFINITIES = {
     'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] },
     'Conduit': { states: ['Stunned', 'Shocked', 'Shielded', 'Haste', 'Immobilized'] },
     'Paladin': { states: ['Shielded', 'Burn', 'Knockdown', 'Invulnerable'] },
-    'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable'] },
+    'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable', 'Poisoned'] },
     'Skirmisher': { states: ['Haste', 'Evasive', 'Bleed', 'Slowed'] },
     'Rookie': { states: ['Haste', 'Bleed'] }
 };
@@ -123,16 +124,13 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
     const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
     
-    // NEW: Action Lockouts evaluated natively via Dictionary
     const statuses = player.statuses || [];
     const activeCoreStates = statuses.map(st => getCoreState(st));
     const isStunned = activeCoreStates.includes('Stunned');
     const isShocked = activeCoreStates.includes('Shocked');
-    const isImmobilized = activeCoreStates.includes('Immobilized');
     const isBlind = activeCoreStates.includes('Blind');
 
     const disableDefenses = isStunned || isShocked;
-    const disableMovement = isStunned || isImmobilized;
     const disableAttacks = isStunned;
 
     const refreshTurn = () => {
@@ -168,12 +166,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    const primeMove = () => { 
-        if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
-        if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
-        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
-    };
-    
     const primeWeapon = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         if (player.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
@@ -269,10 +261,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                             <div className="w-full bg-transparent text-gray-400 text-3xl font-bold text-center mt-1 cursor-not-allowed" title="Max HP automatically scales via Discipline Points.">{derivedMaxHp}</div>
                         </div>
                     </div>
-                    
-                    <button className={`w-full font-bold p-2 uppercase tracking-widest transition-colors shadow-md ${(isMyTurn && !disableMovement) ? 'bg-[#22c55e] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || disableMovement} onClick={primeMove}>
-                        {disableMovement ? 'MOVEMENT LOCKED' : '+ Prime Movement Array'}
-                    </button>
                     
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700 mt-2">
                         <span>CLASS:</span><span>{activeClass}</span>
@@ -417,7 +405,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     {builder.u > 0 && (
                         <div className="flex justify-between items-center animate-fade-in">
                             <span className="text-purple-400">State Concept:</span>
-                            <input type="text" className="w-32 bg-black border border-purple-500 p-1 text-white outline-none text-right" placeholder="e.g. Erase, Snare" value={builder.effectName || ''} onChange={e=>setBuilder({...builder, effectName: e.target.value})} />
+                            <input type="text" className="w-32 bg-black border border-purple-500 p-1 text-white outline-none text-right" placeholder="e.g. Erase, Snare, Venom" value={builder.effectName || ''} onChange={e=>setBuilder({...builder, effectName: e.target.value})} />
                         </div>
                     )}
 

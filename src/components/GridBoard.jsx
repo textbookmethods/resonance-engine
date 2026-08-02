@@ -9,11 +9,11 @@ const CLASS_COLORS = {
     Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff'      
 };
 
-// NEW: Core engine pulls the shared dictionary logic
 const STATE_DICTIONARY = {
     'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
     'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
-    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char', 'fire'],
+    'Poisoned': ['poison', 'venom', 'decay', 'rot', 'corrode', 'acid', 'plague', 'blight', 'infection', 'toxic'],
     'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
     'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
     'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
@@ -151,7 +151,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let barriers = [...(enemy.currentBarriers || [])];
                         let staggered = enemy.staggered;
                         
-                        // NEW: Process defensive layers via Core States
                         let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
                         let incomingDmg = rawDmg;
                         
@@ -186,7 +185,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             updatedStatuses.push(activeAction.effectName);
                             log += `\n>> State [${activeAction.effectName}] applied to ${enemy.name}!`;
 
-                            // NEW: Instantly drop speed values so the token natively locks on the grid mid-round
                             if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
                             else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
                             else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
@@ -317,7 +315,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot move Hostile entities.");
         if (!isGM && t.type === 'player' && t.refId !== localId) return alert("Access Denied: Cannot reposition other Agents.");
 
-        // NEW: Enforces grid-level movement lockouts based on active states
         let srcName = 'Unknown';
         let coreStates = [];
 
@@ -443,6 +440,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == t.refId);
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
+                    
                     let maxRange = 1;
                     (linkedEnemy.abilities || []).forEach(ability => {
                         const rangeMatch = ability.match(/range\s+(\d+)(?:-(\d+))?/i);
