@@ -2,7 +2,7 @@
 import React from 'react';
 import { bestiary } from '../data/bestiary';
 
-export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate }) {
+export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, hardResetSession }) {
     const updateEnc = (updates) => pushUpdate(s => ({ ...s, encounter: { ...s.encounter, ...updates } }));
 
     const addEnemy = (bestiaryId) => {
@@ -103,6 +103,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                     <button className="w-full bg-red-950 border border-red-500 text-red-500 font-bold p-2 hover:bg-red-500 hover:text-white transition-colors" onClick={handleNewEncounter}>
                         ⚠ INITIALIZE NEW ENCOUNTER
                     </button>
+                    
+                    {/* NEW: Master Database Purge Button */}
+                    <button className="w-full bg-black border border-red-900 text-red-900 font-bold p-2 mt-2 text-xs tracking-widest hover:bg-red-900 hover:text-white transition-colors" onClick={hardResetSession}>
+                        PURGE SESSION DATA
+                    </button>
                 </div>
 
                 <div className="border-t border-gray-700 pt-4 mt-auto">
@@ -142,7 +147,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                         </div>
                                     </div>
                                     
-                                    {/* Active States Rendering */}
                                     <div className="flex flex-wrap gap-1 mb-3">
                                         {(enemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">No active states.</span>}
                                         {(enemy.statuses || []).map((st, sIdx) => (

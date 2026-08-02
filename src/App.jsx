@@ -88,6 +88,16 @@ export default function App() {
         });
     };
 
+    // NEW: Complete Session Purge Function
+    const hardResetSession = () => {
+        if (window.confirm("CRITICAL WARNING: This will permanently wipe ALL Agent character sheets, custom grimoires, and grid data for this Session ID. Players will need to refresh their browsers to generate new sheets. Proceed?")) {
+            if (isFirebaseConfigured && role) {
+                firebase.database().ref('sessions/' + sessionId).set(DEFAULT_STATE);
+                alert("Session Data Purged. Ready for new campaign.");
+            }
+        }
+    };
+
     const joinSession = (selectedRole) => {
         if (!sessionIdInput.trim()) return alert("Please enter a valid Session ID.");
         setSessionId(sessionIdInput.trim().toUpperCase());
@@ -170,7 +180,7 @@ export default function App() {
             <main className="flex-1">
                 {activeTab === 'player' && role === 'player' && <PlayerHUD players={gameState?.players || {}} localId={localId} encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
                 {activeTab === 'spellbook' && role === 'player' && <Spellbook players={gameState?.players || {}} localId={localId} pushUpdate={pushUpdate} />} 
-                {activeTab === 'gm' && role === 'gm' && <GMDashboard encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} />}
+                {activeTab === 'gm' && role === 'gm' && <GMDashboard encounter={gameState?.encounter || {}} tokens={gameState?.tokens || []} pushUpdate={pushUpdate} hardResetSession={hardResetSession} />}
                 {activeTab === 'grid' && <GridBoard players={gameState?.players || {}} grid={gameState?.grid || []} tokens={gameState?.tokens || []} encounter={gameState?.encounter || {}} activeAction={gameState?.activeAction} pushUpdate={pushUpdate} />}
                 {activeTab === 'ref' && <Reference />}
                 {activeTab === 'rules' && <Rulebook />} 
