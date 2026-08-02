@@ -76,6 +76,10 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const parsedEff = effMatch ? effMatch[1] : null;
         const coreEff = getCoreState(parsedEff);
         
+        // NEW: Pulls terrain from Enemy bestiary text arrays 
+        const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
+        const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
+
         let eRange = "1";
         const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
@@ -85,7 +89,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             alert("Warning: Entity is BLIND. Targeting optics restricted to adjacent hexes.");
         }
 
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch } }));
+        // Passes pTerrain directly into the execution payload
+        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch, terrain: pTerrain } }));
     };
 
     const handleNextRound = () => {
@@ -100,7 +105,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             newEnemies.forEach(e => {
                 let coreStates = (e.statuses || []).map(st => getCoreState(st));
                 
-                // NEW: Automated, stacking Environmental Physics for DoT states
                 let dotStates = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 if (dotStates.length > 0) {
                     const dmg = dotStates.length * 3;
@@ -309,25 +313,34 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
 
+                                            const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
+                                            const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
+
                                             let eRange = "1";
-                                            const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
+                                            const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
                                             if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
                                             
                                             return (
-                                                <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs flex justify-between items-start gap-2 relative">
+                                                <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                                     <div>
                                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
                                                         {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
-                                                        {desc && <span className="text-gray-400 block mt-1">{desc.trim()}</span>}
+                                                        {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
-                                                    <div className="flex gap-2 shrink-0">
-                                                        {rawName.match(/\[(\d+)\s*Res\]/i) && (
-                                                            <button className="bg-black border border-[#ff6600] text-[#ff6600] px-2 py-1 text-[10px] font-bold uppercase hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - parseInt(rawName.match(/\[(\d+)\s*Res\]/i)[1])) })}>
-                                                                -{rawName.match(/\[(\d+)\s*Res\]/i)[1]} Res
-                                                            </button>
-                                                        )}
-                                                        <button className="bg-[#00f0ff] text-black px-2 py-1 text-[10px] font-bold uppercase hover:bg-white transition-colors" onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>Target</button>
-                                                    </div>
+                                                    
+                                                    {isGM && (
+                                                        <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
+                                                            if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
+                                                            
+                                                            let finalRange = isBlind ? '1' : eRange;
+                                                            let finalAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                                                            if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+                                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
+                                                        }}>
+                                                            {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             );
                                         })}

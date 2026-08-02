@@ -78,7 +78,8 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
 };
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '' });
+    // NEW: Terrain string added to default builder payload
+    const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '' });
 
     const player = players[localId] || {};
 
@@ -86,7 +87,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
     const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
     
-    // FIX: Natively calculates current resonance with 3 fallback if missing
     const currentRes = player.resPool !== undefined ? safeInt(player.resPool) : 3;
 
     const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
@@ -124,7 +124,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     
     const activeAffinity = player.affinityLocked ? (player.affinity || 'Kinetic') : getCoreElement(player.affinityRaw || 'Kinetic');
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
-    const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + Math.pow((builder.a || 0), 2)));
+    
+    // NEW: Terrain cost parsing 
+    const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
+    const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + Math.pow((builder.a || 0), 2)));
 
     const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
     
@@ -151,14 +154,25 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
     const saveToHUD = () => {
         const cards = player.customCards || [];
+        const actionName = builder.name || 'Custom Action';
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
-        updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
+        if (cards.some(c => String(c.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already equipped in your HUD. Please give this ability a unique name.`);
+        updatePlayer('customCards', [...cards, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
     };
     
     const saveToSpellbook = () => {
         const archived = player.savedSkills || [];
-        updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
+        const actionName = builder.name || 'Custom Action';
+        if (archived.some(s => String(s.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already in your Spellbook. Please give this ability a unique name.`);
+        updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
         alert("Ability archived to Spellbook!");
+    };
+
+    const archiveEquippedCard = (card) => {
+        const archived = player.savedSkills || [];
+        if (archived.some(s => String(s.name).toLowerCase() === String(card.name).toLowerCase())) return alert(`"${card.name}" is already archived in your Spellbook.`);
+        updatePlayer('savedSkills', [...archived, card]);
+        alert(`"${card.name}" archived to Spellbook!`);
     };
     
     const rollImprovised = () => {
@@ -196,11 +210,12 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (currentRes < c.cost) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
-        let finalRange = isBlind ? '1' : activeWeapon.range;
-        let finalAoe = isBlind ? 0 : c.a;
+        let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
+        let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
+        // NEW: Injects c.terrain seamlessly into the Grid targeting payload
+        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', terrain: c.terrain, desc: c.desc } })); 
     };
 
     const reqString = (w) => {
@@ -424,6 +439,15 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <div className="flex justify-between items-center"><span>AoE Radius (a):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: safeInt(e.target.value)})}>
                         <option value="0">0</option><option value="1">1 (Small)</option><option value="2">2 (Large)</option>
                     </select></div>
+
+                    {/* NEW: Terrain Generation Interface */}
+                    <div className="flex justify-between items-center"><span>Terrain Gen (t):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
+                        <option value="">None</option>
+                        <option value="minor">Minor (+1)</option>
+                        <option value="clear">Clear (+2)</option>
+                        <option value="major">Major (+3)</option>
+                        <option value="severe">Severe (+5)</option>
+                    </select></div>
                     
                     <div className="bg-gray-900 border border-gray-700 p-2 mt-2">
                         <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1 block">Affinity Calculation (α)</span>
@@ -460,10 +484,14 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
                                     {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
                                     
+                                    {/* NEW: Card visualizes Active Terrain Shift */}
+                                    {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{c.terrain.toUpperCase()}]</div>}
+                                    
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}
                                     </button>
                                 </div>
+                                <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); archiveEquippedCard(c); }} title="Archive to Spellbook">⤓</button>
                                 <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
                             </div>
                         );

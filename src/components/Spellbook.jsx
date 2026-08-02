@@ -1,109 +1,205 @@
-/* eslint-disable */
-import React from 'react';
+/* eslint-disable react/no-unescaped-entities */
+import React, { useState } from 'react';
 
-const STATE_DICTIONARY = {
-    'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
-    'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
-    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char', 'fire'],
-    'Poisoned': ['poison', 'venom', 'decay', 'rot', 'corrode', 'acid', 'plague', 'blight', 'infection', 'toxic'],
-    'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
-    'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
-    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
-    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce', 'fracture'],
-    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam', 'prone'],
-    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash', 'darkness'],
-    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash', 'swift'],
-    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple', 'chill'],
-    'Shocked': ['shock', 'glitch', 'short', 'jolt', 'electrocute'],
-    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase', 'agile'],
-    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
-};
+export default function Rulebook() {
+    const [activeChapter, setActiveChapter] = useState('core');
 
-export default function Spellbook({ players = {}, localId, pushUpdate }) {
-    const player = players[localId] || {};
-    const savedSkills = player.savedSkills || [];
-
-    const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
-    const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
-
-    const deleteSkill = (id) => {
-        updatePlayer('savedSkills', savedSkills.filter(s => s.id !== id));
-    };
-
-    const equipToHUD = (skill) => {
-        const currentHUD = player.customCards || [];
-        if (currentHUD.length >= 4) {
-            return alert("HUD is full. Remove an active skill on the Combat HUD first.");
-        }
-        updatePlayer('customCards', [...currentHUD, { ...skill, id: Date.now() }]);
-        alert("Equipped to Combat HUD!");
-    };
+    const chapters = [
+        { id: 'core', label: '1. The Resonance Engine (VTT)' },
+        { id: 'flow', label: '2. Encounter Flow & Deployment' },
+        { id: 'prog', label: '3. Progression (XP & Affinity)' },
+        { id: 'grid', label: '4. Grid Movement & Terrain' },
+        { id: 'combat', label: '5. Automated Combat & Defense' },
+        { id: 'synthesis', label: '6. The Synthesis Matrix' },
+        { id: 'states', label: '7. Dictionary & State Physics' }
+    ];
 
     return (
-        <div className="bg-[#1a222c] p-6 md:p-10 border border-slate-700 min-h-[75vh] font-mono">
-            <div className="flex justify-between items-center border-b border-[#00f0ff] pb-4 mb-6">
-                <div>
-                    <h2 className="text-[#00f0ff] font-bold text-3xl uppercase tracking-widest">Grimoire Archive</h2>
-                    <p className="text-gray-400 text-sm">Permanent Storage for Synthesized Actions</p>
-                </div>
-                <div className="text-right">
-                    <div className="text-[#ff6600] font-bold text-xl">{savedSkills.length}</div>
-                    <div className="text-gray-500 text-[10px] uppercase tracking-widest">Archived</div>
-                </div>
+        <div className="flex flex-col md:flex-row gap-6 h-[75vh] font-mono text-sm">
+            <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-slate-700 flex flex-col gap-2 shrink-0 overflow-y-auto shadow-xl">
+                <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Manual</h2>
+                {chapters.map(chap => (
+                    <button 
+                        key={chap.id}
+                        className={`p-3 text-left transition-colors border-l-4 ${activeChapter === chap.id ? 'bg-black border-[#ff6600] text-[#ff6600] font-bold shadow-inner' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                        onClick={() => setActiveChapter(chap.id)}
+                    >
+                        {chap.label}
+                    </button>
+                ))}
             </div>
 
-            {savedSkills.length === 0 ? (
-                <div className="text-gray-500 text-center mt-20 border border-dashed border-gray-700 p-10">
-                    No synthesized actions archived. Use the Synthesis Matrix in your Combat HUD to save abilities here.
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {savedSkills.map(skill => {
-                        const dispRaw = skill.elementRaw || skill.element || 'Kinetic';
-                        const dispCore = skill.elementCore || skill.element || 'Kinetic';
-                        const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+            <div className="flex-1 bg-[#1a222c] p-6 md:p-10 border border-slate-700 overflow-y-auto text-gray-300 space-y-6 shadow-inner">
+                
+                {activeChapter === 'core' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">1. The Resonance Engine</h1>
+                        
+                        <div className="bg-gray-900 border border-[#00f0ff] p-4 mb-6">
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 uppercase tracking-widest">Fully Automated System</h3>
+                            <p className="leading-relaxed">Players do not calculate damage, distances, line-of-sight, or flanking angles. The VTT handles all vector math automatically. When a player or GM clicks "TARGET" on a weapon or ability, and clicks an enemy token on the grid, the Engine automatically calculates the trajectory, applies synergy bonuses, deducts the specific defensive stats, shatters barriers, and updates the token's HP instantly.</p>
+                        </div>
+                    </div>
+                )}
 
-                        return (
-                            <div key={skill.id} className="bg-black border border-gray-700 p-4 relative group flex flex-col transition-colors hover:border-[#00f0ff]">
-                                <button className="absolute top-2 right-2 text-gray-500 hover:text-red-500 font-bold" onClick={() => deleteSkill(skill.id)}>✕</button>
+                {activeChapter === 'flow' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">2. Encounter Flow & Deployment</h1>
+                        
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Round 0: Deployment Phase</h3>
+                            <p className="leading-relaxed mb-4">Every encounter begins in Round 0. During this phase, the grid visually splits into two sectors:</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-4">
+                                <li><strong>Northern Sector (Red):</strong> Hostile drop zone.</li>
+                                <li><strong>Southern Sector (Blue):</strong> Agent drop zone.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'prog' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">3. Progression (XP & Affinity)</h1>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Discipline Points (DP)</h3>
+                            <p className="leading-relaxed mb-4">All Agents begin with <strong>5 Base DP</strong>. As you accumulate Experience (XP) from the GM, you unlock more DP. Every <strong>10 XP</strong> grants <strong>+1 DP</strong>.</p>
+                            <p className="leading-relaxed mb-4">Allocating DP into your Front, Support, or Back stats natively alters your Max HP and your active Class. The Engine calculates this strict progression tree:</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-4">
+                                <li><strong>Tier 1 Base:</strong> Paladin (5F/5S), Skirmisher (5F/5B), Saboteur (5S/5B)</li>
+                                <li><strong>Tier 2 Mastery:</strong> Vanguard (10F), Conduit (10S), Sniper (10B)</li>
+                            </ul>
+                            <p className="leading-relaxed mt-4 italic text-sm text-gray-500 mb-6">Note: Class evaluation is strictly ordered. If you reach Tier 2 Vanguard by allocating 10 points to Front, you are permanently locked as a Vanguard—even if you later allocate 10 points to Support—unless you intentionally reduce your Front stat back below 10.</p>
+                            
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 pt-6 border-t border-gray-700">Innate Elemental Affinity</h3>
+                            <p className="leading-relaxed mb-4">Players must also choose their <strong>Innate Element Affinity</strong> during character creation using the HUD. Once this element is locked in, it cannot be changed. It permanently provides a Synergy discount when synthesizing abilities of that element type.</p>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'grid' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">4. Grid Movement & Terrain</h1>
+                        
+                        <div>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
+                            <p className="leading-relaxed mb-4">Players can dynamically alter the environment by adding a <strong>Terrain (t)</strong> generation effect to their synthesized spells. When executed, every hex within the spell's Area of Effect (AoE) radius is instantly painted with that terrain.</p>
+                            <ul className="space-y-4 list-none">
+                                <li className="bg-black border-l-4 border-yellow-500 p-3">
+                                    <strong className="text-yellow-500">Minor Terrain (t=1)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Mud, Caltrops</span><br/>
+                                    Doubles the movement cost to enter the hex.
+                                </li>
+                                <li className="bg-black border-l-4 border-gray-400 p-3">
+                                    <strong className="text-gray-400">Clear Terrain (t=2)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Dispel, Wash, Burn Away</span><br/>
+                                    Removes any existing terrain effects and reverts the hexes to neutral ground.
+                                </li>
+                                <li className="bg-black border-l-4 border-purple-500 p-3">
+                                    <strong className="text-purple-500">Major Terrain (t=3)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Void Rifts, Magma</span><br/>
+                                    Blocks shift/dash abilities. Deals environmental damage if a token ends their turn inside it.
+                                </li>
+                                <li className="bg-black border-l-4 border-blue-500 p-3">
+                                    <strong className="text-blue-500">Severe Terrain (t=5)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
+                                    Completely impassable. Blocks line-of-sight for targeting.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'combat' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">5. Automated Combat & Defense</h1>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Hostile Barriers & Staggering</h3>
+                            <p className="leading-relaxed">Enemies do not use DP. They possess raw HP and layered Barriers. The Engine automatically routes incoming damage to shatter barriers first. Once an enemy's final barrier is reduced to 0, the Engine marks them as <strong>STAGGERED</strong> (highlighted in yellow), meaning subsequent attacks deal full damage directly to their HP pool.</p>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'synthesis' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">6. The Synthesis Matrix</h1>
+                        
+                        <div>
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Building Abilities</h3>
+                            <p className="leading-relaxed mb-4">Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the mathematical Engine formula:</p>
+                            
+                            {/* UPDATED: Added +t to the visual formula rendering */}
+                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + t + a²) ⌉</div>
+                            
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-8">
+                                <li><strong>d (Damage):</strong> Raw damage output.</li>
+                                <li><strong>u (Utility):</strong> Status effects (1 = Minor, 3 = Major, 5 = Severe, 10 = Terminal).</li>
+                                <li><strong>t (Terrain Gen):</strong> Adds a physical Grid effect (1 = Minor, 2 = Clear, 3 = Major, 5 = Severe).</li>
+                                <li><strong>a (AoE Radius):</strong> Hex blast radius.</li>
+                                <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
+                            </ul>
+
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8">Automated Affinity (α)</h3>
+                            <p className="leading-relaxed mb-4">Players cannot manually declare Affinity. The Engine calculates it automatically based on your Class Specialization, Equipped Weapon, and the concepts you type into the Matrix.</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
+                                <li><strong>Synergy (0.75x Cost):</strong> The ability mechanically aligns with your <strong>Innate Element Affinity</strong>, your Class Playstyle, or your Weapon Element.</li>
+                                <li><strong>Neutral (1.0x Cost):</strong> No direct alignment. Standard execution.</li>
+                                <li><strong>Resistance (2.0x Cost):</strong> You are attempting to force a Severe or Terminal state effect that directly opposes your Class training (e.g., A Conduit attempting to Execute with brute force).</li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'states' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">7. Dictionary & State Physics</h1>
+                        
+                        <div>
+                            <h3 className="text-[#a855f7] font-bold text-lg mb-2">Automated Mechanical Definitions</h3>
+                            <p className="leading-relaxed mb-4">The Engine uses a semantic dictionary to map player imagination into core mechanical physics. If a player targets an entity with the concept "Petrify," the engine reads this as the core state `Stunned` and physically locks the target's controls.</p>
+                            
+                            <ul className="space-y-4 list-none text-gray-300">
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#00f0ff] text-lg uppercase tracking-wider block mb-1">Defense Modifiers</strong>
+                                    <strong>Shielded:</strong> Subtly absorbs 5 incoming damage and shatters.<br/>
+                                    <strong>Vulnerable:</strong> Target receives 1.5x incoming damage.<br/>
+                                    <strong>Evasive:</strong> The next attack mathematically forces an evasion roll regardless of attack vector.<br/>
+                                    <strong>Invulnerable:</strong> The incoming attack is completely negated.
+                                </li>
                                 
-                                <div className="flex-1 mb-4 pr-4">
-                                    <h3 className="font-bold text-white text-lg mb-1 text-[#00f0ff] uppercase tracking-wider truncate">{skill.name}</h3>
-                                    
-                                    <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-800 pb-1" title={showType}>
-                                        TYPE: [{showType}]
-                                    </div>
-                                    
-                                    <div className="text-[#ff6600] font-bold text-xs mb-3">COST: -{skill.cost} RES</div>
-                                    
-                                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 mb-3">
-                                        <div><span className="text-gray-500">Damage:</span> {skill.d}</div>
-                                        <div><span className="text-gray-500">AoE:</span> {skill.a} Hex</div>
-                                        <div><span className="text-gray-500">Utility:</span> {skill.u}</div>
-                                        <div><span className="text-gray-500">Affinity:</span> {skill.alpha || 1}</div>
-                                    </div>
-                                    
-                                    {skill.effectName && (
-                                        <div className="mb-3 bg-purple-900 border border-purple-500 text-white text-[10px] px-2 py-1 font-bold inline-block">
-                                            Effect: [{(skill.effectName.toLowerCase() !== (skill.effectCore || '').toLowerCase() && skill.effectCore) ? `${skill.effectName} : ${skill.effectCore}` : skill.effectName}]
-                                        </div>
-                                    )}
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#ff6600] text-lg uppercase tracking-wider block mb-1">Movement Modifiers</strong>
+                                    <strong>Haste:</strong> Instantly adds +2 to token movement logic.<br/>
+                                    <strong>Slowed:</strong> Instantly subtracts -2 from token movement logic.<br/>
+                                    <strong>Knockdown:</strong> Halves base speed. Fades at the start of the next round.<br/>
+                                    <strong>Immobilized:</strong> movement drops to 0. The token physically cannot be moved on the grid.
+                                </li>
 
-                                    {skill.desc && (
-                                        <div className="bg-gray-900 border-l-2 border-gray-600 p-2 text-gray-400 text-xs italic line-clamp-3">
-                                            "{skill.desc}"
-                                        </div>
-                                    )}
-                                </div>
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-yellow-500 text-lg uppercase tracking-wider block mb-1">Control Jamming</strong>
+                                    <strong>Blind:</strong> The entity's targeting arrays are forced to adjacent hexes (Range = 1, AoE = 0).<br/>
+                                    <strong>Shocked:</strong> The entity's Defensive Arrays (Parry, Intercept, Evade) are completely jammed.<br/>
+                                    <strong>Stunned:</strong> The entity's HUD is fully locked. Cannot target, move, or defend.
+                                </li>
 
-                                <button className="w-full bg-gray-800 text-white font-bold py-2 uppercase text-xs hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => equipToHUD(skill)}>
-                                    Equip to HUD
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#22c55e] text-lg uppercase tracking-wider block mb-1">Environmental Physics (DoTs Stack!)</strong>
+                                    <strong>Bleed / Burn / Poisoned:</strong> Damage over Time states. When the GM advances to the next round, the Engine automatically applies 3 direct HP damage per active state. <em>(e.g., If a target is Bleeding AND Poisoned, they take 6 damage).</em>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-black border border-red-500 p-4 mt-6">
+                            <h3 className="text-red-500 font-bold text-lg mb-2 uppercase tracking-widest">TERMINAL EFFECTS (u = 10)</h3>
+                            <p className="leading-relaxed mb-4">These are reality-breaking states reserved for apex tier actions. They cost massive amounts of Resonance to synthesize—requiring either Tag-Team combos or Class Synergy to even afford.</p>
+                            <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
+                                <li><strong>[Execute]:</strong> Target is instantly erased from the grid. Bypasses all HP, shatters all remaining barriers, and ignores player defensive stats. HP is violently reduced to 0.</li>
+                            </ul>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
