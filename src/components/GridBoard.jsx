@@ -66,7 +66,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
     const COLS = 15; const ROWS = 10;
     const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
-    const activeTokens = tokens || [];
+    
+    // FIX: Applies redundant filter(Boolean) sweep specifically for Grid token mapping
+    const activeTokens = (tokens || []).filter(Boolean);
 
     const R = 36; const hexWidth = R * 2; const hexHeight = R * Math.sqrt(3); 
     const stepX = hexWidth * 0.75; const stepY = hexHeight; 
@@ -131,7 +133,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         return crushed;
     };
 
-    // NEW: Centralized Crushed / Escape evaluation function
     const evaluateCrush = (tokensList, currentGrid, playersObj, enemiesList, deadEnemyUids, logStr) => {
         let evLog = logStr;
         let pObj = { ...playersObj };
@@ -231,7 +232,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const targetRow = Math.floor(index / COLS);
         
         pushUpdate(s => {
-            const newTokens = [...(s.tokens || [])];
+            const newTokens = [...(s.tokens || [])].filter(Boolean);
             const tIdx = findActiveTokenIndex(activeAction, newTokens);
             
             if (tIdx !== -1) {
@@ -258,7 +259,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 t.pos = index;
                 if (targetCell.terrain === 'major') alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
 
-                // Evaluates escape protocols upon movement
                 let finalPlayers = s.players;
                 let finalLog = s.globalLog;
                 if (t.type === 'player') {
@@ -276,10 +276,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         });
     };
 
-    // NEW: Handles instantaneous self-displacement mechanics
     const executeBlink = (index) => {
         pushUpdate(s => {
-            const newTokens = [...(s.tokens || [])];
+            const newTokens = [...(s.tokens || [])].filter(Boolean);
             const tIdx = findActiveTokenIndex(activeAction, newTokens);
             
             if (tIdx !== -1) {
@@ -322,7 +321,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
 
         let newPlayers = { ...players };
-        let newEnemies = [...(encounter?.enemies || [])];
+        let newEnemies = [...(encounter?.enemies || [])].filter(Boolean);
         let newTokens = JSON.parse(JSON.stringify(activeTokens));
         
         let hitCount = 0;
@@ -449,8 +448,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             
                             if (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0') {
                                 isFlanking = true; mitType = "AoE Target";
-                            } else if (attackerPos) {
-                                const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
+                            } else if (attackerPosIdx) {
+                                const dx = attackerPosIdx.x - targetCoords.x; const dy = attackerPosIdx.y - targetCoords.y;
                                 let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
                                 if (angle < 0) angle += 360; 
                                 const facingAngle = t.facing * 60; 
@@ -492,7 +491,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     }
                 }
 
-                // NEW: Automated Push / Pull mathematical evaluation
                 if (targetWasHit && activeAction.m > 0 && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
                     if (activeAction.coreMobility === 'Push' || activeAction.coreMobility === 'Pull') {
                         let pushPos = t.pos;

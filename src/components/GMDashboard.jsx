@@ -160,7 +160,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     activeDoTs.push('Major Terrain');
                 }
 
-                // NEW: Escapable Entombment automated ticker logic
                 if (p.statuses && p.statuses.includes('Crushed [2/3]')) {
                     p.currentHp = 0;
                     log.push(`AGENT CRUSHED! [${p.name}]'s Entombment timer expired.`);
@@ -250,8 +249,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     };
 
     const isOverload = (encounter?.round || 0) >= 4;
-    const enemiesList = encounter?.enemies || [];
-    const enemyTokens = tokens.filter(tok => tok.type === 'enemy').sort((a,b) => a.id - b.id);
+    // FIX: Apply filter(Boolean) sweep to active maps
+    const enemiesList = (encounter?.enemies || []).filter(Boolean);
+    const enemyTokens = (tokens || []).filter(tok => tok && tok.type === 'enemy').sort((a,b) => a.id - b.id);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 font-mono text-sm">

@@ -26,7 +26,6 @@ if (isFirebaseConfigured && !firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 
-// NEW: Added globalLog container to default state
 const DEFAULT_STATE = {
     players: {}, 
     encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
@@ -45,7 +44,6 @@ export default function App() {
     const [gameState, setGameState] = useState(DEFAULT_STATE);
     const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only (Waiting for Firebase Keys)');
     
-    // NEW: Tracks the timestamp of the last dismissed log to prevent infinite loops
     const [dismissedLog, setDismissedLog] = useState(0);
 
     const [localId] = useState(() => {
@@ -65,15 +63,24 @@ export default function App() {
             if (data) {
                 if (data.players) {
                     Object.keys(data.players).forEach(pid => {
-                        data.players[pid].customCards = data.players[pid].customCards || [];
-                        data.players[pid].savedSkills = data.players[pid].savedSkills || [];
-                        data.players[pid].statuses = data.players[pid].statuses || [];
-                        if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
+                        if (data.players[pid]) {
+                            data.players[pid].customCards = data.players[pid].customCards || [];
+                            data.players[pid].savedSkills = data.players[pid].savedSkills || [];
+                            data.players[pid].statuses = data.players[pid].statuses || [];
+                            if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
+                        }
                     });
                 }
+                
+                // FIX: Sweeps corrupt/sparse array gaps caused by Firebase deletion ghosts
                 if (data.encounter?.enemies) {
-                    data.encounter.enemies.forEach(e => { e.statuses = e.statuses || []; });
+                    data.encounter.enemies = data.encounter.enemies.filter(Boolean);
+                    data.encounter.enemies.forEach(e => { if (e) e.statuses = e.statuses || []; });
                 }
+                if (data.tokens) {
+                    data.tokens = data.tokens.filter(Boolean);
+                }
+
                 setGameState(data);
             } else {
                 roomRef.set(DEFAULT_STATE);
@@ -197,7 +204,6 @@ export default function App() {
                 {activeTab === 'rules' && <Rulebook />} 
             </main>
 
-            {/* NEW: Global Synchronized Broadcast Modal */}
             {gameState.globalLog && gameState.globalLog.timestamp !== dismissedLog && (
                 <div className="fixed inset-0 bg-black/85 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-[#0b0f14] border border-[#ff6600] p-6 max-w-2xl w-full shadow-[0_0_40px_rgba(255,102,0,0.3)] font-mono flex flex-col max-h-[90vh]">
