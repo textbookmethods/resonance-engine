@@ -4,8 +4,28 @@ import { armory } from '../data/armory';
 
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 
+// NEW: The Deep Synonym Dictionary
+const ELEMENT_DICTIONARY = {
+    'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'],
+    'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'],
+    'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'],
+    'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'],
+    'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'],
+    'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'],
+    'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood']
+};
+
+const getCoreElement = (input) => {
+    if (!input) return 'Kinetic';
+    const clean = input.toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
+        if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
+    }
+    return 'Kinetic'; 
+};
+
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', d: 0, u: 0, a: 0, alpha: 1, effectName: '' });
+    const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, alpha: 1, effectName: '', desc: '' });
 
     const player = players[localId] || {};
 
@@ -48,12 +68,15 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const saveToHUD = () => {
         const cards = player.customCards || [];
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
-        updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
+        
+        const coreType = getCoreElement(builder.elementRaw);
+        updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', elementRaw: builder.elementRaw || 'Kinetic', elementCore: coreType, cost: calcCost, id: Date.now() }]);
     };
     
     const saveToSpellbook = () => {
         const archived = player.savedSkills || [];
-        updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
+        const coreType = getCoreElement(builder.elementRaw);
+        updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', elementRaw: builder.elementRaw || 'Kinetic', elementCore: coreType, cost: calcCost, id: Date.now() }]);
         alert("Ability archived to Spellbook!");
     };
     
@@ -67,8 +90,17 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    const primeWeapon = () => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } })); };
-    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range, effectName: c.effectName } })); };
+    const primeMove = () => { safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); };
+    
+    const primeWeapon = () => { 
+        const rawWpn = activeWeapon.element || 'Kinetic';
+        const coreWpn = getCoreElement(rawWpn);
+        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, elementRaw: rawWpn, elementCore: coreWpn } })); 
+    };
+    
+    const primeCard = (c) => { 
+        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range, effectName: c.effectName, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
+    };
 
     const reqString = (w) => {
         if (!w.reqF && !w.reqS && !w.reqB) return 'No Req';
@@ -104,7 +136,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         </div>
                     </div>
                     
-                    {/* Active Statuses Display */}
+                    <button className="w-full bg-[#22c55e] text-black font-bold p-2 uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_10px_rgba(34,197,94,0.3)]" onClick={primeMove}>
+                        + Prime Movement Array
+                    </button>
+                    
                     <div className="bg-gray-900 border border-gray-700 p-2 mt-2">
                         <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-2">Active States (Buffs/Debuffs)</div>
                         <div className="flex flex-wrap gap-1">
@@ -210,16 +245,22 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 <button className="w-full bg-[#00f0ff] text-black font-bold p-3 uppercase hover:bg-white transition-colors" onClick={rollImprovised}>Improvised Skill (-1 Res)</button>
             </div>
 
-            <div className="bg-[#1a222c] p-4 border border-slate-700">
+            <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-full">
                 <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Synthesis Matrix</h2>
-                <div className="space-y-3 mb-4">
-                    <div className="flex justify-between items-center mb-4"><span className="text-gray-300">Skill Name:</span><input type="text" className="w-40 bg-black border border-[#00f0ff] p-1 text-white outline-none font-bold" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} /></div>
+                <div className="space-y-3 mb-4 flex-1">
+                    <div className="flex justify-between items-center"><span className="text-gray-300">Skill Name:</span><input type="text" className="w-40 bg-black border border-[#00f0ff] p-1 text-white outline-none font-bold" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} /></div>
+                    
+                    {/* NEW: Free-Text Elemental Concept Field */}
+                    <div className="flex justify-between items-center">
+                        <span className="text-gray-300" title="Type any word (e.g. Magma, Void, Sound)">Concept (Element):</span>
+                        <input type="text" className="w-32 bg-black border border-gray-600 p-1 text-white text-xs text-right outline-none focus:border-[#ff6600]" placeholder="e.g. Magma, Sonic" value={builder.elementRaw} onChange={e=>setBuilder({...builder, elementRaw: e.target.value})} />
+                    </div>
+
                     <div className="flex justify-between items-center"><span>Damage (d):</span><input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white" value={builder.d} onChange={e=>setBuilder({...builder, d: safeInt(e.target.value)})} /></div>
                     <div className="flex justify-between items-center"><span>Utility (u):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.u)} onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}>
                         <option value="0">0</option><option value="1">1 (Minor)</option><option value="3">3 (Major)</option><option value="5">5 (Severe)</option>
                     </select></div>
                     
-                    {/* NEW: State Effect Input reveals if u > 0 */}
                     {builder.u > 0 && (
                         <div className="flex justify-between items-center animate-fade-in">
                             <span className="text-purple-400">State Effect:</span>
@@ -233,24 +274,40 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <div className="flex justify-between items-center"><span>Affinity (α):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.alpha)} onChange={e=>setBuilder({...builder, alpha: parseFloat(e.target.value) || 1})}>
                         <option value="0.75">0.75 (Synergy)</option><option value="1">1.0 (Neutral)</option><option value="2">2.0 (Resist)</option>
                     </select></div>
+
+                    {/* NEW: Flavor Text Input */}
+                    <div className="mt-4">
+                        <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1 block">Description / Flavor Text:</span>
+                        <textarea className="w-full bg-black border border-gray-600 text-gray-300 p-2 text-xs outline-none resize-none" rows="2" placeholder="E.g., A searing lance of pure heat..." value={builder.desc || ''} onChange={e=>setBuilder({...builder, desc: e.target.value})}></textarea>
+                    </div>
                 </div>
-                <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4"><span>COST:</span><span>{calcCost} RES</span></div>
+
+                <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4 mt-auto"><span>COST:</span><span>{calcCost} RES</span></div>
                 <div className="flex gap-2 mb-4">
                     <button className="flex-1 bg-[#00f0ff] text-black font-bold border border-[#00f0ff] p-2 hover:bg-white text-xs uppercase" onClick={saveToHUD}>Equip</button>
                     <button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase" onClick={saveToSpellbook}>Archive</button>
                 </div>
+                
                 <div className="grid grid-cols-2 gap-2">
-                    {customCards.map(c => (
-                        <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
-                            <div className="flex-1 pr-6 pb-2">
-                                <div className="font-bold text-[#00f0ff] mb-1 truncate">{c.name || 'Custom Action'}</div>
-                                <div className="text-white font-bold mb-1">Cost: -{c.cost} Res</div>
+                    {customCards.map(c => {
+                        const dispRaw = c.elementRaw || c.element || 'Kinetic';
+                        const dispCore = c.elementCore || c.element || 'Kinetic';
+                        const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+
+                        return (
+                            <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
+                                <div className="flex-1 pr-6 pb-2">
+                                    <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
+                                    <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
+                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
+                                    {c.desc && <div className="text-[9px] text-gray-500 italic leading-tight mb-2 line-clamp-2">"{c.desc}"</div>}
+                                </div>
+                                <button className="mt-auto w-full bg-[#00f0ff] text-black font-bold py-1 hover:bg-white uppercase" onClick={() => primeCard(c)}>Target</button>
+                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
+                                {c.effectName && <div className="absolute -bottom-2 -right-2 bg-purple-900 text-white text-[8px] px-1 border border-purple-500">{c.effectName}</div>}
                             </div>
-                            <button className="mt-auto w-full bg-[#00f0ff] text-black font-bold py-1 hover:bg-white uppercase" onClick={() => primeCard(c)}>Target</button>
-                            <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
-                            {c.effectName && <div className="absolute -bottom-2 -right-2 bg-purple-900 text-white text-[8px] px-1 border border-purple-500">{c.effectName}</div>}
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         </div>

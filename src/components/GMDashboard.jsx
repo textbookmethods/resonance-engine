@@ -2,6 +2,26 @@
 import React from 'react';
 import { bestiary } from '../data/bestiary';
 
+// NEW: Shared Synonym Dictionary for the GM parsing engine
+const ELEMENT_DICTIONARY = {
+    'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'],
+    'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'],
+    'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'],
+    'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'],
+    'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'],
+    'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'],
+    'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood']
+};
+
+const getCoreElement = (input) => {
+    if (!input) return 'Kinetic';
+    const clean = input.toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
+        if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
+    }
+    return 'Kinetic'; 
+};
+
 export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, hardResetSession }) {
     const updateEnc = (updates) => pushUpdate(s => ({ ...s, encounter: { ...s.encounter, ...updates } }));
 
@@ -13,11 +33,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
     };
 
     const primeEnemyAbility = (enemy, cleanName, desc) => {
-        const dmgMatch = desc.match(/deals\s+(\d+)\s+damage/i);
+        // NEW: Upgraded Regex mapping to extract raw element concepts
+        const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
+        const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
+        const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
+        const coreMatch = getCoreElement(rawMatch);
+
         const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
         const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
-        
-        const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
         const parsedAoe = aoeMatch ? parseInt(aoeMatch[1]) : 0;
         const parsedEff = effMatch ? effMatch[1] : null;
         
@@ -25,7 +48,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
         const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
         
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff } }));
+        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, elementRaw: rawMatch, elementCore: coreMatch } }));
     };
 
     const handleNextRound = () => {
@@ -103,8 +126,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate, h
                     <button className="w-full bg-red-950 border border-red-500 text-red-500 font-bold p-2 hover:bg-red-500 hover:text-white transition-colors" onClick={handleNewEncounter}>
                         ⚠ INITIALIZE NEW ENCOUNTER
                     </button>
-                    
-                    {/* NEW: Master Database Purge Button */}
                     <button className="w-full bg-black border border-red-900 text-red-900 font-bold p-2 mt-2 text-xs tracking-widest hover:bg-red-900 hover:text-white transition-colors" onClick={hardResetSession}>
                         PURGE SESSION DATA
                     </button>

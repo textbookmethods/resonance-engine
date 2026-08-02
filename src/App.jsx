@@ -88,7 +88,6 @@ export default function App() {
         });
     };
 
-    // NEW: Complete Session Purge Function
     const hardResetSession = () => {
         if (window.confirm("CRITICAL WARNING: This will permanently wipe ALL Agent character sheets, custom grimoires, and grid data for this Session ID. Players will need to refresh their browsers to generate new sheets. Proceed?")) {
             if (isFirebaseConfigured && role) {
