@@ -5,7 +5,7 @@ import { armory } from '../data/armory';
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', d: 0, u: 0, a: 0, alpha: 1 });
+    const [builder, setBuilder] = useState({ name: '', d: 0, u: 0, a: 0, alpha: 1, effectName: '' });
 
     const player = players[localId] || {};
 
@@ -50,11 +50,13 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
         updatePlayer('customCards', [...cards, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
     };
+    
     const saveToSpellbook = () => {
         const archived = player.savedSkills || [];
         updatePlayer('savedSkills', [...archived, { ...builder, name: builder.name || 'Custom Action', cost: calcCost, id: Date.now() }]);
         alert("Ability archived to Spellbook!");
     };
+    
     const rollImprovised = () => {
         updatePlayer('resPool', Math.max(0, safeInt(player.resPool) - 1));
         const roll = Math.floor(Math.random() * 6) + 1;
@@ -65,9 +67,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
-    const primeMove = () => { safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); };
     const primeWeapon = () => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } })); };
-    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range } })); };
+    const primeCard = (c) => { safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range, effectName: c.effectName } })); };
 
     const reqString = (w) => {
         if (!w.reqF && !w.reqS && !w.reqB) return 'No Req';
@@ -77,6 +78,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
 
     const customCards = player.customCards || [];
+    const statuses = player.statuses || [];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
@@ -102,9 +104,21 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         </div>
                     </div>
                     
-                    <button className="w-full bg-[#22c55e] text-black font-bold p-2 uppercase tracking-widest hover:bg-white transition-colors shadow-[0_0_10px_rgba(34,197,94,0.3)]" onClick={primeMove}>
-                        + Prime Movement Array
-                    </button>
+                    {/* Active Statuses Display */}
+                    <div className="bg-gray-900 border border-gray-700 p-2 mt-2">
+                        <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-2">Active States (Buffs/Debuffs)</div>
+                        <div className="flex flex-wrap gap-1">
+                            {statuses.length === 0 && <span className="text-xs text-gray-600 italic">Systems Nominal. No active states.</span>}
+                            {statuses.map((st, i) => (
+                                <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                    {st} <button className="text-red-400 hover:text-white" onClick={() => {
+                                        const newS = [...statuses]; newS.splice(i, 1);
+                                        updatePlayer('statuses', newS);
+                                    }}>✕</button>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
 
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700">
                         <span>CLASS:</span><span>{activeClass}</span>
@@ -180,7 +194,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                 {player.usedEvade ? 'EXHAUSTED' : 'AVAILABLE'}
                             </button>
                         </div>
-                        <div className="text-[10px] text-gray-500 pt-1 leading-tight text-right">App automatically tracks/exhausts Parry & Evasion on grid hit.</div>
                     </div>
                 </div>
             </div>
@@ -205,6 +218,15 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <div className="flex justify-between items-center"><span>Utility (u):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.u)} onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}>
                         <option value="0">0</option><option value="1">1 (Minor)</option><option value="3">3 (Major)</option><option value="5">5 (Severe)</option>
                     </select></div>
+                    
+                    {/* NEW: State Effect Input reveals if u > 0 */}
+                    {builder.u > 0 && (
+                        <div className="flex justify-between items-center animate-fade-in">
+                            <span className="text-purple-400">State Effect:</span>
+                            <input type="text" className="w-32 bg-black border border-purple-500 p-1 text-white outline-none text-right" placeholder="e.g. Stunned" value={builder.effectName || ''} onChange={e=>setBuilder({...builder, effectName: e.target.value})} />
+                        </div>
+                    )}
+
                     <div className="flex justify-between items-center"><span>AoE Radius (a):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: safeInt(e.target.value)})}>
                         <option value="0">0</option><option value="1">1 (Small)</option><option value="2">2 (Large)</option>
                     </select></div>
@@ -226,6 +248,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                             </div>
                             <button className="mt-auto w-full bg-[#00f0ff] text-black font-bold py-1 hover:bg-white uppercase" onClick={() => primeCard(c)}>Target</button>
                             <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
+                            {c.effectName && <div className="absolute -bottom-2 -right-2 bg-purple-900 text-white text-[8px] px-1 border border-purple-500">{c.effectName}</div>}
                         </div>
                     ))}
                 </div>

@@ -43,7 +43,6 @@ export default function App() {
     const [gameState, setGameState] = useState(DEFAULT_STATE);
     const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only (Waiting for Firebase Keys)');
 
-    // Generate and persist a unique ID for this browser so players can reconnect to their sheets
     const [localId] = useState(() => {
         let id = localStorage.getItem('res_player_id');
         if (!id) { id = Math.random().toString(36).substr(2, 9); localStorage.setItem('res_player_id', id); }
@@ -59,12 +58,15 @@ export default function App() {
         roomRef.on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                // Sanitize inbound Firebase data arrays
                 if (data.players) {
                     Object.keys(data.players).forEach(pid => {
                         data.players[pid].customCards = data.players[pid].customCards || [];
                         data.players[pid].savedSkills = data.players[pid].savedSkills || [];
+                        data.players[pid].statuses = data.players[pid].statuses || [];
                     });
+                }
+                if (data.encounter?.enemies) {
+                    data.encounter.enemies.forEach(e => { e.statuses = e.statuses || []; });
                 }
                 setGameState(data);
             } else {
@@ -92,11 +94,10 @@ export default function App() {
         setRole(selectedRole);
         setActiveTab(selectedRole === 'gm' ? 'gm' : 'player');
 
-        // If joining as player, guarantee they have a sheet in the global dictionary
         if (selectedRole === 'player') {
             pushUpdate(s => {
                 if (!s.players || !s.players[localId]) {
-                    const newAgent = { name: 'Agent', title: '', weaponId: 'w01', currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [], savedSkills: [], usedParry: false, usedIntercept: false, usedEvade: false };
+                    const newAgent = { name: 'Agent', title: '', weaponId: 'w01', currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [], savedSkills: [], statuses: [], usedParry: false, usedIntercept: false, usedEvade: false };
                     return { ...s, players: { ...(s.players || {}), [localId]: newAgent } };
                 }
                 return s;

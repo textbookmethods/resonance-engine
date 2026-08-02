@@ -8,21 +8,24 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
     const addEnemy = (bestiaryId) => {
         const template = bestiary.find(b => b.id === bestiaryId);
         if (!template) return;
-        const newEnemy = { ...template, uid: Date.now(), currentHp: template.hp || 0, currentBarriers: template.barriers ? [...template.barriers] : [], siphonActive: false, staggered: false };
+        const newEnemy = { ...template, uid: Date.now(), currentHp: template.hp || 0, currentBarriers: template.barriers ? [...template.barriers] : [], siphonActive: false, staggered: false, statuses: [] };
         updateEnc({ enemies: [...(encounter?.enemies || []), newEnemy] });
     };
 
     const primeEnemyAbility = (enemy, cleanName, desc) => {
         const dmgMatch = desc.match(/deals\s+(\d+)\s+damage/i);
         const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+        const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
+        
         const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
         const parsedAoe = aoeMatch ? parseInt(aoeMatch[1]) : 0;
+        const parsedEff = effMatch ? effMatch[1] : null;
         
         let eRange = "1";
         const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
         
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange } }));
+        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff } }));
     };
 
     const handleNextRound = () => {
@@ -30,7 +33,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
             const newRound = (s.encounter?.round || 0) + 1;
             const newTokens = (s.tokens || []).map(t => ({ ...t, movementRemaining: t.speed ?? 3 }));
             
-            // Unlock all defensive toggles for all connected players
             const newPlayers = { ...(s.players || {}) };
             Object.keys(newPlayers).forEach(pid => {
                 newPlayers[pid] = { ...newPlayers[pid], usedParry: false, usedIntercept: false, usedEvade: false };
@@ -38,6 +40,31 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
 
             return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, players: newPlayers };
         });
+    };
+
+    const handleNewEncounter = () => {
+        if (window.confirm("Initialize new encounter? This resets rounds to 0, clears the board, and restores all Agent Resonance to 3.")) {
+            pushUpdate(s => {
+                const newPlayers = { ...(s.players || {}) };
+                Object.keys(newPlayers).forEach(pid => {
+                    newPlayers[pid] = { 
+                        ...newPlayers[pid], 
+                        resPool: 3, 
+                        usedParry: false, 
+                        usedIntercept: false, 
+                        usedEvade: false 
+                    };
+                });
+                return {
+                    ...s,
+                    encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
+                    tokens: [],
+                    grid: Array(150).fill({ type: 'empty', terrain: null }),
+                    players: newPlayers,
+                    activeAction: null
+                };
+            });
+        }
     };
 
     const isOverload = (encounter?.round || 0) >= 4;
@@ -70,6 +97,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                         <button className={`flex-1 p-2 font-bold border transition-colors ${encounter?.activeTurn === 'enemy' ? 'bg-[#ff6600] text-black border-[#ff6600]' : 'bg-black text-gray-500 border-gray-700 hover:text-white'}`} onClick={() => updateEnc({ activeTurn: 'enemy' })}>HOSTILES</button>
                     </div>
                     <div className="text-xs text-gray-500 mt-2 leading-tight">Clicking [Next +] automatically refills all token movement ranges and resets Player Guard toggles.</div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                    <button className="w-full bg-red-950 border border-red-500 text-red-500 font-bold p-2 hover:bg-red-500 hover:text-white transition-colors" onClick={handleNewEncounter}>
+                        ⚠ INITIALIZE NEW ENCOUNTER
+                    </button>
                 </div>
 
                 <div className="border-t border-gray-700 pt-4 mt-auto">
@@ -108,6 +141,23 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                             Move Pts: <span className="text-[#ff6600]">{myToken ? `${myToken.movementRemaining ?? myToken.speed ?? 3} / ${myToken.speed ?? 3}` : 'Off Grid'}</span>
                                         </div>
                                     </div>
+                                    
+                                    {/* Active States Rendering */}
+                                    <div className="flex flex-wrap gap-1 mb-3">
+                                        {(enemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">No active states.</span>}
+                                        {(enemy.statuses || []).map((st, sIdx) => (
+                                            <span key={sIdx} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                                {st} <button className="text-red-400 hover:text-white" onClick={() => {
+                                                    pushUpdate(s => {
+                                                        const newE = [...(s.encounter?.enemies || [])];
+                                                        if (newE[idx]) newE[idx].statuses.splice(sIdx, 1);
+                                                        return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                                    });
+                                                }}>✕</button>
+                                            </span>
+                                        ))}
+                                    </div>
+
                                     <div className="mt-2 space-y-2">
                                         {(enemy.abilities || []).map((ability, aIdx) => {
                                             const parts = (ability || '').split(':');
@@ -116,11 +166,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                                             const costMatch = rawName.match(/\[(\d+)\s*Res\]/i) || rawName.match(/\((\d+)\s*Res\)/i);
                                             const cost = costMatch ? parseInt(costMatch[1]) : 0;
+                                            const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
+                                            const pEff = effMatch ? effMatch[1] : null;
 
                                             return (
-                                                <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs flex justify-between items-start gap-2">
+                                                <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs flex justify-between items-start gap-2 relative">
                                                     <div>
                                                         <span className="font-bold text-[#00f0ff]">{cleanName}</span>
+                                                        {pEff && <span className="text-purple-400 text-[10px] ml-2">[{pEff}]</span>}
                                                         {desc && <span className="text-gray-400 block mt-1">{desc.trim()}</span>}
                                                     </div>
                                                     <div className="flex gap-2 shrink-0">
@@ -145,10 +198,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                                 const val = parseInt(e.target.value) || 0;
                                                 pushUpdate(s => {
                                                     const newE = [...(s.encounter?.enemies || [])];
-                                                    const eIdx = newE.findIndex(en => en.uid === enemy.uid);
-                                                    if (eIdx !== -1) {
-                                                        newE[eIdx].currentBarriers[bIdx] = val;
-                                                        if (val <= 0 && bar > 0) newE[eIdx].staggered = true;
+                                                    if (newE[idx]) {
+                                                        newE[idx].currentBarriers[bIdx] = val;
+                                                        if (val <= 0 && bar > 0) newE[idx].staggered = true;
                                                     }
                                                     return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                                 });
@@ -161,8 +213,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
                                                 const newE = [...(s.encounter?.enemies || [])];
-                                                const eIdx = newE.findIndex(en => en.uid === enemy.uid);
-                                                if (eIdx !== -1) newE[eIdx].currentHp = val;
+                                                if (newE[idx]) newE[idx].currentHp = val;
                                                 return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                             });
                                         }} />

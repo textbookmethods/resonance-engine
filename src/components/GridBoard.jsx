@@ -44,9 +44,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
     const findActiveTokenIndex = (action, tokenList) => {
         if (!action) return -1;
-        if (action.isTokenId) {
-            return tokenList.findIndex(t => t.id === action.sourceId);
-        }
+        if (action.isTokenId) return tokenList.findIndex(t => t.id === action.sourceId);
         return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && t.refId === action.sourceId);
     };
 
@@ -59,7 +57,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             
             if (tIdx !== -1) {
                 const t = newTokens[tIdx];
-                
                 if (s.encounter?.round === 0) {
                     if (t.type === 'player' && targetRow < 5) { alert("Agents must be deployed in the southern sector (Rows 6-10)."); return s; }
                     if (t.type === 'enemy' && targetRow >= 5) { alert("Hostiles must be deployed in the northern sector (Rows 1-5)."); return s; }
@@ -76,23 +73,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const cost = targetCell.terrain === 'minor' ? 2 : 1;
                 const currentRemaining = t.movementRemaining ?? t.speed ?? 3;
 
-                if (currentRemaining < cost) {
-                    alert(`Insufficient movement points! Cost: ${cost}, Remaining: ${currentRemaining}`);
-                    return s;
-                }
+                if (currentRemaining < cost) { alert(`Insufficient movement points! Cost: ${cost}, Remaining: ${currentRemaining}`); return s; }
 
                 t.movementRemaining = currentRemaining - cost;
                 t.pos = index;
-                
-                if (targetCell.terrain === 'major') {
-                    alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
-                }
+                if (targetCell.terrain === 'major') alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
 
-                if (t.movementRemaining <= 0) {
-                    return { ...s, tokens: newTokens, activeAction: null };
-                } else {
-                    return { ...s, tokens: newTokens };
-                }
+                if (t.movementRemaining <= 0) return { ...s, tokens: newTokens, activeAction: null };
+                return { ...s, tokens: newTokens };
             }
             return s;
         });
@@ -132,7 +120,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let staggered = enemy.staggered;
                         if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
 
-                        newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered };
+                        // AUTOMATED STATUS EFFECT INJECTION (Enemy)
+                        let updatedStatuses = [...(enemy.statuses || [])];
+                        if (activeAction.effectName) {
+                            updatedStatuses.push(activeAction.effectName);
+                            log += `\n>> State [${activeAction.effectName}] applied to ${enemy.name}!`;
+                        }
+
+                        newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered, statuses: updatedStatuses };
                         log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg (Mitigated ${rawDmg - dmgRemaining} via Barriers). HP is now ${newHp}.`;
                         if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
                     }
@@ -160,26 +155,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
 
                         if (isFlanking) {
-                            if (p.usedEvade) {
-                                mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]";
-                            } else {
-                                mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0);
-                                mitType = "Backline Evasion";
-                                p.usedEvade = true; 
-                            }
+                            if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
+                            else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
                         } else {
-                            if (p.usedParry) {
-                                mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]";
-                            } else {
-                                mitigation = fDP + (wpn.baseDmg||0) + wpnBonus;
-                                mitType = "Front Parry";
-                                p.usedParry = true; 
-                            }
+                            if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } 
+                            else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
                         }
 
                         const finalDmg = Math.max(0, rawDmg - mitigation);
                         const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
                         p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
+                        
+                        // AUTOMATED STATUS EFFECT INJECTION (Player)
+                        if (activeAction.effectName) {
+                            p.statuses = [...(p.statuses || []), activeAction.effectName];
+                            log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
+                        }
                         
                         log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
                     }
@@ -214,12 +205,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             const p = players[t.refId];
             if (p) srcName = p.name;
         }
-        
         const rem = t.movementRemaining ?? t.speed ?? 3;
-        if (rem <= 0 && encounter?.round !== 0) {
-            return alert("Movement points expended for this turn. Wait for GM to advance round or manually reset points in Inspector.");
-        }
-
+        if (rem <= 0 && encounter?.round !== 0) return alert("Movement points expended for this turn. Wait for GM to advance round or manually reset points in Inspector.");
         pushUpdate(s => ({ ...s, activeAction: { type: 'move', source: srcName, sourceId: t.id, isEnemy: t.type === 'enemy', isTokenId: true } }));
     };
 
@@ -322,10 +309,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             const offsetY = orderInHex > 0 ? orderInHex * 10 : 0;
 
             let hpDisplay = null; let displayChar = 'E'; let tBg = '#ff6600'; let txtColor = '#000000';
+            let activeStatusList = [];
 
             if (t.type === 'enemy') {
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === t.refId);
                 if (linkedEnemy) {
+                    activeStatusList = linkedEnemy.statuses || [];
                     hpDisplay = (
                         <div className="absolute -bottom-8 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap pointer-events-none z-50 shadow-md" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
                             {linkedEnemy.currentHp} HP
@@ -336,6 +325,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             
             if (t.type === 'player') {
                 const p = players[t.refId] || {};
+                activeStatusList = p.statuses || [];
                 const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
                 let pClass = "Rookie";
                 if (fDP >= 10) pClass = "Vanguard"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (bDP >= 10) pClass = "Sniper"; else if (sDP >= 10) pClass = "Conduit"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
@@ -370,6 +360,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     <span className="mt-1">{displayChar}</span>
                     {hpDisplay}
                     
+                    {/* NEW: Floating Status Effects Flag */}
+                    {activeStatusList.length > 0 && (
+                        <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-none" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
+                            {activeStatusList.join(', ')}
+                        </div>
+                    )}
+
                     {selectedToken === t.id && ( 
                         <div className="absolute -top-10 flex gap-2 z-50" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
                             <button className="bg-[#22c55e] text-black rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-white hover:border-[#22c55e] transition-colors shadow-lg" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button>
@@ -444,6 +441,32 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             </div>
                         </div>
 
+                        {/* NEW: Manual Status Injector */}
+                        <div className="bg-gray-900 border border-gray-700 p-2 mt-1">
+                            <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Active States</div>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {(p.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
+                                {(p.statuses || []).map((st, i) => (
+                                    <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                        {st} <button className="text-red-400 hover:text-white" onClick={() => {
+                                            const newS = [...p.statuses]; newS.splice(i, 1);
+                                            pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: newS } } }));
+                                        }}>✕</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex gap-1">
+                                <input type="text" id="pState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
+                                <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
+                                    const val = document.getElementById('pState').value;
+                                    if (val) {
+                                        pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: [...(p.statuses||[]), val] } } }));
+                                        document.getElementById('pState').value = '';
+                                    }
+                                }}>+</button>
+                            </div>
+                        </div>
+
                         <div className="flex gap-2 mt-2">
                             <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
                             <button className="flex-1 bg-black text-white font-bold py-1 uppercase text-xs hover:bg-white hover:text-black border transition-colors" style={{ borderColor: pColor }} onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range } }))}>Target</button>
@@ -452,10 +475,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Active Custom Cards</div>
                         {(p.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
                         {(p.customCards || []).map(c => (
-                            <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm">
+                            <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
                                 <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
                                 <div className="text-gray-400 text-xs mb-2">Cost: {c.cost} Res | d:{c.d} a:{c.a}</div>
-                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range } }))}>Target</button>
+                                {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
+                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range, effectName: c.effectName } }))}>Target</button>
                             </div>
                         ))}
                     </div>
@@ -464,7 +488,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
             if (activeT.type === 'enemy') {
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === activeT.refId);
-
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
                 return (
@@ -515,6 +538,41 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             </div>
                         </div>
 
+                        {/* NEW: Manual Status Injector for Enemies */}
+                        <div className="bg-gray-900 border border-gray-700 p-2 mt-1">
+                            <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Active States</div>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {(linkedEnemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
+                                {(linkedEnemy.statuses || []).map((st, i) => (
+                                    <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                        {st} <button className="text-red-400 hover:text-white" onClick={() => {
+                                            pushUpdate(s => {
+                                                const newE = [...(s.encounter?.enemies || [])];
+                                                const eIdx = newE.findIndex(en => en.uid === linkedEnemy.uid);
+                                                if (eIdx !== -1) newE[eIdx].statuses.splice(i, 1);
+                                                return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                            });
+                                        }}>✕</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex gap-1">
+                                <input type="text" id="eState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
+                                <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
+                                    const val = document.getElementById('eState').value;
+                                    if (val) {
+                                        pushUpdate(s => {
+                                            const newE = [...(s.encounter?.enemies || [])];
+                                            const eIdx = newE.findIndex(en => en.uid === linkedEnemy.uid);
+                                            if (eIdx !== -1) newE[eIdx].statuses.push(val);
+                                            return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                        });
+                                        document.getElementById('eState').value = '';
+                                    }
+                                }}>+</button>
+                            </div>
+                        </div>
+
                         <button className="w-full bg-[#22c55e] text-black font-bold py-2 mt-2 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Prime Movement</button>
 
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Abilities</div>
@@ -525,14 +583,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                             const dmgMatch = desc.match(/deals\s+(\d+)\s+damage/i);
                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+                            
+                            // Regex grabs any bracketed effect text e.g. "applies [Poison]"
+                            const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
+                            const pEff = effMatch ? effMatch[1] : null;
+
                             let eRange = "1";
                             const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
                             if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
                             
                             return (
-                                <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center">
-                                    <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: (dmgMatch ? parseInt(dmgMatch[1]) : 0), a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange } }))}>Target</button>
+                                <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
+                                    <div>
+                                        <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
+                                        {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
+                                    </div>
+                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: (dmgMatch ? parseInt(dmgMatch[1]) : 0), a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange, effectName: pEff } }))}>Target</button>
                                 </div>
                             );
                         })}
@@ -595,6 +661,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div className="text-xs mt-1">
                                     {activeAction.d !== undefined && <span className="mr-3">DMG: {activeAction.d}</span>}
                                     {activeAction.a !== undefined && <span className="mr-3">AoE Rad: {activeAction.a}</span>}
+                                    {activeAction.effectName && <span className="text-purple-400 ml-3">State: [{activeAction.effectName}]</span>}
                                 </div>
                             )}
                         </div>

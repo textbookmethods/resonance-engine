@@ -15,7 +15,6 @@ export default function Rulebook() {
 
     return (
         <div className="flex flex-col md:flex-row gap-6 h-[75vh] font-mono text-sm">
-            {/* Sidebar */}
             <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-slate-700 flex flex-col gap-2 shrink-0 overflow-y-auto shadow-xl">
                 <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Manual</h2>
                 {chapters.map(chap => (
@@ -29,7 +28,6 @@ export default function Rulebook() {
                 ))}
             </div>
 
-            {/* Content Area */}
             <div className="flex-1 bg-[#1a222c] p-6 md:p-10 border border-slate-700 overflow-y-auto text-gray-300 space-y-6 shadow-inner">
                 
                 {activeChapter === 'core' && (
@@ -173,8 +171,8 @@ export default function Rulebook() {
                         <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">6. The Synthesis Matrix</h1>
                         
                         <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Player Resonance</h3>
-                            <p className="leading-relaxed mb-4">Resonance is fuel. It is capped at 10 points per player. Earn Resonance through tactical actions:</p>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Player Resonance (Starting Fuel)</h3>
+                            <p className="leading-relaxed mb-4">Resonance is fuel. Players begin every encounter with <strong>3 Resonance</strong>, capped at a maximum of 10 points. Earn Resonance during combat through tactical actions:</p>
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4">
                                 <li><strong>Basic Attack:</strong> +1 Res</li>
                                 <li><strong>Banter / Roleplay:</strong> +1 Res</li>
@@ -193,7 +191,20 @@ export default function Rulebook() {
                                 <li><strong>a (AoE Radius):</strong> Hex blast radius.</li>
                                 <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
                             </ul>
-                            <p className="mt-4 leading-relaxed">Once built, abilities can be Equipped to the active HUD (max 4), or Archived permanently in your Grimoire / Spellbook tab for later use.</p>
+                        </div>
+
+                        <div>
+                            <h3 className="text-[#a855f7] font-bold text-lg mb-2 mt-6">Applying Buffs & Debuffs</h3>
+                            <p className="leading-relaxed mb-4">The Engine fully supports player-created buffs, shields, and debuffs. This is governed by the <strong>Utility (u)</strong> variable.</p>
+                            <ul className="space-y-2 list-none text-gray-400">
+                                <li><strong className="text-white">u = 0 :</strong> Pure Damage. No extra effects.</li>
+                                <li><strong className="text-white">u = 1 :</strong> Minor Buff/Debuff (e.g., +1 Movement, -1 DP)</li>
+                                <li><strong className="text-white">u = 3 :</strong> Major Buff/Debuff (e.g., Shielded, Immobilized, Bleed)</li>
+                                <li><strong className="text-white">u = 5 :</strong> Severe Buff/Debuff (e.g., Invulnerable, Stunned)</li>
+                            </ul>
+                            <p className="mt-4 leading-relaxed bg-purple-900 border border-purple-500 p-3 text-white text-sm shadow-inner">
+                                <strong>How to Use:</strong> If you select a Utility value greater than 0, a purple <strong>State Effect</strong> box will appear in the matrix. Type the name of your effect (e.g., "Stunned"). When you hit your target on the grid, the Engine will automatically append that status tag directly over their token!
+                            </p>
                         </div>
                     </div>
                 )}

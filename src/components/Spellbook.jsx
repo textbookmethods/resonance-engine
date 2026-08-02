@@ -54,6 +54,11 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                     <div><span className="text-gray-500">Utility:</span> {skill.u}</div>
                                     <div><span className="text-gray-500">Affinity:</span> {skill.alpha}</div>
                                 </div>
+                                {skill.effectName && (
+                                    <div className="mt-3 bg-purple-900 border border-purple-500 text-white text-[10px] px-2 py-1 font-bold inline-block">
+                                        Effect: [{skill.effectName}]
+                                    </div>
+                                )}
                             </div>
 
                             <button className="w-full bg-gray-800 text-white font-bold py-2 uppercase text-xs hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => equipToHUD(skill)}>
