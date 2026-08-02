@@ -90,7 +90,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const radius = activeAction.a || 0;
         const rawDmg = parseInt(activeAction.d) || 0;
         
-        // Output Dictionary Mapping to Combat Log
         const dispRaw = activeAction.elementRaw || activeAction.element || 'Kinetic';
         const dispCore = activeAction.elementCore || activeAction.element || 'Kinetic';
         const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
@@ -319,9 +318,24 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid === t.refId);
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
+                    
+                    // NEW: Automatically parse max attack range from the hostile's abilities array
+                    let maxRange = 1;
+                    (linkedEnemy.abilities || []).forEach(ability => {
+                        const rangeMatch = ability.match(/range\s+(\d+)(?:-(\d+))?/i);
+                        if (rangeMatch) {
+                            const r = rangeMatch[2] ? parseInt(rangeMatch[2]) : parseInt(rangeMatch[1]);
+                            if (r > maxRange) maxRange = r;
+                        }
+                    });
+
+                    // NEW: Format display abbreviation
+                    displayChar = linkedEnemy.name ? linkedEnemy.name.substring(0,2).toUpperCase() : 'E';
+
                     hpDisplay = (
-                        <div className="absolute -bottom-8 bg-black text-[#ff6600] text-[11px] font-bold px-1.5 py-0.5 border border-[#ff6600] rounded whitespace-nowrap pointer-events-none z-50 shadow-md" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
-                            {linkedEnemy.currentHp} HP
+                        <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: '#ff6600', color: '#ff6600', transform: `rotate(-${t.facing * 60}deg)` }}>
+                            <span className="text-white mb-0.5">{linkedEnemy.name || 'Hostile'}</span>
+                            <span>T{linkedEnemy.tier || 1} | RNG {maxRange} | {linkedEnemy.currentHp} HP</span>
                         </div>
                     );
                 }
@@ -340,7 +354,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 txtColor = ['Vanguard', 'Conduit', 'Sniper'].includes(pClass) ? '#ffffff' : '#000000';
                 displayChar = p.name ? p.name.substring(0,2).toUpperCase() : 'P1';
                 hpDisplay = (
-                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md" style={{ borderColor: tBg, color: tBg, transform: `rotate(-${t.facing * 60}deg)` }}>
+                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: tBg, color: tBg, transform: `rotate(-${t.facing * 60}deg)` }}>
                         <span className="text-white mb-0.5">{p.name || 'Agent'}</span>
                         <span>{pClass} | {p.currentHp ?? derivedMaxHp} HP</span>
                     </div>
@@ -468,6 +482,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 }}>+</button>
                             </div>
                         </div>
+
+                        <div className="flex gap-2 mt-2">
+                            <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
+                            <button className="flex-1 bg-black text-white font-bold py-1 uppercase text-xs hover:bg-white hover:text-black border transition-colors" style={{ borderColor: pColor }} onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, element: 'Kinetic' } }))}>Target</button>
+                        </div>
+                        
+                        <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Active Custom Cards</div>
+                        {(p.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
+                        {(p.customCards || []).map(c => (
+                            <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
+                                <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
+                                <div className="text-gray-400 text-xs mb-2">Cost: {c.cost} Res | d:{c.d} a:{c.a}</div>
+                                {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
+                                <button className="w-full bg-gray-800 text-white font-bold py-1 uppercase text-xs border border-gray-600 hover:bg-white hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range, effectName: c.effectName, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc } }))}>Target</button>
+                            </div>
+                        ))}
                     </div>
                 );
             }
@@ -541,7 +571,54 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     </span>
                                 ))}
                             </div>
+                            <div className="flex gap-1">
+                                <input type="text" id="eState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
+                                <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
+                                    const val = document.getElementById('eState').value;
+                                    if (val) {
+                                        pushUpdate(s => {
+                                            const newE = [...(s.encounter?.enemies || [])];
+                                            const eIdx = newE.findIndex(en => en.uid === linkedEnemy.uid);
+                                            if (eIdx !== -1) newE[eIdx].statuses.push(val);
+                                            return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                        });
+                                        document.getElementById('eState').value = '';
+                                    }
+                                }}>+</button>
+                            </div>
                         </div>
+
+                        <button className="w-full bg-[#22c55e] text-black font-bold py-2 mt-2 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Prime Movement</button>
+
+                        <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Abilities</div>
+                        {(linkedEnemy.abilities || []).map((ability, aIdx) => {
+                            const parts = (ability || '').split(':');
+                            const rawName = parts[0];
+                            const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
+                            const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
+                            
+                            const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
+                            const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
+                            const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
+
+                            const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+                            const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
+                            const pEff = effMatch ? effMatch[1] : null;
+
+                            let eRange = "1";
+                            const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
+                            if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
+                            
+                            return (
+                                <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
+                                    <div>
+                                        <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
+                                        {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
+                                    </div>
+                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))}>Target</button>
+                                </div>
+                            );
+                        })}
                     </div>
                 );
             }
@@ -591,7 +668,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 {activeAction && (
                     <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.type === 'move' ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
                         <div className="font-mono">
-                            <span className={`text-xs uppercase tracking-widest block mb-1 ${activeAction.type === 'move' ? 'text-[#4ade80]' : 'text-red-400'}`}>
+                            <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.type === 'move' ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>
                                 {activeAction.type === 'move' ? 'Movement Array Active' : 'Targeting Array Active'} // Source: {activeAction.source}
                             </span>
                             <span className="font-bold text-xl uppercase tracking-wider block mb-1">
@@ -601,7 +678,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400">
                                     {activeAction.d !== undefined && <span>DMG: {activeAction.d}</span>}
                                     
-                                    {/* NEW: Targeting Banner Dictionary Display */}
                                     {activeAction.elementCore && (
                                         <span className="text-[#ff6600]">
                                             TYPE: {(activeAction.elementRaw && activeAction.elementRaw.toLowerCase() !== activeAction.elementCore.toLowerCase()) 
