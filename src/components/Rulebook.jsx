@@ -83,20 +83,25 @@ export default function Rulebook() {
                         
                         <div>
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
-                            <p className="leading-relaxed mb-4">The environment is painted dynamically based on the Utility Weight (u) of synthesized abilities:</p>
+                            <p className="leading-relaxed mb-4">Players can dynamically alter the environment by adding a <strong>Terrain (t)</strong> generation effect to their synthesized spells. When executed, every hex within the spell's Area of Effect (AoE) radius is instantly painted with that terrain.</p>
                             <ul className="space-y-4 list-none">
                                 <li className="bg-black border-l-4 border-yellow-500 p-3">
-                                    <strong className="text-yellow-500">Minor Terrain (u=1)</strong><br/>
+                                    <strong className="text-yellow-500">Minor Terrain (t=1)</strong><br/>
                                     <span className="text-gray-400 text-xs">Examples: Mud, Caltrops</span><br/>
                                     Doubles the movement cost to enter the hex.
                                 </li>
+                                <li className="bg-black border-l-4 border-gray-400 p-3">
+                                    <strong className="text-gray-400">Clear Terrain (t=2)</strong><br/>
+                                    <span className="text-gray-400 text-xs">Examples: Dispel, Wash, Burn Away</span><br/>
+                                    Removes any existing terrain effects and reverts the hexes to neutral ground. Can also shatter Severe Terrain bedrock.
+                                </li>
                                 <li className="bg-black border-l-4 border-purple-500 p-3">
-                                    <strong className="text-purple-500">Major Terrain (u=3)</strong><br/>
+                                    <strong className="text-purple-500">Major Terrain (t=3)</strong><br/>
                                     <span className="text-gray-400 text-xs">Examples: Void Rifts, Magma</span><br/>
-                                    Blocks shift/dash abilities. Deals environmental damage if a token ends their turn inside it.
+                                    Blocks shift/dash abilities. Deals <strong>5 Environmental Damage</strong> automatically if a token ends their round inside it.
                                 </li>
                                 <li className="bg-black border-l-4 border-blue-500 p-3">
-                                    <strong className="text-blue-500">Severe Terrain (u=5)</strong><br/>
+                                    <strong className="text-blue-500">Severe Terrain (t=5)</strong><br/>
                                     <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
                                     Completely impassable. Blocks line-of-sight for targeting.
                                 </li>
@@ -123,8 +128,17 @@ export default function Rulebook() {
                         <div>
                             <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Building Abilities</h3>
                             <p className="leading-relaxed mb-4">Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the mathematical Engine formula:</p>
-                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + a²) ⌉</div>
                             
+                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + t + a²) ⌉</div>
+                            
+                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-8">
+                                <li><strong>d (Damage):</strong> Raw damage output.</li>
+                                <li><strong>u (Utility):</strong> Status effects (1 = Minor, 3 = Major, 5 = Severe, 10 = Terminal).</li>
+                                <li><strong>t (Terrain Gen):</strong> Adds a physical Grid effect (1 = Minor, 2 = Clear, 3 = Major, 5 = Severe).</li>
+                                <li><strong>a (AoE Radius):</strong> Hex blast radius.</li>
+                                <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
+                            </ul>
+
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8">Automated Affinity (α)</h3>
                             <p className="leading-relaxed mb-4">Players cannot manually declare Affinity. The Engine calculates it automatically based on your Class Specialization, Equipped Weapon, and the concepts you type into the Matrix.</p>
                             <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
@@ -170,7 +184,8 @@ export default function Rulebook() {
 
                                 <li className="bg-gray-900 border border-gray-700 p-3">
                                     <strong className="text-[#22c55e] text-lg uppercase tracking-wider block mb-1">Environmental Physics (DoTs Stack!)</strong>
-                                    <strong>Bleed / Burn / Poisoned:</strong> Damage over Time states. When the GM advances to the next round, the Engine automatically applies 3 direct HP damage per active state. <em>(e.g., If a target is Bleeding AND Poisoned, they take 6 damage).</em>
+                                    <strong>Bleed / Burn / Poisoned:</strong> Damage over Time states. When the GM advances to the next round, the Engine automatically applies 3 direct HP damage per active state. <em>(e.g., If a target is Bleeding AND Poisoned, they take 6 damage).</em><br/>
+                                    <strong>Major Terrain:</strong> If an entity is standing in Major Terrain (e.g. Magma) when the round ends, they take 5 Environmental Damage.
                                 </li>
                             </ul>
                         </div>

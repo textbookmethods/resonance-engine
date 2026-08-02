@@ -32,6 +32,25 @@ const STATE_DICTIONARY = {
     'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
+// NEW: Tooltip helper text for visual grids
+const STATE_DESCRIPTIONS = {
+    'Execute': 'Instantly reduces HP to 0. Bypasses all defenses.',
+    'Bleed': 'Takes 3 HP damage at the end of the round.',
+    'Burn': 'Takes 3 HP damage at the end of the round.',
+    'Poisoned': 'Takes 3 HP damage at the end of the round. DoTs stack.',
+    'Immobilized': 'Movement points reduced to 0.',
+    'Stunned': 'Movement 0. Cannot attack. Defensive arrays jammed.',
+    'Shielded': 'Absorbs 5 incoming damage, then shatters.',
+    'Vulnerable': 'Takes 1.5x incoming damage from the next attack, then shatters.',
+    'Knockdown': 'Movement points halved. Automatically recovers next round.',
+    'Blind': 'Targeting optics restricted to Range 1 and AoE 0.',
+    'Haste': 'Movement points increased by +2.',
+    'Slowed': 'Movement points reduced by -2.',
+    'Shocked': 'Defensive arrays (Parry, Intercept, Evade) jammed.',
+    'Evasive': 'Next incoming attack automatically forces an Evasion roll, then shatters.',
+    'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
+};
+
 const CLASS_AFFINITIES = {
     'Vanguard': { states: ['Knockdown', 'Bleed', 'Shielded', 'Burn', 'Execute'] },
     'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] },
@@ -78,7 +97,6 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
 };
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    // NEW: Terrain string added to default builder payload
     const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '' });
 
     const player = players[localId] || {};
@@ -125,7 +143,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const activeAffinity = player.affinityLocked ? (player.affinity || 'Kinetic') : getCoreElement(player.affinityRaw || 'Kinetic');
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     
-    // NEW: Terrain cost parsing 
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
     const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + Math.pow((builder.a || 0), 2)));
 
@@ -185,12 +202,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         else outcome = "Cascade (Total Success)";
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
-
-    const primeMove = () => { 
-        if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
-        if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
-        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
-    };
     
     const primeWeapon = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
@@ -214,7 +225,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-        // NEW: Injects c.terrain seamlessly into the Grid targeting payload
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', terrain: c.terrain, desc: c.desc } })); 
     };
 
@@ -440,7 +450,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         <option value="0">0</option><option value="1">1 (Small)</option><option value="2">2 (Large)</option>
                     </select></div>
 
-                    {/* NEW: Terrain Generation Interface */}
                     <div className="flex justify-between items-center"><span>Terrain Gen (t):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
                         <option value="">None</option>
                         <option value="minor">Minor (+1)</option>
@@ -482,10 +491,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
-                                    {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
                                     
-                                    {/* NEW: Card visualizes Active Terrain Shift */}
-                                    {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{c.terrain.toUpperCase()}]</div>}
+                                    {/* UPDATED: Cards now have tooltips so players can remember exactly what their states do */}
+                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
+                                    
+                                    {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}

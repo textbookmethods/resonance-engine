@@ -27,6 +27,24 @@ const STATE_DICTIONARY = {
     'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
+const STATE_DESCRIPTIONS = {
+    'Execute': 'Instantly reduces HP to 0. Bypasses all defenses.',
+    'Bleed': 'Takes 3 HP damage at the end of the round.',
+    'Burn': 'Takes 3 HP damage at the end of the round.',
+    'Poisoned': 'Takes 3 HP damage at the end of the round. DoTs stack.',
+    'Immobilized': 'Movement points reduced to 0.',
+    'Stunned': 'Movement 0. Cannot attack. Defensive arrays jammed.',
+    'Shielded': 'Absorbs 5 incoming damage, then shatters.',
+    'Vulnerable': 'Takes 1.5x incoming damage from the next attack, then shatters.',
+    'Knockdown': 'Movement points halved. Automatically recovers next round.',
+    'Blind': 'Targeting optics restricted to Range 1 and AoE 0.',
+    'Haste': 'Movement points increased by +2.',
+    'Slowed': 'Movement points reduced by -2.',
+    'Shocked': 'Defensive arrays (Parry, Intercept, Evade) jammed.',
+    'Evasive': 'Next incoming attack automatically forces an Evasion roll, then shatters.',
+    'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
+};
+
 const getCoreState = (input) => {
     if (!input) return '';
     const match = String(input).match(/\[(.*?)\]/);
@@ -291,12 +309,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             }
         }
 
-        // NEW: Pulls the active Grid map, calculates terrain overwrites securely within the blast radius, and pushes it natively.
         let newGrid = [...activeGrid];
         if (activeAction.terrain) {
             let changedCount = 0;
             newGrid = newGrid.map((cell, idx) => {
                 if (getHexDistance(idx, targetHex) <= radius) {
+                    // NEW: Impassable Bedrock Protection (Cannot overwrite Severe unless explicitly cleared)
+                    if (cell.terrain === 'severe' && activeAction.terrain !== 'clear') return cell;
                     changedCount++;
                     return { ...cell, terrain: activeAction.terrain === 'clear' ? null : activeAction.terrain };
                 }
@@ -406,6 +425,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             const { x, y } = getHexCoords(idx);
             let bgColor = '#1e293b'; let hexBorder = 'none'; let hexZ = 1;
 
+            // NEW: Installs Tooltips directly to Hex Terrain Backgrounds
+            let titleStr = `Hex ${idx}`;
+            if (cell.terrain) {
+                let tDesc = cell.terrain === 'minor' ? 'Movement cost doubled.' :
+                            cell.terrain === 'major' ? 'Deals 5 damage at round end.' :
+                            cell.terrain === 'severe' ? 'Impassable & Blocks Line-of-Sight.' : '';
+                titleStr += ` | ${String(cell.terrain).toUpperCase()}: ${tDesc}`;
+            }
+
             if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; 
             if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; 
             if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
@@ -443,7 +471,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             else if (isMovable) { bgColor = 'rgba(34, 197, 94, 0.3)'; hexBorder = '2px dashed rgba(34, 197, 94, 0.8)'; hexZ = 5; }
 
             return (
-                <div key={`bg-${idx}`} onClick={() => handleHexClick(idx)} onMouseEnter={() => setHoveredHex(idx)} onMouseLeave={() => setHoveredHex(null)}
+                <div key={`bg-${idx}`} title={titleStr} onClick={() => handleHexClick(idx)} onMouseEnter={() => setHoveredHex(idx)} onMouseLeave={() => setHoveredHex(null)}
                     className="absolute transition-all" style={{ left: `${x}px`, top: `${y}px`, width: `${hexWidth}px`, height: `${hexHeight}px`, backgroundColor: bgColor, border: hexBorder, clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)', transform: 'scale(0.95)', zIndex: hexZ, cursor: activeAction ? 'crosshair' : 'pointer' }}></div>
             );
         });
@@ -534,9 +562,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     <span className="mt-1">{displayChar}</span>
                     {hpDisplay}
                     
+                    {/* NEW: Enables Tooltips on Tokens (Pointer Events Auto allows hover capture) */}
                     {activeStatusList.length > 0 && (
-                        <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-none" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
-                            {activeStatusList.join(', ')}
+                        <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-auto" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
+                            {activeStatusList.map((st, i) => (
+                                <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="cursor-help hover:text-[#00f0ff] transition-colors">{st}{i < activeStatusList.length - 1 ? ',' : ''}</span>
+                            ))}
                         </div>
                     )}
 
@@ -650,7 +681,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {(p.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(p.statuses || []).map((st, i) => (
-                                    <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
                                         {(isGM || activeT.refId === localId) && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
@@ -700,13 +731,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const isNoFuel = currentRes < c.cost;
 
                             return (
-                                <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
+                                <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-sm relative">
                                     <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
-                                    {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
+                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     
-                                    {/* NEW: Displays Active Terrain Shift explicitly */}
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                     
                                     {(isGM || activeT.refId === localId) && (
@@ -804,7 +834,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {(linkedEnemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(linkedEnemy.statuses || []).map((st, i) => (
-                                    <span key={i} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
                                         {isGM && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
@@ -859,8 +889,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                             const pEff = effMatch ? effMatch[1] : null;
-                            
-                            // NEW: Enemy Dashboard parses terrain strings natively too
+
                             const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
                             const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
 
@@ -872,7 +901,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                     <div>
                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                        {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
+                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)]} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                     </div>
                                     
@@ -975,7 +1004,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         </span>
                                     )}
                                     
-                                    {/* NEW: Grid overlay dynamically indicates if the impending attack will blow a hole in the grid's terrain */}
                                     {activeAction.terrain && (
                                         <span className="text-yellow-400">
                                             TERRAIN: [{String(activeAction.terrain).toUpperCase()}]

@@ -30,6 +30,24 @@ const STATE_DICTIONARY = {
     'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
+const STATE_DESCRIPTIONS = {
+    'Execute': 'Instantly reduces HP to 0. Bypasses all defenses.',
+    'Bleed': 'Takes 3 HP damage at the end of the round.',
+    'Burn': 'Takes 3 HP damage at the end of the round.',
+    'Poisoned': 'Takes 3 HP damage at the end of the round. DoTs stack.',
+    'Immobilized': 'Movement points reduced to 0.',
+    'Stunned': 'Movement 0. Cannot attack. Defensive arrays jammed.',
+    'Shielded': 'Absorbs 5 incoming damage, then shatters.',
+    'Vulnerable': 'Takes 1.5x incoming damage from the next attack, then shatters.',
+    'Knockdown': 'Movement points halved. Automatically recovers next round.',
+    'Blind': 'Targeting optics restricted to Range 1 and AoE 0.',
+    'Haste': 'Movement points increased by +2.',
+    'Slowed': 'Movement points reduced by -2.',
+    'Shocked': 'Defensive arrays (Parry, Intercept, Evade) jammed.',
+    'Evasive': 'Next incoming attack automatically forces an Evasion roll, then shatters.',
+    'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
+};
+
 const getCoreElement = (input) => {
     if (!input) return 'Kinetic';
     const clean = input.toLowerCase().trim();
@@ -76,7 +94,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const parsedEff = effMatch ? effMatch[1] : null;
         const coreEff = getCoreState(parsedEff);
         
-        // NEW: Pulls terrain from Enemy bestiary text arrays 
         const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
         const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
 
@@ -89,7 +106,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             alert("Warning: Entity is BLIND. Targeting optics restricted to adjacent hexes.");
         }
 
-        // Passes pTerrain directly into the execution payload
         pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch, terrain: pTerrain } }));
     };
 
@@ -102,14 +118,23 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             let newPlayers = { ...(s.players || {}) };
             let newTokens = [...(s.tokens || [])];
 
+            // NEW: Fully unified Environmental Physics (State DoTs + Major Terrain DoT)
             newEnemies.forEach(e => {
                 let coreStates = (e.statuses || []).map(st => getCoreState(st));
+                let dotDmg = 0;
+                let activeDoTs = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 
-                let dotStates = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
-                if (dotStates.length > 0) {
-                    const dmg = dotStates.length * 3;
-                    e.currentHp = Math.max(0, e.currentHp - dmg);
-                    log.push(`Hostile [${e.name}] took ${dmg} damage from active states (${dotStates.join(', ')}).`);
+                if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
+
+                const t = newTokens.find(tok => tok.type === 'enemy' && tok.refId == e.uid);
+                if (t && s.grid && s.grid[t.pos]?.terrain === 'major') {
+                    dotDmg += 5;
+                    activeDoTs.push('Major Terrain');
+                }
+
+                if (dotDmg > 0) {
+                    e.currentHp = Math.max(0, e.currentHp - dotDmg);
+                    log.push(`Hostile [${e.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
                     if (e.currentHp <= 0) deadEnemyUids.add(e.uid);
                 }
                 
@@ -119,12 +144,20 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             Object.keys(newPlayers).forEach(pid => {
                 let p = newPlayers[pid];
                 let coreStates = (p.statuses || []).map(st => getCoreState(st));
+                let dotDmg = 0;
+                let activeDoTs = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 
-                let dotStates = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
-                if (dotStates.length > 0) {
-                    const dmg = dotStates.length * 3;
-                    p.currentHp = Math.max(0, p.currentHp - dmg);
-                    log.push(`Agent [${p.name}] took ${dmg} damage from active states (${dotStates.join(', ')}).`);
+                if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
+
+                const t = newTokens.find(tok => tok.type === 'player' && tok.refId === pid);
+                if (t && s.grid && s.grid[t.pos]?.terrain === 'major') {
+                    dotDmg += 5;
+                    activeDoTs.push('Major Terrain');
+                }
+
+                if (dotDmg > 0) {
+                    p.currentHp = Math.max(0, p.currentHp - dotDmg);
+                    log.push(`Agent [${p.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
                 }
 
                 p.statuses = (p.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
@@ -156,7 +189,10 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 log.push(`>> ${deadEnemyUids.size} entities purged due to terminal damage.`);
             }
 
-            if (log.length > 0) alert("ROUND ADVANCE LOG:\n" + log.join('\n'));
+            // Syncs the unified logic directly into the global overlay tracker
+            if (log.length > 0) {
+                return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers, globalLog: { message: "ROUND ADVANCE PROTOCOLS:\n\n" + log.join('\n'), timestamp: Date.now() } };
+            }
 
             return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers };
         });
@@ -286,7 +322,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                     <div className="flex flex-wrap gap-1 mb-3">
                                         {(enemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">No active states.</span>}
                                         {(enemy.statuses || []).map((st, sIdx) => (
-                                            <span key={sIdx} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                            <span key={sIdx} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                                 {st} <button className="text-red-400 hover:text-white" onClick={() => {
                                                     pushUpdate(s => {
                                                         const newE = [...(s.encounter?.enemies || [])];
@@ -324,23 +360,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                                     <div>
                                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                                        {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
+                                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)]} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    {isGM && (
-                                                        <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
-                                                            if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
-                                                            
-                                                            let finalRange = isBlind ? '1' : eRange;
-                                                            let finalAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
-                                                            if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-
-                                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
-                                                        }}>
-                                                            {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
-                                                        </button>
-                                                    )}
+                                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>Target</button>
                                                 </div>
                                             );
                                         })}
