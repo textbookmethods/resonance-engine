@@ -11,10 +11,14 @@ import Rulebook from './components/Rulebook';
 import Spellbook from './components/Spellbook';
 
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID"
+  apiKey: "AIzaSyDFah77C7Jcp6dSbA1cgqNM39QAg_ik65k",
+  authDomain: "resonance-playtest.firebaseapp.com",
+  databaseURL: "https://resonance-playtest-default-rtdb.firebaseio.com",
+  projectId: "resonance-playtest",
+  storageBucket: "resonance-playtest.firebasestorage.app",
+  messagingSenderId: "368094649772",
+  appId: "1:368094649772:web:353df7af50267c34612e09",
+  measurementId: "G-KXCPG9YYHC"
 };
 
 const isFirebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY";

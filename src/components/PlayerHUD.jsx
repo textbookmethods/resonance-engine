@@ -31,7 +31,6 @@ export default function PlayerHUD({ player = {}, encounter = {}, tokens = [], pu
     const calcBackEvasion = back + 3 + bonusBack;
     const calcCost = Math.ceil((builder.alpha || 1) * ((builder.d || 0) + (builder.u || 0) + Math.pow((builder.a || 0), 2)));
 
-    // FIND THE LINKED TOKEN
     const myToken = tokens.find(t => t.type === 'player' && t.name === player?.name);
 
     const refreshTurn = () => {

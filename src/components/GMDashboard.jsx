@@ -25,21 +25,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], pushUpdate })
         pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange } }));
     };
 
-    // --- GLOBAL TURN REFRESHER ---
     const handleNextRound = () => {
         pushUpdate(s => {
             const newRound = (s.encounter?.round || 0) + 1;
-            // Refill EVERY token's movement point pool
             const newTokens = (s.tokens || []).map(t => ({ ...t, movementRemaining: t.speed ?? 3 }));
-            // Unlock all Player defensive toggles
             const newPlayer = { ...s.player, usedParry: false, usedIntercept: false, usedEvade: false };
-            
-            return { 
-                ...s, 
-                encounter: { ...s.encounter, round: newRound }, 
-                tokens: newTokens, 
-                player: newPlayer 
-            };
+            return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, player: newPlayer };
         });
     };
 

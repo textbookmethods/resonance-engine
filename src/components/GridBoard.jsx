@@ -55,7 +55,6 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
         return -1;
     };
 
-    // --- STEP-BY-STEP TERRAIN & MOVEMENT ENFORCER ---
     const executeMove = (index) => {
         const targetRow = Math.floor(index / COLS);
         
@@ -66,7 +65,6 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             if (tIdx !== -1) {
                 const t = newTokens[tIdx];
                 
-                // ROUND 0 DEPLOYMENT (Unlimited placement within zone)
                 if (s.encounter?.round === 0) {
                     if (t.type === 'player' && targetRow < 5) { alert("Agents must be deployed in the southern sector (Rows 6-10)."); return s; }
                     if (t.type === 'enemy' && targetRow >= 5) { alert("Hostiles must be deployed in the northern sector (Rows 1-5)."); return s; }
@@ -74,14 +72,12 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                     return { ...s, tokens: newTokens, activeAction: null };
                 }
 
-                // STANDARD ROUND MOVEMENT (Step-by-step enforcement)
                 const dist = getHexDistance(t.pos, index);
                 if (dist !== 1) { alert("Movement must be executed one adjacent hex at a time."); return s; }
 
                 const targetCell = s.grid && s.grid.length === 150 ? s.grid[index] : { terrain: null };
                 if (targetCell.terrain === 'severe') { alert("Severe Terrain is impassable. Blocked."); return s; }
 
-                // Calculate cost: Minor doubles to 2, else 1
                 const cost = targetCell.terrain === 'minor' ? 2 : 1;
                 const currentRemaining = t.movementRemaining ?? t.speed ?? 3;
 
@@ -97,7 +93,6 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                     alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
                 }
 
-                // Auto-clear active state if movement is empty
                 if (t.movementRemaining <= 0) {
                     return { ...s, tokens: newTokens, activeAction: null };
                 } else {
@@ -280,7 +275,7 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
             if (tIdx !== -1) originToken = activeTokens[tIdx];
 
             if (activeAction.type === 'move') {
-                minR = 1; maxR = 1; // Movement is strictly locked to 1-hex adjacent steps
+                minR = 1; maxR = 1; 
             } else if (activeAction.range) {
                 const parts = String(activeAction.range).split('-');
                 if (parts.length === 2) { minR = parseInt(parts[0]); maxR = parseInt(parts[1]); }
@@ -312,7 +307,6 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                         if (originToken?.type === 'player' && targetRow >= 5) isMovable = true;
                         if (originToken?.type === 'enemy' && targetRow < 5) isMovable = true;
                     } else {
-                        // Strict adjacent check + Cost Verification
                         if (dist === 1 && cell.terrain !== 'severe') {
                             const cost = cell.terrain === 'minor' ? 2 : 1;
                             const rem = originToken?.movementRemaining ?? originToken?.speed ?? 3;
@@ -377,7 +371,10 @@ export default function GridBoard({ player = {}, grid = [], tokens = [], encount
                     key={`tok-${t.id}`} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold transition-transform cursor-pointer ${selectedToken === t.id ? 'ring-4 ring-white scale-110 shadow-lg shadow-white/50 z-40' : 'shadow-md shadow-black/80 z-30'}`}
                     onClick={(e) => { 
                         e.stopPropagation(); 
-                        if (activeAction) { if (activeAction.type === 'move') return executeMove(t.pos); return resolveCombat(t.pos); }
+                        if (activeAction) {
+                            if (activeAction.type === 'move') return executeMove(t.pos);
+                            return resolveCombat(t.pos);
+                        }
                         setSelectedToken(selectedToken === t.id ? null : t.id); 
                     }}
                     style={{ backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, transform: `rotate(${t.facing * 60}deg)`, cursor: activeAction ? 'crosshair' : 'pointer' }}
