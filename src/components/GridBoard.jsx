@@ -9,6 +9,34 @@ const CLASS_COLORS = {
     Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff'      
 };
 
+// NEW: Core engine pulls the shared dictionary logic
+const STATE_DICTIONARY = {
+    'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
+    'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
+    'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
+    'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
+    'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
+    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
+    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce', 'fracture'],
+    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam', 'prone'],
+    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash', 'darkness'],
+    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash', 'swift'],
+    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple', 'chill'],
+    'Shocked': ['shock', 'glitch', 'short', 'jolt', 'electrocute'],
+    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase', 'agile'],
+    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
+};
+
+const getCoreState = (input) => {
+    if (!input) return '';
+    const match = input.match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : input).toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
+        if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
+    }
+    return input; 
+};
+
 export default function GridBoard({ players = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate, role, localId }) {
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
@@ -108,6 +136,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
         const isExecute = activeAction.effectCore === 'Execute';
         let deadEnemyUids = new Set();
+        const consumeStates = ['Invulnerable', 'Shielded', 'Vulnerable', 'Evasive'];
 
         newTokens.forEach(t => {
             if (getHexDistance(t.pos, targetHex) <= radius) {
@@ -121,6 +150,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let newHp = enemy.currentHp;
                         let barriers = [...(enemy.currentBarriers || [])];
                         let staggered = enemy.staggered;
+                        
+                        // NEW: Process defensive layers via Core States
+                        let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
+                        let incomingDmg = rawDmg;
+                        
+                        if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                        if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                        if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
+                        if (coreStates.includes('Evasive') && !isExecute) log += `\n>> [Evasive] triggered.`;
 
                         if (isExecute) {
                             barriers.fill(0);
@@ -128,7 +166,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             staggered = true;
                             log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`;
                         } else {
-                            let dmgRemaining = rawDmg;
+                            let dmgRemaining = incomingDmg;
                             for (let i = 0; i < barriers.length; i++) {
                                 if (barriers[i] > 0 && dmgRemaining > 0) {
                                     if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
@@ -137,14 +175,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             }
                             newHp = Math.max(0, (enemy.currentHp || 0) - dmgRemaining);
                             if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
-                            log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg (Mitigated ${rawDmg - dmgRemaining} via Barriers). HP is now ${newHp}.`;
+                            log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.`;
                             if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
                         }
 
-                        let updatedStatuses = [...(enemy.statuses || [])];
+                        let updatedStatuses = (enemy.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
+                        
                         if (activeAction.effectName && !isExecute) {
+                            let newlyAppliedCore = activeAction.effectCore || getCoreState(activeAction.effectName);
                             updatedStatuses.push(activeAction.effectName);
                             log += `\n>> State [${activeAction.effectName}] applied to ${enemy.name}!`;
+
+                            // NEW: Instantly drop speed values so the token natively locks on the grid mid-round
+                            if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
+                            else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
+                            else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
+                            else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
                         }
 
                         if (newHp <= 0) {
@@ -162,6 +208,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         const wpn = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
                         let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
                         let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
+
+                        let coreStates = (p.statuses || []).map(st => getCoreState(st));
+                        let incomingDmg = rawDmg;
+                        let forcedEvasion = coreStates.includes('Evasive');
+
+                        if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                        if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                        if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
 
                         if (isExecute) {
                             p.currentHp = 0;
@@ -181,7 +235,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 if (diff > 60) isFlanking = true; 
                             }
 
-                            if (isFlanking) {
+                            if (forcedEvasion) {
+                                isFlanking = true; mitType = "Forced Evasion [State]";
+                                if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; }
+                                else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
+                            } else if (isFlanking) {
                                 if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
                                 else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
                             } else {
@@ -189,15 +247,23 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
                             }
 
-                            const finalDmg = Math.max(0, rawDmg - mitigation);
+                            const finalDmg = Math.max(0, incomingDmg - mitigation);
                             const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
                             p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
-                            
-                            if (activeAction.effectName) {
-                                p.statuses = [...(p.statuses || []), activeAction.effectName];
-                                log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
-                            }
                             log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
+                        }
+
+                        p.statuses = (p.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
+
+                        if (activeAction.effectName && !isExecute) {
+                            let newlyAppliedCore = activeAction.effectCore || getCoreState(activeAction.effectName);
+                            p.statuses = [...(p.statuses || []), activeAction.effectName];
+                            log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
+
+                            if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
+                            else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
+                            else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
+                            else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
                         }
                     }
                 }
@@ -251,14 +317,20 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot move Hostile entities.");
         if (!isGM && t.type === 'player' && t.refId !== localId) return alert("Access Denied: Cannot reposition other Agents.");
 
+        // NEW: Enforces grid-level movement lockouts based on active states
         let srcName = 'Unknown';
+        let coreStates = [];
+
         if (t.type === 'enemy') {
             const e = (encounter?.enemies || []).find(en => en.uid == t.refId);
-            if (e) srcName = e.name;
+            if (e) { srcName = e.name; coreStates = (e.statuses || []).map(st => getCoreState(st)); }
         } else if (t.type === 'player') {
             const p = players[t.refId];
-            if (p) srcName = p.name;
+            if (p) { srcName = p.name; coreStates = (p.statuses || []).map(st => getCoreState(st)); }
         }
+
+        if (coreStates.includes('Stunned') || coreStates.includes('Immobilized')) return alert("System Locked: Entity is STUNNED or IMMOBILIZED and cannot reposition.");
+
         const rem = t.movementRemaining ?? t.speed ?? 3;
         if (rem <= 0 && encounter?.round !== 0) return alert("Movement points expended for this turn. Wait for GM to advance round or manually reset points in Inspector.");
         pushUpdate(s => ({ ...s, activeAction: { type: 'move', source: srcName, sourceId: t.id, isEnemy: t.type === 'enemy', isTokenId: true } }));
@@ -371,7 +443,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == t.refId);
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
-                    
                     let maxRange = 1;
                     (linkedEnemy.abilities || []).forEach(ability => {
                         const rangeMatch = ability.match(/range\s+(\d+)(?:-(\d+))?/i);
@@ -481,6 +552,16 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 let isSynergy = fDP >= (activeWeapon.reqF||0) && sDP >= (activeWeapon.reqS||0) && bDP >= (activeWeapon.reqB||0);
                 const calcBaseDmg = fDP + (activeWeapon.baseDmg || 0) + (isSynergy ? (activeWeapon.bonusDmg || 0) : 0);
 
+                const activeCoreStates = (p.statuses || []).map(st => getCoreState(st));
+                const isStunned = activeCoreStates.includes('Stunned');
+                const isShocked = activeCoreStates.includes('Shocked');
+                const isImmobilized = activeCoreStates.includes('Immobilized');
+                const isBlind = activeCoreStates.includes('Blind');
+
+                const disableDefenses = isStunned || isShocked;
+                const disableMovement = isStunned || isImmobilized;
+                const disableAttacks = isStunned;
+
                 return (
                     <div className="w-full md:w-64 bg-[#1a222c] p-4 border font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto" style={{ borderColor: pColor }}>
                         <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
@@ -571,11 +652,16 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                         {(isGM || activeT.refId === localId) && (
                             <div className="flex gap-2 mt-2">
-                                <button className="flex-1 bg-[#22c55e] text-black font-bold py-1 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Move</button>
-                                <button className={`flex-1 font-bold py-1 uppercase text-xs border transition-colors ${p.usedBasicAttack ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: p.usedBasicAttack ? 'gray' : pColor }} disabled={p.usedBasicAttack && !isGM} onClick={() => {
-                                    if (p.usedBasicAttack && !isGM) return alert("System Locked: Basic attack already executed this turn.");
-                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, elementRaw: activeWeapon.element || 'Kinetic', elementCore: activeWeapon.element || 'Kinetic', isBasic: true, cost: 0 } }))
-                                }}>{p.usedBasicAttack ? 'EXHAUSTED' : 'Target'}</button>
+                                <button className={`flex-1 font-bold py-1 uppercase text-xs transition-colors ${disableMovement ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={disableMovement} onClick={() => primeTokenMove(activeT)}>Move</button>
+                                <button className={`flex-1 font-bold py-1 uppercase text-xs border transition-colors ${(p.usedBasicAttack || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks) && !isGM} onClick={() => {
+                                    if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
+                                    if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
+                                    
+                                    let finalRange = isBlind ? '1' : activeWeapon.range;
+                                    if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
+
+                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: activeWeapon.element || 'Kinetic', isBasic: true, cost: 0 } }))
+                                }}>{(disableAttacks ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'Target'))}</button>
                             </div>
                         )}
                         
@@ -586,8 +672,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const dispCore = c.elementCore || c.element || 'Kinetic';
                             const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                             
-                            // CLEANUP FIXED HERE: Safely evaluate p.resPool to prevent white screens
                             const pRes = parseInt(p.resPool) || 0;
+                            const isNoFuel = pRes < c.cost;
 
                             return (
                                 <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
@@ -598,10 +684,16 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     
                                     {(isGM || activeT.refId === localId) && (
                                         <>
-                                            <button className={`w-full font-bold py-1 uppercase text-xs border border-gray-600 transition-colors ${pRes < c.cost ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={pRes < c.cost && !isGM} onClick={() => {
-                                                if (pRes < c.cost && !isGM) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
-                                                pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: c.a, range: activeWeapon.range, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc, isBasic: false, cost: c.cost } }))
-                                            }}>{pRes < c.cost ? 'NO FUEL' : 'Target'}</button>
+                                            <button className={`w-full font-bold py-1 uppercase text-xs border border-gray-600 transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
+                                                if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
+                                                if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
+                                                
+                                                let finalRange = isBlind ? '1' : c.range;
+                                                let finalAoe = isBlind ? 0 : c.a;
+                                                if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+                                                pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: finalAoe, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw, elementCore: c.elementCore, desc: c.desc, isBasic: false, cost: c.cost } }))
+                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'Target')}</button>
                                         </>
                                     )}
                                 </div>
@@ -614,6 +706,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             if (activeT.type === 'enemy') {
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == activeT.refId);
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
+
+                const eCoreStates = (linkedEnemy.statuses || []).map(st => getCoreState(st));
+                const disableMovement = eCoreStates.includes('Stunned') || eCoreStates.includes('Immobilized');
+                const disableAttacks = eCoreStates.includes('Stunned');
+                const isBlind = eCoreStates.includes('Blind');
 
                 return (
                     <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-[#ff6600] font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
@@ -716,7 +813,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         </div>
 
                         {isGM && (
-                            <button className="w-full bg-[#22c55e] text-black font-bold py-2 mt-2 uppercase text-xs hover:bg-white transition-colors" onClick={() => primeTokenMove(activeT)}>Prime Movement</button>
+                            <button className={`w-full font-bold py-2 mt-2 uppercase text-xs transition-colors ${disableMovement ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={disableMovement} onClick={() => primeTokenMove(activeT)}>
+                                {disableMovement ? 'LOCKED' : 'Prime Movement'}
+                            </button>
                         )}
 
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Abilities</div>
@@ -746,7 +845,17 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     </div>
                                     
                                     {isGM && (
-                                        <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: (aoeMatch ? parseInt(aoeMatch[1]) : 0), range: eRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))}>Target</button>
+                                        <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
+                                            if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
+                                            
+                                            let finalRange = isBlind ? '1' : eRange;
+                                            let finalAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                                            if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement } }))
+                                        }}>
+                                            {disableAttacks ? 'LOCKED' : 'Target'}
+                                        </button>
                                     )}
                                 </div>
                             );

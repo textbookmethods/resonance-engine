@@ -11,7 +11,7 @@ export default function Rulebook() {
         { id: 'grid', label: '4. Grid Movement & Terrain' },
         { id: 'combat', label: '5. Automated Combat & Defense' },
         { id: 'synthesis', label: '6. The Synthesis Matrix' },
-        { id: 'states', label: '7. Utility & State Effects' }
+        { id: 'states', label: '7. Dictionary & State Physics' }
     ];
 
     return (
@@ -138,17 +138,40 @@ export default function Rulebook() {
 
                 {activeChapter === 'states' && (
                     <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">7. Utility & State Effects</h1>
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">7. Dictionary & State Physics</h1>
                         
                         <div>
-                            <h3 className="text-[#a855f7] font-bold text-lg mb-2">Applying Buffs & Debuffs</h3>
-                            <p className="leading-relaxed mb-4">The Engine fully supports player-created buffs, shields, and debuffs. This is governed by the <strong>Utility (u)</strong> variable. If you select a Utility value greater than 0, a purple <strong>State Concept</strong> box will appear in the matrix. Type any word that comes to mind (e.g., "Snare", "Burn", "Execute"). The Engine's dictionary will intercept your imagination and map it to a mechanical Core State.</p>
+                            <h3 className="text-[#a855f7] font-bold text-lg mb-2">Automated Mechanical Definitions</h3>
+                            <p className="leading-relaxed mb-4">The Engine uses a semantic dictionary to map player imagination into core mechanical physics. If a player targets an entity with the concept "Petrify," the engine reads this as the core state `Stunned` and physically locks the target's controls.</p>
                             
-                            <ul className="space-y-2 list-none text-gray-400">
-                                <li><strong className="text-white">u = 0 :</strong> Pure Damage. No extra effects.</li>
-                                <li><strong className="text-white">u = 1 :</strong> Minor Buff/Debuff (e.g., +1 Movement, -1 DP)</li>
-                                <li><strong className="text-white">u = 3 :</strong> Major Buff/Debuff (e.g., Shielded, Immobilized, Bleed)</li>
-                                <li><strong className="text-white">u = 5 :</strong> Severe Buff/Debuff (e.g., Invulnerable, Stunned)</li>
+                            <ul className="space-y-4 list-none text-gray-300">
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#00f0ff] text-lg uppercase tracking-wider block mb-1">Defense Modifiers</strong>
+                                    <strong>Shielded:</strong> Subtly absorbs 5 incoming damage and shatters.<br/>
+                                    <strong>Vulnerable:</strong> Target receives 1.5x incoming damage.<br/>
+                                    <strong>Evasive:</strong> The next attack mathematically forces an evasion roll regardless of attack vector.<br/>
+                                    <strong>Invulnerable:</strong> The incoming attack is completely negated.
+                                </li>
+                                
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#ff6600] text-lg uppercase tracking-wider block mb-1">Movement Modifiers</strong>
+                                    <strong>Haste:</strong> Instantly adds +2 to token movement logic.<br/>
+                                    <strong>Slowed:</strong> Instantly subtracts -2 from token movement logic.<br/>
+                                    <strong>Knockdown:</strong> Halves base speed. Fades at the start of the next round.<br/>
+                                    <strong>Immobilized:</strong> movement drops to 0. The token physically cannot be moved on the grid.
+                                </li>
+
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-yellow-500 text-lg uppercase tracking-wider block mb-1">Control Jamming</strong>
+                                    <strong>Blind:</strong> The entity's targeting arrays are forced to adjacent hexes (Range = 1, AoE = 0).<br/>
+                                    <strong>Shocked:</strong> The entity's Defensive Arrays (Parry, Intercept, Evade) are completely jammed.<br/>
+                                    <strong>Stunned:</strong> The entity's HUD is fully locked. Cannot target, move, or defend.
+                                </li>
+
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-[#22c55e] text-lg uppercase tracking-wider block mb-1">Environmental Physics</strong>
+                                    <strong>Bleed / Burn:</strong> A DoT (Damage over Time) state. When the GM clicks "Next Round," all afflicted entities automatically take 3 direct HP damage.
+                                </li>
                             </ul>
                         </div>
 
@@ -156,7 +179,7 @@ export default function Rulebook() {
                             <h3 className="text-red-500 font-bold text-lg mb-2 uppercase tracking-widest">TERMINAL EFFECTS (u = 10)</h3>
                             <p className="leading-relaxed mb-4">These are reality-breaking states reserved for apex tier actions. They cost massive amounts of Resonance to synthesize—requiring either Tag-Team combos or Class Synergy to even afford.</p>
                             <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
-                                <li><strong>[Execute]:</strong> Target is instantly erased from the grid. Bypasses all HP, shatters all remaining barriers, and ignores player defensive stats. HP is violently reduced to 0. <em>(Note: The Engine dictionary natively recognizes words like Erase, Delete, Obliterate, Assassinate, and Kill as an Execute command).</em></li>
+                                <li><strong>[Execute]:</strong> Target is instantly erased from the grid. Bypasses all HP, shatters all remaining barriers, and ignores player defensive stats. HP is violently reduced to 0.</li>
                             </ul>
                         </div>
                     </div>

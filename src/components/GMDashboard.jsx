@@ -18,15 +18,15 @@ const STATE_DICTIONARY = {
     'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
     'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
     'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
-    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor'],
-    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce'],
-    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam'],
-    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash'],
-    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash'],
-    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple'],
-    'Shocked': ['shock', 'glitch', 'short', 'jolt'],
-    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase'],
-    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable']
+    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
+    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce', 'fracture'],
+    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam', 'prone'],
+    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash', 'darkness'],
+    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash', 'swift'],
+    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple', 'chill'],
+    'Shocked': ['shock', 'glitch', 'short', 'jolt', 'electrocute'],
+    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase', 'agile'],
+    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
 const getCoreElement = (input) => {
@@ -40,7 +40,8 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const clean = input.toLowerCase().replace(/\[|\]/g, '').trim();
+    const match = input.match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
@@ -58,6 +59,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     };
 
     const primeEnemyAbility = (enemy, cleanName, desc) => {
+        const eStates = (enemy.statuses || []).map(s => getCoreState(s));
+        if (eStates.includes('Stunned')) return alert("System Locked: Entity is STUNNED.");
+
+        const isBlind = eStates.includes('Blind');
+
         const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
         const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
         const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
@@ -65,7 +71,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
         const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
         const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
-        const parsedAoe = aoeMatch ? parseInt(aoeMatch[1]) : 0;
+        const parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
         const parsedEff = effMatch ? effMatch[1] : null;
         const coreEff = getCoreState(parsedEff);
         
@@ -73,21 +79,73 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
         
+        if (isBlind) {
+            eRange = '1';
+            alert("Warning: Entity is BLIND. Targeting optics restricted to adjacent hexes.");
+        }
+
         pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch } }));
     };
 
+    // NEW: Fully automated environmental physics
     const handleNextRound = () => {
         pushUpdate(s => {
             const newRound = (s.encounter?.round || 0) + 1;
-            const newTokens = (s.tokens || []).map(t => ({ ...t, movementRemaining: t.speed ?? 3 }));
-            
-            const newPlayers = { ...(s.players || {}) };
-            Object.keys(newPlayers).forEach(pid => {
-                // NEW: Wipes the basic attack exhaust locks so players can fire again
-                newPlayers[pid] = { ...newPlayers[pid], usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false };
+            let log = [];
+            let deadEnemyUids = new Set();
+            let newEnemies = [...(s.encounter?.enemies || [])];
+            let newPlayers = { ...(s.players || {}) };
+            let newTokens = [...(s.tokens || [])];
+
+            newEnemies.forEach(e => {
+                let coreStates = (e.statuses || []).map(st => getCoreState(st));
+                if (coreStates.includes('Bleed') || coreStates.includes('Burn')) {
+                    e.currentHp = Math.max(0, e.currentHp - 3);
+                    log.push(`Hostile [${e.name}] took 3 damage from environmental physics.`);
+                    if (e.currentHp <= 0) deadEnemyUids.add(e.uid);
+                }
+                e.statuses = (e.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
             });
 
-            return { ...s, encounter: { ...s.encounter, round: newRound }, tokens: newTokens, players: newPlayers };
+            Object.keys(newPlayers).forEach(pid => {
+                let p = newPlayers[pid];
+                let coreStates = (p.statuses || []).map(st => getCoreState(st));
+                if (coreStates.includes('Bleed') || coreStates.includes('Burn')) {
+                    p.currentHp = Math.max(0, p.currentHp - 3);
+                    log.push(`Agent [${p.name}] took 3 damage from environmental physics.`);
+                }
+                p.statuses = (p.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
+                p.usedParry = false; p.usedIntercept = false; p.usedEvade = false; p.usedBasicAttack = false;
+            });
+
+            newTokens.forEach(t => {
+                let coreStates = [];
+                let baseSpeed = t.speed ?? 3;
+                if (t.type === 'enemy') {
+                    const e = newEnemies.find(en => en.uid == t.refId);
+                    if (e) coreStates = (e.statuses || []).map(st => getCoreState(st));
+                } else {
+                    const p = newPlayers[t.refId];
+                    if (p) coreStates = (p.statuses || []).map(st => getCoreState(st));
+                }
+
+                let dynSpeed = baseSpeed;
+                if (coreStates.includes('Haste')) dynSpeed += 2;
+                if (coreStates.includes('Slowed')) dynSpeed = Math.max(0, dynSpeed - 2);
+                if (coreStates.includes('Immobilized') || coreStates.includes('Stunned')) dynSpeed = 0;
+                
+                t.movementRemaining = dynSpeed;
+            });
+
+            if (deadEnemyUids.size > 0) {
+                newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
+                newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+                log.push(`>> ${deadEnemyUids.size} entities purged due to terminal damage.`);
+            }
+
+            if (log.length > 0) alert("ROUND ADVANCE LOG:\n" + log.join('\n'));
+
+            return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers };
         });
     };
 
@@ -157,7 +215,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                         <button className={`flex-1 p-2 font-bold border transition-colors ${encounter?.activeTurn === 'player' ? 'bg-[#00f0ff] text-black border-[#00f0ff]' : 'bg-black text-gray-500 border-gray-700 hover:text-white'}`} onClick={() => updateEnc({ activeTurn: 'player' })}>AGENTS</button>
                         <button className={`flex-1 p-2 font-bold border transition-colors ${encounter?.activeTurn === 'enemy' ? 'bg-[#ff6600] text-black border-[#ff6600]' : 'bg-black text-gray-500 border-gray-700 hover:text-white'}`} onClick={() => updateEnc({ activeTurn: 'enemy' })}>HOSTILES</button>
                     </div>
-                    <div className="text-xs text-gray-500 mt-2 leading-tight">Clicking [Next +] automatically refills all token movement ranges and resets Player Guard toggles.</div>
+                    <div className="text-xs text-gray-500 mt-2 leading-tight">Clicking [Next +] automatically executes environmental DoTs and refills movement physics.</div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-gray-700">
@@ -236,13 +294,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             
                                             const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
                                             const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
-                                            const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
-                                            const coreMatch = getCoreElement(rawMatch);
+                                            const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
 
                                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
-                                            const coreEff = getCoreState(pEff);
 
                                             let eRange = "1";
                                             const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
@@ -251,7 +307,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 p-2 border border-gray-700 text-xs flex justify-between items-start gap-2 relative">
                                                     <div>
-                                                        <span className="font-bold text-[#00f0ff]">{cleanName}</span>
+                                                        <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
                                                         {pEff && <span className="block text-purple-400 text-[10px] mt-0.5">[{pEff}]</span>}
                                                         {desc && <span className="text-gray-400 block mt-1">{desc.trim()}</span>}
                                                     </div>

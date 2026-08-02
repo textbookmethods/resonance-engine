@@ -20,15 +20,15 @@ const STATE_DICTIONARY = {
     'Burn': ['burn', 'ignite', 'scorch', 'melt', 'char'],
     'Immobilized': ['immobilize', 'root', 'snare', 'trap', 'bind', 'pin', 'tether'],
     'Stunned': ['stun', 'paralyze', 'petrify', 'frozen', 'daze'],
-    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor'],
-    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce'],
-    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam'],
-    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash'],
-    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash'],
-    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple'],
-    'Shocked': ['shock', 'glitch', 'short', 'jolt'],
-    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase'],
-    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable']
+    'Shielded': ['shield', 'protect', 'barrier', 'ward', 'guard', 'armor', 'block'],
+    'Vulnerable': ['vulnerable', 'expose', 'sunder', 'break', 'shatter', 'pierce', 'fracture'],
+    'Knockdown': ['knockdown', 'trip', 'shove', 'push', 'throw', 'slam', 'prone'],
+    'Blind': ['blind', 'blindside', 'obscure', 'smoke', 'flash', 'darkness'],
+    'Haste': ['haste', 'speed', 'quick', 'fast', 'accelerate', 'dash', 'swift'],
+    'Slowed': ['slow', 'sluggish', 'lethargic', 'hobble', 'cripple', 'chill'],
+    'Shocked': ['shock', 'glitch', 'short', 'jolt', 'electrocute'],
+    'Evasive': ['evade', 'dodge', 'blur', 'ghost', 'phase', 'agile'],
+    'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
 const CLASS_AFFINITIES = {
@@ -52,7 +52,8 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const clean = input.toLowerCase().replace(/\[|\]/g, '').trim();
+    const match = input.match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
@@ -87,7 +88,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
 
     const front = safeInt(player.dpFront); const supp = safeInt(player.dpSupport); const back = safeInt(player.dpBack);
-
     const xp = safeInt(player.xp);
     const earnedDp = 5 + Math.floor(xp / 10);
     const spentDp = front + supp + back;
@@ -117,14 +117,23 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const builderCoreState = getCoreState(builder.effectName);
     const weaponCoreElement = getCoreElement(activeWeapon.element);
     
-    // FIX: Engine now dynamically evaluates text while typing to provide a live synergy preview, 
-    // but defaults back to their permanent locked element once they commit.
     const activeAffinity = player.affinityLocked ? (player.affinity || 'Kinetic') : getCoreElement(player.affinityRaw || 'Kinetic');
-    
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + Math.pow((builder.a || 0), 2)));
 
     const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
+    
+    // NEW: Action Lockouts evaluated natively via Dictionary
+    const statuses = player.statuses || [];
+    const activeCoreStates = statuses.map(st => getCoreState(st));
+    const isStunned = activeCoreStates.includes('Stunned');
+    const isShocked = activeCoreStates.includes('Shocked');
+    const isImmobilized = activeCoreStates.includes('Immobilized');
+    const isBlind = activeCoreStates.includes('Blind');
+
+    const disableDefenses = isStunned || isShocked;
+    const disableMovement = isStunned || isImmobilized;
+    const disableAttacks = isStunned;
 
     const refreshTurn = () => {
         safePush(s => {
@@ -149,6 +158,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
     
     const rollImprovised = () => {
+        if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         updatePlayer('resPool', Math.max(0, safeInt(player.resPool) - 1));
         const roll = Math.floor(Math.random() * 6) + 1;
         let outcome = "";
@@ -158,18 +168,35 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
     };
 
+    const primeMove = () => { 
+        if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
+        if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
+        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
+    };
+    
     const primeWeapon = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         if (player.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
+        if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
+        
+        let finalRange = isBlind ? '1' : activeWeapon.range;
+        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
+
         const rawWpn = activeWeapon.element || 'Kinetic';
         const coreWpn = getCoreElement(rawWpn);
-        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: activeWeapon.range, elementRaw: rawWpn, elementCore: coreWpn } })); 
+        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
     };
     
     const primeCard = (c) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         if (safeInt(player.resPool) < c.cost) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
-        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: c.a, u: c.u, range: activeWeapon.range, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
+        if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
+        
+        let finalRange = isBlind ? '1' : activeWeapon.range;
+        let finalAoe = isBlind ? 0 : c.a;
+        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
     };
 
     const reqString = (w) => {
@@ -180,7 +207,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
 
     const customCards = player.customCards || [];
-    const statuses = player.statuses || [];
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
@@ -215,7 +241,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     const rawVal = player.affinityRaw || 'Kinetic';
                                     const coreVal = getCoreElement(rawVal);
                                     if(window.confirm(`Lock in ${rawVal.toUpperCase()} [Core: ${coreVal}] as your permanent Innate Affinity?`)) {
-                                        // FIX: Bundled into an atomic update to guarantee Firebase catches the entire lock sequence.
                                         safePush(s => ({
                                             ...s,
                                             players: {
@@ -244,6 +269,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                             <div className="w-full bg-transparent text-gray-400 text-3xl font-bold text-center mt-1 cursor-not-allowed" title="Max HP automatically scales via Discipline Points.">{derivedMaxHp}</div>
                         </div>
                     </div>
+                    
+                    <button className={`w-full font-bold p-2 uppercase tracking-widest transition-colors shadow-md ${(isMyTurn && !disableMovement) ? 'bg-[#22c55e] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || disableMovement} onClick={primeMove}>
+                        {disableMovement ? 'MOVEMENT LOCKED' : '+ Prime Movement Array'}
+                    </button>
                     
                     <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700 mt-2">
                         <span>CLASS:</span><span>{activeClass}</span>
@@ -303,8 +332,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     <div>Range: {activeWeapon.range} Hexes</div>
                                     {isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}
                                 </div>
-                                <button className={`font-bold px-3 py-1 uppercase transition-colors ${(isMyTurn && !player.usedBasicAttack) ? 'bg-[#00f0ff] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || player.usedBasicAttack} onClick={primeWeapon}>
-                                    {player.usedBasicAttack ? 'EXHAUSTED' : 'Target'}
+                                <button className={`font-bold px-3 py-1 uppercase transition-colors ${(isMyTurn && !player.usedBasicAttack && !disableAttacks) ? 'bg-[#00f0ff] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || player.usedBasicAttack || disableAttacks} onClick={primeWeapon}>
+                                    {disableAttacks ? 'LOCKED' : (player.usedBasicAttack ? 'EXHAUSTED' : 'Target')}
                                 </button>
                             </div>
                         </div>
@@ -320,31 +349,31 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player.usedParry ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Front Parry:</span>
-                                <span className={player.usedParry ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcFrontParry}</span>
+                                <span className={(player.usedParry || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Front Parry:</span>
+                                <span className={(player.usedParry || disableDefenses) ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcFrontParry}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedParry ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedParry} onClick={() => updatePlayer('usedParry', true)}>
-                                {player.usedParry ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedParry || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedParry || disableDefenses} onClick={() => updatePlayer('usedParry', true)}>
+                                {disableDefenses ? 'JAMMED' : (player.usedParry ? 'EXHAUSTED' : 'AVAILABLE')}
                             </button>
                         </div>
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player.usedIntercept ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Support Intercept:</span>
-                                <span className={player.usedIntercept ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcSuppIntercept}</span>
+                                <span className={(player.usedIntercept || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Support Intercept:</span>
+                                <span className={(player.usedIntercept || disableDefenses) ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcSuppIntercept}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedIntercept ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedIntercept} onClick={() => updatePlayer('usedIntercept', true)}>
-                                {player.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedIntercept || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedIntercept || disableDefenses} onClick={() => updatePlayer('usedIntercept', true)}>
+                                {disableDefenses ? 'JAMMED' : (player.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE')}
                             </button>
                         </div>
                         
                         <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2">
                             <div>
-                                <span className={player.usedEvade ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Backline Evasion:</span>
-                                <span className={player.usedEvade ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcBackEvasion}</span>
+                                <span className={(player.usedEvade || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#00f0ff] mr-2"}>Backline Evasion:</span>
+                                <span className={(player.usedEvade || disableDefenses) ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#ff6600]" : "font-bold text-white")}>{calcBackEvasion}</span>
                             </div>
-                            <button className={`text-[10px] px-2 py-1 font-bold border ${player.usedEvade ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedEvade} onClick={() => updatePlayer('usedEvade', true)}>
-                                {player.usedEvade ? 'EXHAUSTED' : 'AVAILABLE'}
+                            <button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedEvade || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedEvade || disableDefenses} onClick={() => updatePlayer('usedEvade', true)}>
+                                {disableDefenses ? 'JAMMED' : (player.usedEvade ? 'EXHAUSTED' : 'AVAILABLE')}
                             </button>
                         </div>
                     </div>
@@ -360,7 +389,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 2))}>+2 Exploit</button>
                     <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 1))}>+1 Banter</button>
                 </div>
-                <button className="w-full bg-[#00f0ff] text-black font-bold p-3 uppercase hover:bg-white transition-colors" onClick={rollImprovised}>Improvised Skill (-1 Res)</button>
+                <button className={`w-full font-bold p-3 uppercase transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#00f0ff] text-black hover:bg-white'}`} disabled={disableAttacks} onClick={rollImprovised}>
+                    {disableAttacks ? 'SYSTEM LOCKED' : 'Improvised Skill (-1 Res)'}
+                </button>
             </div>
 
             <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-full">
@@ -418,6 +449,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         const dispRaw = c.elementRaw || c.element || 'Kinetic';
                         const dispCore = c.elementCore || c.element || 'Kinetic';
                         const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+                        const pRes = parseInt(player.resPool) || 0;
+                        const isNoFuel = pRes < c.cost;
 
                         return (
                             <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
@@ -427,8 +460,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
                                     {c.effectName && <div className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold">[{c.effectName}]</div>}
                                     
-                                    <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isMyTurn && safeInt(player.resPool) >= c.cost) ? 'bg-[#00f0ff] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || safeInt(player.resPool) < c.cost} onClick={() => primeCard(c)}>
-                                        {safeInt(player.resPool) < c.cost ? 'NO FUEL' : 'Target'}
+                                    <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
+                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'Target')}
                                     </button>
                                 </div>
                                 <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
