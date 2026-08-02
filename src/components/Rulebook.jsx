@@ -129,13 +129,15 @@ export default function Rulebook() {
                             <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Building Abilities</h3>
                             <p className="leading-relaxed mb-4">Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the mathematical Engine formula:</p>
                             
-                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + t + a²) ⌉</div>
+                            {/* UPDATED: Added +m to the visual formula rendering */}
+                            <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + t + m + a) ⌉</div>
                             
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-8">
                                 <li><strong>d (Damage):</strong> Raw damage output.</li>
                                 <li><strong>u (Utility):</strong> Status effects (1 = Minor, 3 = Major, 5 = Severe, 10 = Terminal).</li>
                                 <li><strong>t (Terrain Gen):</strong> Adds a physical Grid effect (1 = Minor, 2 = Clear, 3 = Major, 5 = Severe).</li>
-                                <li><strong>a (AoE Radius):</strong> Hex blast radius.</li>
+                                <li><strong>m (Mobility):</strong> Self Displacement or Target Movement (0-10 Hexes).</li>
+                                <li><strong>a (AoE Shape):</strong> 3-Hex Lines and Clusters cost 1. Circular radii costs scale quadratically.</li>
                                 <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
                             </ul>
 
@@ -145,6 +147,15 @@ export default function Rulebook() {
                                 <li><strong>Synergy (0.75x Cost):</strong> The ability mechanically aligns with your <strong>Innate Element Affinity</strong>, your Class Playstyle, or your Weapon Element.</li>
                                 <li><strong>Neutral (1.0x Cost):</strong> No direct alignment. Standard execution.</li>
                                 <li><strong>Resistance (2.0x Cost):</strong> You are attempting to force a Severe or Terminal state effect that directly opposes your Class training (e.g., A Conduit attempting to Execute with brute force).</li>
+                            </ul>
+
+                            {/* NEW: Explicit documentation for the Improvised Skill override */}
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8 border-t border-gray-700 pt-6">Improvised Skills (Crafting on the fly)</h3>
+                            <p className="leading-relaxed mb-4">Instead of archiving a built spell, you can immediately execute it from the Matrix for a flat cost of <strong>1 Resonance</strong>, regardless of its original R_cost. Doing so forces the Engine to roll a 1d6 upon detonation:</p>
+                            <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
+                                <li><strong>Cascade (5-6):</strong> The spell fires flawlessly.</li>
+                                <li><strong>Surge (3-4):</strong> The spell fires, but the casting Agent suffers feedback damage equal to the original calculated R_cost.</li>
+                                <li><strong>Backlash (1-2):</strong> Catastrophic failure. The Engine overrides the targeting arrays and instantly detonates the spell on the caster's own hex!</li>
                             </ul>
                         </div>
                     </div>
@@ -187,6 +198,13 @@ export default function Rulebook() {
                                     <strong>Bleed / Burn / Poisoned:</strong> Damage over Time states. When the GM advances to the next round, the Engine automatically applies 3 direct HP damage per active state. <em>(e.g., If a target is Bleeding AND Poisoned, they take 6 damage).</em><br/>
                                     <strong>Major Terrain:</strong> If an entity is standing in Major Terrain (e.g. Magma) when the round ends, they take 5 Environmental Damage.
                                 </li>
+                                
+                                {/* NEW: Explicit documentation for the Mobility Dictionary implementation */}
+                                <li className="bg-gray-900 border border-gray-700 p-3">
+                                    <strong className="text-blue-400 text-lg uppercase tracking-wider block mb-1">Mobility Vectors</strong>
+                                    <strong>Blink (Self):</strong> Words like *Teleport, Jump, Dash, Tunnel*. The Engine transforms the ability into a dynamic relocation array, allowing the Agent to move instantly across the grid, bypassing movement limits and hazardous terrain. <br/>
+                                    <strong>Push / Pull (Forced):</strong> Words like *Throw, Drag, Slam, Hook*. The Engine calculates a mathematical vector between the Attacker and the Target upon detonation, projecting the enemy across the grid. If the enemy slams into impassable bedrock before their momentum is spent, they suffer <strong>1 physical damage</strong> per remaining hex.
+                                </li>
                             </ul>
                         </div>
 
@@ -195,6 +213,9 @@ export default function Rulebook() {
                             <p className="leading-relaxed mb-4">These are reality-breaking states reserved for apex tier actions. They cost massive amounts of Resonance to synthesize—requiring either Tag-Team combos or Class Synergy to even afford.</p>
                             <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
                                 <li><strong>[Execute]:</strong> Target is instantly erased from the grid. Bypasses all HP, shatters all remaining barriers, and ignores player defensive stats. HP is violently reduced to 0.</li>
+                                
+                                {/* UPDATED: Escapable Entombment mechanic documentation */}
+                                <li><strong>[Entombment]:</strong> If an entity occupies a Severe hex, and every single valid hex within a 2-hex radius is also Severe, the Engine will automatically crush them! Hostiles are executed immediately. Agents receive an Entombment Timer; if they do not escape by the end of the third round, they are Executed.</li>
                             </ul>
                         </div>
                     </div>

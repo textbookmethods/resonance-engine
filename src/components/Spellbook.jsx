@@ -47,6 +47,12 @@ const getCoreState = (input) => {
     return input; 
 };
 
+const formatAoe = (a) => {
+    if (a === 'line3') return '3-Hex Line';
+    if (a === 'cluster3') return '3-Hex Cluster';
+    return `${a || 0} Hex Radius`;
+};
+
 export default function Spellbook({ players = {}, localId, pushUpdate }) {
     const player = players[localId] || {};
     const savedSkills = player.savedSkills || [];
@@ -110,7 +116,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                     
                                     <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 mb-3">
                                         <div><span className="text-gray-500">Damage:</span> {skill.d}</div>
-                                        <div><span className="text-gray-500">AoE:</span> {skill.a} Hex</div>
+                                        <div><span className="text-gray-500">AoE:</span> {formatAoe(skill.a)}</div>
                                         <div><span className="text-gray-500">Utility:</span> {skill.u}</div>
                                         <div><span className="text-gray-500">Affinity:</span> {skill.alpha || 1}</div>
                                     </div>
@@ -124,6 +130,13 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                     {skill.terrain && (
                                         <div className="mb-3 ml-2 bg-black border border-yellow-500 text-yellow-500 text-[10px] px-2 py-1 font-bold inline-block">
                                             Terrain: [{String(skill.terrain).toUpperCase()}]
+                                        </div>
+                                    )}
+
+                                    {/* NEW: Displays Mobility parameters inside the Grimoire */}
+                                    {skill.m > 0 && (
+                                        <div className="mb-3 bg-black border border-blue-500 text-blue-400 text-[10px] px-2 py-1 font-bold inline-block w-fit">
+                                            Mobility: {skill.m} [{String(skill.coreMobility).toUpperCase()}]
                                         </div>
                                     )}
 

@@ -32,7 +32,13 @@ const STATE_DICTIONARY = {
     'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
-// NEW: Tooltip helper text for visual grids
+// NEW: Maps player terminology into pure physics vectors
+const MOBILITY_DICTIONARY = {
+    'Blink': ['blink', 'teleport', 'jump', 'leap', 'bound', 'dash', 'phase', 'tunnel', 'burrow', 'step'],
+    'Push': ['push', 'repel', 'throw', 'knockback', 'slam', 'blow', 'blast', 'drive'],
+    'Pull': ['pull', 'attract', 'draw', 'drag', 'snare', 'hook', 'catch', 'leash']
+};
+
 const STATE_DESCRIPTIONS = {
     'Execute': 'Instantly reduces HP to 0. Bypasses all defenses.',
     'Bleed': 'Takes 3 HP damage at the end of the round.',
@@ -80,6 +86,15 @@ const getCoreState = (input) => {
     return input; 
 };
 
+const getCoreMobility = (input) => {
+    if (!input) return '';
+    const clean = input.toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(MOBILITY_DICTIONARY)) {
+        if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
+    }
+    return input;
+};
+
 const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElementCore, spellEffectCore, uValue) => {
     const cls = CLASS_AFFINITIES[activeClass] || CLASS_AFFINITIES['Rookie'];
     const isWpnSyn = wpnElement === spellElementCore;
@@ -96,8 +111,15 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
     return { alpha: 1.0, label: 'Neutral (No Direct Alignment)' };
 };
 
+const getAoeCost = (a) => {
+    if (a === 'line3' || a === 'cluster3') return 1;
+    const n = parseInt(a) || 0;
+    return n * n;
+};
+
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '' });
+    // NEW: builder payload includes m (Mobility integer) and mobilityName (string concept)
+    const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
     const player = players[localId] || {};
 
@@ -144,7 +166,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
-    const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + Math.pow((builder.a || 0), 2)));
+    
+    // UPDATED: Cost formula natively processes +m logic
+    const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
 
     const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
     
@@ -191,16 +215,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         updatePlayer('savedSkills', [...archived, card]);
         alert(`"${card.name}" archived to Spellbook!`);
     };
-    
-    const rollImprovised = () => {
-        if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
-        updatePlayer('resPool', Math.max(0, currentRes - 1));
-        const roll = Math.floor(Math.random() * 6) + 1;
-        let outcome = "";
-        if (roll <= 2) outcome = "Backlash (Failure & Consequence)";
-        else if (roll <= 4) outcome = "Surge (Success at a Cost)";
-        else outcome = "Cascade (Total Success)";
-        alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
+
+    const primeMove = () => { 
+        if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
+        if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
+        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
     };
     
     const primeWeapon = () => { 
@@ -216,16 +235,34 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
     };
     
-    const primeCard = (c) => { 
+    // UPDATED: Dynamically checks if the spell is a self-displacement and triggers a Blink Array instead
+    const primeCard = (c, isImprovised = false, originalCost = 0) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
-        if (currentRes < c.cost) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
+        const requiredRes = isImprovised ? 1 : c.cost;
+        if (currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
         let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
         let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', terrain: c.terrain, desc: c.desc } })); 
+        const coreMobility = getCoreMobility(c.mobilityName);
+        const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
+
+        safePush(s => ({ ...s, activeAction: { 
+            type: isBlink ? 'blink' : undefined,
+            source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, 
+            isImprovised: isImprovised, originalCost: originalCost, cost: requiredRes, 
+            name: c.name || (isImprovised ? 'Improvised Action' : 'Custom Action'), 
+            d: c.d, a: finalAoe, u: c.u, m: safeInt(c.m), coreMobility: coreMobility,
+            range: finalRange, effectName: c.effectName, effectCore: c.effectCore, 
+            elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', 
+            terrain: c.terrain, desc: c.desc 
+        } })); 
+    };
+
+    const primeImprovised = () => {
+        primeCard(builder, true, calcCost);
     };
 
     const reqString = (w) => {
@@ -414,9 +451,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Exploit</button>
                     <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Banter</button>
                 </div>
-                <button className={`w-full font-bold p-3 uppercase transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#00f0ff] text-black hover:bg-white'}`} disabled={disableAttacks} onClick={rollImprovised}>
-                    {disableAttacks ? 'SYSTEM LOCKED' : 'Improvised Skill (-1 Res)'}
-                </button>
             </div>
 
             <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-full">
@@ -446,8 +480,12 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         </div>
                     )}
 
-                    <div className="flex justify-between items-center"><span>AoE Radius (a):</span><select className="w-24 bg-black border border-gray-600 p-1 text-white" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: safeInt(e.target.value)})}>
-                        <option value="0">0</option><option value="1">1 (Small)</option><option value="2">2 (Large)</option>
+                    <div className="flex justify-between items-center"><span>Target Shape (a):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white text-xs" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: e.target.value})}>
+                        <option value="0">Single Target</option>
+                        <option value="1">Radius (Small)</option>
+                        <option value="line3">3-Hex Line</option>
+                        <option value="cluster3">3-Hex Cluster</option>
+                        <option value="2">Radius (Large)</option>
                     </select></div>
 
                     <div className="flex justify-between items-center"><span>Terrain Gen (t):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
@@ -457,6 +495,23 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         <option value="major">Major (+3)</option>
                         <option value="severe">Severe (+5)</option>
                     </select></div>
+
+                    {/* NEW: Matrix row for Mobility Vectors */}
+                    <div className="flex justify-between items-center"><span>Mobility (m):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white" value={String(builder.m)} onChange={e=>setBuilder({...builder, m: safeInt(e.target.value)})}>
+                        <option value="0">None</option>
+                        <option value="1">1 Hex</option>
+                        <option value="2">2 Hexes</option>
+                        <option value="3">3 Hexes</option>
+                        <option value="5">5 Hexes</option>
+                        <option value="10">10 Hexes</option>
+                    </select></div>
+                    
+                    {builder.m > 0 && (
+                        <div className="flex justify-between items-center animate-fade-in">
+                            <span className="text-blue-400">Mobility Concept:</span>
+                            <input type="text" className="w-32 bg-black border border-blue-500 p-1 text-white outline-none text-right" placeholder="e.g. Blink, Push, Hook" value={builder.mobilityName || ''} onChange={e=>setBuilder({...builder, mobilityName: e.target.value})} />
+                        </div>
+                    )}
                     
                     <div className="bg-gray-900 border border-gray-700 p-2 mt-2">
                         <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1 block">Affinity Calculation (α)</span>
@@ -472,18 +527,26 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 </div>
 
                 <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4 mt-auto"><span>COST:</span><span>{calcCost} RES</span></div>
-                <div className="flex gap-2 mb-4">
+                
+                <div className="flex gap-2 mb-2">
                     <button className="flex-1 bg-[#00f0ff] text-black font-bold border border-[#00f0ff] p-2 hover:bg-white text-xs uppercase" onClick={saveToHUD}>Equip</button>
                     <button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase" onClick={saveToSpellbook}>Archive</button>
                 </div>
+
+                <button className={`w-full font-bold p-3 uppercase transition-colors mb-4 ${disableAttacks ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#ff6600] text-black hover:bg-white'}`} disabled={disableAttacks} onClick={primeImprovised}>
+                    {disableAttacks ? 'SYSTEM LOCKED' : 'Improvise Directly to Grid (1 Res)'}
+                </button>
                 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 border-t border-gray-700 pt-4">
                     {customCards.map(c => {
                         const dispRaw = c.elementRaw || c.element || 'Kinetic';
                         const dispCore = c.elementCore || c.element || 'Kinetic';
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                        
                         const isNoFuel = currentRes < c.cost;
+
+                        // NEW: Checks if the card acts as a Self-Displacement (Blink) mechanism
+                        const coreMob = getCoreMobility(c.mobilityName);
+                        const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
 
                         return (
                             <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
@@ -491,14 +554,13 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
-                                    
-                                    {/* UPDATED: Cards now have tooltips so players can remember exactly what their states do */}
                                     {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
+                                    {c.m > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {c.m} [{coreMob.toUpperCase()}]</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
-                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}
+                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
                                     </button>
                                 </div>
                                 <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); archiveEquippedCard(c); }} title="Archive to Spellbook">⤓</button>

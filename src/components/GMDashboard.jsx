@@ -89,8 +89,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const coreMatch = getCoreElement(rawMatch);
 
         const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+        const shapeMatch = desc.match(/(line|cluster)/i);
+        let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+        if (!isBlind && shapeMatch) {
+            if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
+            if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
+        }
+
         const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
-        const parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
         const parsedEff = effMatch ? effMatch[1] : null;
         const coreEff = getCoreState(parsedEff);
         
@@ -118,7 +124,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             let newPlayers = { ...(s.players || {}) };
             let newTokens = [...(s.tokens || [])];
 
-            // NEW: Fully unified Environmental Physics (State DoTs + Major Terrain DoT)
             newEnemies.forEach(e => {
                 let coreStates = (e.statuses || []).map(st => getCoreState(st));
                 let dotDmg = 0;
@@ -155,7 +160,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     activeDoTs.push('Major Terrain');
                 }
 
-                if (dotDmg > 0) {
+                // NEW: Escapable Entombment automated ticker logic
+                if (p.statuses && p.statuses.includes('Crushed [2/3]')) {
+                    p.currentHp = 0;
+                    log.push(`AGENT CRUSHED! [${p.name}]'s Entombment timer expired.`);
+                } else if (p.statuses && p.statuses.includes('Crushed [1/3]')) {
+                    p.statuses = p.statuses.filter(st => st !== 'Crushed [1/3]');
+                    p.statuses.push('Crushed [2/3]');
+                    log.push(`AGENT ENTOMBED! [${p.name}]'s structural integrity failing. [2/3]`);
+                }
+
+                if (dotDmg > 0 && p.currentHp > 0) {
                     p.currentHp = Math.max(0, p.currentHp - dotDmg);
                     log.push(`Agent [${p.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
                 }
@@ -178,7 +193,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 let dynSpeed = baseSpeed;
                 if (coreStates.includes('Haste')) dynSpeed += 2;
                 if (coreStates.includes('Slowed')) dynSpeed = Math.max(0, dynSpeed - 2);
-                if (coreStates.includes('Immobilized') || coreStates.includes('Stunned')) dynSpeed = 0;
+                if (coreStates.includes('Immobilized') || coreStates.includes('Stunned') || coreStates.includes('Crushed')) dynSpeed = 0;
                 
                 t.movementRemaining = dynSpeed;
             });
@@ -189,7 +204,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 log.push(`>> ${deadEnemyUids.size} entities purged due to terminal damage.`);
             }
 
-            // Syncs the unified logic directly into the global overlay tracker
             if (log.length > 0) {
                 return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers, globalLog: { message: "ROUND ADVANCE PROTOCOLS:\n\n" + log.join('\n'), timestamp: Date.now() } };
             }
@@ -346,6 +360,13 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
 
                                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+                                            const shapeMatch = desc.match(/(line|cluster)/i);
+                                            let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                                            if (!isBlind && shapeMatch) {
+                                                if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
+                                                if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
+                                            }
+
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
 
@@ -364,7 +385,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    <button className="bg-gray-800 text-white font-bold px-2 py-1 uppercase text-[10px] border border-gray-600 hover:bg-[#ff6600] hover:text-black transition-colors" onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>Target</button>
+                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
+                                                        if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
+                                                        
+                                                        let finalRange = isBlind ? '1' : eRange;
+                                                        let finalAoe = isBlind ? 0 : parsedAoe;
+                                                        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+                                                        pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
+                                                    }}>
+                                                        {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
+                                                    </button>
                                                 </div>
                                             );
                                         })}

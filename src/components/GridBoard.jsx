@@ -79,6 +79,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         return { q, r, s };
     };
 
+    const getIndexFromCube = (q, r) => {
+        const col = q;
+        const row = r + Math.floor(col / 2);
+        if (col >= 0 && col < COLS && row >= 0 && row < ROWS) return row * COLS + col;
+        return null;
+    };
+
     const getHexDistance = (idxA, idxB) => {
         const a = getCubeCoords(idxA); const b = getCubeCoords(idxB);
         return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(a.s - b.s));
@@ -88,6 +95,130 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const col = idx % COLS; const row = Math.floor(idx / COLS);
         const x = col * stepX; const y = row * stepY + (col % 2 === 1 ? stepY / 2 : 0);
         return { x, y };
+    };
+    
+    const getAdjacentHexes = (idx) => {
+        const c = getCubeCoords(idx);
+        const dirs = [{q:1,r:0}, {q:0,r:1}, {q:-1,r:1}, {q:-1,r:0}, {q:0,r:-1}, {q:1,r:-1}];
+        const hexes = [];
+        dirs.forEach(d => {
+            const nIdx = getIndexFromCube(c.q + d.q, c.r + d.r);
+            if (nIdx !== null) hexes.push(nIdx);
+        });
+        return hexes;
+    };
+
+    const isCrushed = (pos, currentGrid) => {
+        let crushed = true;
+        for (let dq = -2; dq <= 2; dq++) {
+            for (let dr = -2; dr <= 2; dr++) {
+                let ds = -dq - dr;
+                if (Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds)) <= 2) {
+                    const centerCube = getCubeCoords(pos);
+                    const nq = centerCube.q + dq;
+                    const nr = centerCube.r + dr;
+                    const nIdx = getIndexFromCube(nq, nr);
+                    if (nIdx !== null) {
+                        if (currentGrid[nIdx]?.terrain !== 'severe') {
+                            crushed = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!crushed) break;
+        }
+        return crushed;
+    };
+
+    // NEW: Centralized Crushed / Escape evaluation function
+    const evaluateCrush = (tokensList, currentGrid, playersObj, enemiesList, deadEnemyUids, logStr) => {
+        let evLog = logStr;
+        let pObj = { ...playersObj };
+        let eList = [...enemiesList];
+        
+        tokensList.forEach(t => {
+            const crushed = isCrushed(t.pos, currentGrid);
+            if (t.type === 'enemy') {
+                if (crushed) {
+                    const eIndex = eList.findIndex(e => e.uid == t.refId);
+                    if (eIndex !== -1 && eList[eIndex].currentHp > 0) {
+                        eList[eIndex].currentHp = 0;
+                        deadEnemyUids.add(t.refId);
+                        evLog += `\n>> HOSTILE CRUSHED! [Entombed in Severe Terrain]`;
+                    }
+                }
+            } else if (t.type === 'player') {
+                const p = pObj[t.refId];
+                if (p) {
+                    if (crushed) {
+                        if (!p.statuses) p.statuses = [];
+                        if (!p.statuses.includes('Crushed [1/3]') && !p.statuses.includes('Crushed [2/3]') && !p.statuses.includes('Crushed [3/3]')) {
+                            p.statuses.push('Crushed [1/3]');
+                            evLog += `\n>> AGENT TRAPPED: ${p.name || 'Agent'} is Entombed [1/3]. Evacuate immediately!`;
+                        }
+                    } else {
+                        if (p.statuses && (p.statuses.includes('Crushed [1/3]') || p.statuses.includes('Crushed [2/3]'))) {
+                            p.statuses = p.statuses.filter(st => !st.startsWith('Crushed ['));
+                            evLog += `\n>> AGENT ESCAPED: ${p.name || 'Agent'} successfully broke free from Entombment.`;
+                        }
+                    }
+                }
+            }
+        });
+        
+        return { pObj, eList, logStr: evLog };
+    };
+
+    const getAoEHexes = (targetIdx, originPosIdx, aType) => {
+        if (targetIdx === null || targetIdx === -1) return [];
+        let hexes = [targetIdx];
+        if (!aType || aType === 0 || aType === '0') return hexes;
+        if (aType === 1 || aType === '1') {
+            for (let i = 0; i < 150; i++) if (getHexDistance(targetIdx, i) === 1) hexes.push(i);
+            return hexes;
+        }
+        if (aType === 2 || aType === '2') {
+            for (let i = 0; i < 150; i++) if (getHexDistance(targetIdx, i) <= 2 && i !== targetIdx) hexes.push(i);
+            return hexes;
+        }
+
+        const tCube = getCubeCoords(targetIdx);
+        let dirIdx = 0;
+        
+        if (originPosIdx !== null && originPosIdx !== targetIdx) {
+            const tCoords = getHexCoords(targetIdx);
+            const aCoords = getHexCoords(originPosIdx);
+            let angle = Math.atan2(tCoords.y - aCoords.y, tCoords.x - aCoords.x) * (180 / Math.PI);
+            if (angle < 0) angle += 360;
+            dirIdx = Math.round(angle / 60) % 6;
+        }
+
+        const hexDirs = [
+            {q: 1, r: 0, s: -1},  // 0: Right
+            {q: 0, r: 1, s: -1},  // 1: Bottom Right
+            {q: -1, r: 1, s: 0},  // 2: Bottom Left
+            {q: -1, r: 0, s: 1},  // 3: Left
+            {q: 0, r: -1, s: 1},  // 4: Top Left
+            {q: 1, r: -1, s: 0}   // 5: Top Right
+        ];
+
+        if (aType === 'line3') {
+            const d = hexDirs[dirIdx];
+            for (let step = 1; step <= 2; step++) {
+                const nIdx = getIndexFromCube(tCube.q + d.q*step, tCube.r + d.r*step);
+                if (nIdx !== null) hexes.push(nIdx);
+            }
+        } else if (aType === 'cluster3') {
+            const d1 = hexDirs[dirIdx];
+            const d2 = hexDirs[(dirIdx + 1) % 6];
+            const idx1 = getIndexFromCube(tCube.q + d1.q, tCube.r + d1.r);
+            const idx2 = getIndexFromCube(tCube.q + d2.q, tCube.r + d2.r);
+            if (idx1 !== null) hexes.push(idx1);
+            if (idx2 !== null) hexes.push(idx2);
+        }
+
+        return hexes;
     };
 
     const findActiveTokenIndex = (action, tokenList) => {
@@ -127,15 +258,63 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 t.pos = index;
                 if (targetCell.terrain === 'major') alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
 
-                if (t.movementRemaining <= 0) return { ...s, tokens: newTokens, activeAction: null };
-                return { ...s, tokens: newTokens };
+                // Evaluates escape protocols upon movement
+                let finalPlayers = s.players;
+                let finalLog = s.globalLog;
+                if (t.type === 'player') {
+                    const res = evaluateCrush(newTokens, s.grid, s.players, s.encounter?.enemies || [], new Set(), "");
+                    if (res.logStr) {
+                        finalPlayers = res.pObj;
+                        finalLog = { message: res.logStr, timestamp: Date.now() };
+                    }
+                }
+
+                if (t.movementRemaining <= 0) return { ...s, tokens: newTokens, activeAction: null, players: finalPlayers, globalLog: finalLog };
+                return { ...s, tokens: newTokens, players: finalPlayers, globalLog: finalLog };
+            }
+            return s;
+        });
+    };
+
+    // NEW: Handles instantaneous self-displacement mechanics
+    const executeBlink = (index) => {
+        pushUpdate(s => {
+            const newTokens = [...(s.tokens || [])];
+            const tIdx = findActiveTokenIndex(activeAction, newTokens);
+            
+            if (tIdx !== -1) {
+                const t = newTokens[tIdx];
+                const targetCell = s.grid && s.grid.length === 150 ? s.grid[index] : { terrain: null };
+                if (targetCell.terrain === 'severe') { alert("Destination hex contains Severe Terrain. Blink aborted."); return s; }
+
+                t.pos = index;
+                
+                let log = `\n>> AGENT RELOCATED: Executed [${activeAction.coreMobility}] displacement vector for ${activeAction.m} hexes.`;
+                
+                let newPlayers = { ...s.players };
+                if (!activeAction.isEnemy && activeAction.sourceId) {
+                    const p = newPlayers[activeAction.sourceId];
+                    if (p) {
+                        const pRes = p.resPool !== undefined ? parseInt(p.resPool) : 3;
+                        if (activeAction.isImprovised) {
+                            p.resPool = Math.max(0, pRes - 1);
+                            log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
+                        } else if (activeAction.cost > 0) {
+                            p.resPool = Math.max(0, pRes - activeAction.cost);
+                            log += `\n>> [-${activeAction.cost} Res] Skill executed.`;
+                        }
+                    }
+                }
+
+                const res = evaluateCrush(newTokens, s.grid, newPlayers, s.encounter?.enemies || [], new Set(), log);
+
+                return { ...s, tokens: newTokens, players: res.pObj, activeAction: null, globalLog: { message: res.logStr, timestamp: Date.now() } };
             }
             return s;
         });
     };
 
     const resolveCombat = (targetHex) => {
-        const radius = activeAction.a || 0;
         const rawDmg = parseInt(activeAction.d) || 0;
         
         const dispRaw = activeAction.elementRaw || activeAction.element || 'Kinetic';
@@ -145,32 +324,61 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         let newPlayers = { ...players };
         let newEnemies = [...(encounter?.enemies || [])];
         let newTokens = JSON.parse(JSON.stringify(activeTokens));
-        let log = `--- COMBAT LOG: ${activeAction.name} [${showType}] ---\nBase Damage: ${rawDmg}\n`;
+        
         let hitCount = 0;
-        let attackerPos = null;
+        let attackerPosIdx = null;
         
         const attIdx = findActiveTokenIndex(activeAction, newTokens);
-        if (attIdx !== -1) attackerPos = getHexCoords(newTokens[attIdx].pos);
+        if (attIdx !== -1) attackerPosIdx = newTokens[attIdx].pos;
+        
+        let actualTargetHex = targetHex;
+        let log = `--- COMBAT LOG: ${activeAction.name} [${showType}] ---\n`;
+
+        if (activeAction.isImprovised) {
+            const roll = Math.floor(Math.random() * 6) + 1;
+            log += `\n>> IMPROVISED ROLL: [${roll}]`;
+            if (roll >= 5) {
+                log += `\n>> CASCADE: Reality bent to Agent's will.\n`;
+            } else if (roll >= 3) {
+                log += `\n>> SURGE: Action succeeds, but Agent suffers ${activeAction.originalCost} feedback damage.\n`;
+                if (!activeAction.isEnemy && activeAction.sourceId) {
+                    const p = newPlayers[activeAction.sourceId];
+                    if (p) p.currentHp = Math.max(0, p.currentHp - activeAction.originalCost);
+                }
+            } else {
+                log += `\n>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`;
+                if (attIdx !== -1) {
+                    actualTargetHex = newTokens[attIdx].pos;
+                }
+            }
+        }
+        
+        log += `Base Damage: ${rawDmg}\n`;
+
+        const originPosIdx = attIdx !== -1 ? newTokens[attIdx].pos : null;
+        const aoeHexes = getAoEHexes(actualTargetHex, originPosIdx, activeAction.a);
 
         const isExecute = activeAction.effectCore === 'Execute';
         let deadEnemyUids = new Set();
         const consumeStates = ['Invulnerable', 'Shielded', 'Vulnerable', 'Evasive'];
 
         newTokens.forEach(t => {
-            if (getHexDistance(t.pos, targetHex) <= radius) {
+            if (aoeHexes.includes(t.pos)) {
                 hitCount++;
                 const targetCoords = getHexCoords(t.pos);
+                let incomingDmg = rawDmg;
+                let targetWasHit = false;
                 
                 if (t.type === 'enemy') {
                     const eIndex = newEnemies.findIndex(e => e.uid == t.refId);
                     if (eIndex !== -1) {
+                        targetWasHit = true;
                         const enemy = newEnemies[eIndex];
                         let newHp = enemy.currentHp;
                         let barriers = [...(enemy.currentBarriers || [])];
                         let staggered = enemy.staggered;
                         
                         let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
-                        let incomingDmg = rawDmg;
                         
                         if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
                         if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
@@ -220,13 +428,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 else if (t.type === 'player') {
                     const p = newPlayers[t.refId];
                     if (p) {
+                        targetWasHit = true;
                         const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
                         const wpn = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
                         let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
                         let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
 
                         let coreStates = (p.statuses || []).map(st => getCoreState(st));
-                        let incomingDmg = rawDmg;
                         let forcedEvasion = coreStates.includes('Evasive');
 
                         if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
@@ -239,7 +447,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         } else {
                             let mitigation = 0; let mitType = "None"; let isFlanking = false;
                             
-                            if (radius > 0) {
+                            if (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0') {
                                 isFlanking = true; mitType = "AoE Target";
                             } else if (attackerPos) {
                                 const dx = attackerPos.x - targetCoords.x; const dy = attackerPos.y - targetCoords.y;
@@ -283,15 +491,57 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
                     }
                 }
+
+                // NEW: Automated Push / Pull mathematical evaluation
+                if (targetWasHit && activeAction.m > 0 && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
+                    if (activeAction.coreMobility === 'Push' || activeAction.coreMobility === 'Pull') {
+                        let pushPos = t.pos;
+                        let collisionDmg = 0;
+                        
+                        for (let step = 0; step < activeAction.m; step++) {
+                            const adjHexes = getAdjacentHexes(pushPos);
+                            const validHexes = adjHexes.filter(h => s.grid && s.grid[h] && s.grid[h].terrain !== 'severe');
+                            
+                            if (validHexes.length === 0) { collisionDmg += (activeAction.m - step); break; }
+                            
+                            validHexes.sort((a,b) => {
+                                const distA = getHexDistance(a, attackerPosIdx);
+                                const distB = getHexDistance(b, attackerPosIdx);
+                                return activeAction.coreMobility === 'Push' ? distB - distA : distA - distB; 
+                            });
+                            
+                            const bestHex = validHexes[0];
+                            const currentDist = getHexDistance(pushPos, attackerPosIdx);
+                            const bestDist = getHexDistance(bestHex, attackerPosIdx);
+                            
+                            if (activeAction.coreMobility === 'Push' && bestDist <= currentDist) { collisionDmg += (activeAction.m - step); break; }
+                            if (activeAction.coreMobility === 'Pull' && bestDist >= currentDist) { collisionDmg += (activeAction.m - step); break; }
+                            
+                            pushPos = bestHex;
+                        }
+                        
+                        t.pos = pushPos;
+                        log += `\n>> FORCED MOVEMENT: Entity thrown via [${activeAction.coreMobility}] momentum.`;
+
+                        if (collisionDmg > 0) {
+                            if (t.type === 'enemy') {
+                                const eIndex = newEnemies.findIndex(e => e.uid == t.refId);
+                                if (eIndex !== -1) {
+                                    newEnemies[eIndex].currentHp = Math.max(0, newEnemies[eIndex].currentHp - collisionDmg);
+                                    if (newEnemies[eIndex].currentHp <= 0) deadEnemyUids.add(t.refId);
+                                }
+                            } else if (t.type === 'player') {
+                                const p = newPlayers[t.refId];
+                                if (p) p.currentHp = Math.max(0, p.currentHp - collisionDmg);
+                            }
+                            log += `\n>> SLAM COLLISION: Entity struck impassable terrain for ${collisionDmg} physical damage.`;
+                        }
+                    }
+                }
             }
         });
 
-        if (hitCount === 0) log += `\nNo valid targets in radius.`;
-
-        if (deadEnemyUids.size > 0) {
-            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
-            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
-        }
+        if (hitCount === 0) log += `\nNo valid targets in payload array.`;
 
         if (!activeAction.isEnemy && activeAction.sourceId) {
             const p = newPlayers[activeAction.sourceId];
@@ -302,6 +552,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     p.usedBasicAttack = true;
                     p.resPool = Math.min(10, pRes + 1);
                     log += `\n>> [+1 Res] Basic Attack executed.`;
+                } else if (activeAction.isImprovised) {
+                    p.resPool = Math.max(0, pRes - 1);
+                    log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
                 } else if (activeAction.cost > 0) {
                     p.resPool = Math.max(0, pRes - activeAction.cost);
                     log += `\n>> [-${activeAction.cost} Res] Skill executed.`;
@@ -313,8 +566,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (activeAction.terrain) {
             let changedCount = 0;
             newGrid = newGrid.map((cell, idx) => {
-                if (getHexDistance(idx, targetHex) <= radius) {
-                    // NEW: Impassable Bedrock Protection (Cannot overwrite Severe unless explicitly cleared)
+                if (aoeHexes.includes(idx)) {
                     if (cell.terrain === 'severe' && activeAction.terrain !== 'clear') return cell;
                     changedCount++;
                     return { ...cell, terrain: activeAction.terrain === 'clear' ? null : activeAction.terrain };
@@ -324,14 +576,26 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             if (changedCount > 0) log += `\n>> TERRAIN SHIFT: ${changedCount} hex(es) converted to [${activeAction.terrain.toUpperCase()}].`;
         }
 
+        if (deadEnemyUids.size > 0) {
+            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
+            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+        }
+        
+        const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, log);
+
+        if (deadEnemyUids.size > 0) {
+            res.eList = res.eList.filter(e => !deadEnemyUids.has(e.uid));
+            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+        }
+
         pushUpdate(s => ({ 
             ...s, 
-            players: newPlayers, 
-            encounter: { ...(s.encounter || {}), enemies: newEnemies }, 
+            players: res.pObj, 
+            encounter: { ...(s.encounter || {}), enemies: res.eList }, 
             tokens: newTokens, 
             grid: newGrid,
             activeAction: null,
-            globalLog: { message: log, timestamp: Date.now() }
+            globalLog: { message: res.logStr, timestamp: Date.now() }
         }));
 
         if (selectedToken && deadEnemyUids.size > 0) {
@@ -343,12 +607,20 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const handleHexClick = (index) => {
         if (activeAction) {
             if (activeAction.type === 'move') executeMove(index);
+            else if (activeAction.type === 'blink') executeBlink(index);
             else resolveCombat(index);
         } else if (paintBrush) {
             pushUpdate(s => {
                 const newGrid = [...(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null }))];
                 newGrid[index] = { ...newGrid[index], terrain: paintBrush === 'clear' ? null : paintBrush };
-                return { ...s, grid: newGrid };
+                
+                const res = evaluateCrush(s.tokens || [], newGrid, s.players || {}, s.encounter?.enemies || [], new Set(), "");
+                
+                let finalTokens = s.tokens || [];
+                let finalLog = s.globalLog;
+                if (res.logStr) finalLog = { message: "TERRAIN OVERRIDE LOG:" + res.logStr, timestamp: Date.now() };
+
+                return { ...s, grid: newGrid, encounter: { ...s.encounter, enemies: res.eList }, players: res.pObj, tokens: finalTokens, globalLog: finalLog };
             });
         }
     };
@@ -412,7 +684,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             const tIdx = findActiveTokenIndex(activeAction, activeTokens);
             if (tIdx !== -1) originToken = activeTokens[tIdx];
 
-            if (activeAction.type === 'move') {
+            if (activeAction.type === 'move' || activeAction.type === 'blink') {
                 minR = 1; maxR = 1; 
             } else if (activeAction.range) {
                 const parts = String(activeAction.range).split('-');
@@ -420,12 +692,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 else { minR = 1; maxR = parseInt(parts[0]); }
             }
         }
+        
+        const aoeHexes = activeAction ? getAoEHexes(hoveredHex !== null ? hoveredHex : -1, originToken ? originToken.pos : null, activeAction.a) : [];
 
         return activeGrid.map((cell, idx) => {
             const { x, y } = getHexCoords(idx);
             let bgColor = '#1e293b'; let hexBorder = 'none'; let hexZ = 1;
 
-            // NEW: Installs Tooltips directly to Hex Terrain Backgrounds
             let titleStr = `Hex ${idx}`;
             if (cell.terrain) {
                 let tDesc = cell.terrain === 'minor' ? 'Movement cost doubled.' :
@@ -460,13 +733,16 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             if (cost <= rem) isMovable = true;
                         }
                     }
+                } else if (activeAction.type === 'blink') {
+                    if (dist > 0 && dist <= activeAction.m && cell.terrain !== 'severe') isMovable = true;
                 } else {
                     if (dist >= minR && dist <= maxR && cell.terrain !== 'severe') isTargetable = true;
-                    if (hoveredHex !== null && getHexDistance(idx, hoveredHex) <= (activeAction.a || 0)) isAoETarget = true;
+                    if (hoveredHex !== null && aoeHexes.includes(idx)) isAoETarget = true;
                 }
             }
 
             if (isAoETarget) { bgColor = 'rgba(255, 0, 0, 0.6)'; hexBorder = '2px solid #ff0000'; hexZ = 10; } 
+            else if (activeAction && activeAction.type === 'blink' && isMovable) { bgColor = 'rgba(59, 130, 246, 0.3)'; hexBorder = '2px dashed rgba(59, 130, 246, 0.8)'; hexZ = 5; }
             else if (isTargetable) { bgColor = 'rgba(255, 102, 0, 0.2)'; hexBorder = '2px dashed rgba(255, 102, 0, 0.8)'; hexZ = 5; } 
             else if (isMovable) { bgColor = 'rgba(34, 197, 94, 0.3)'; hexBorder = '2px dashed rgba(34, 197, 94, 0.8)'; hexZ = 5; }
 
@@ -547,6 +823,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         e.stopPropagation(); 
                         if (activeAction) {
                             if (activeAction.type === 'move') return executeMove(t.pos);
+                            if (activeAction.type === 'blink') return executeBlink(t.pos);
                             return resolveCombat(t.pos);
                         }
                         setSelectedToken(selectedToken === t.id ? null : t.id); 
@@ -562,11 +839,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     <span className="mt-1">{displayChar}</span>
                     {hpDisplay}
                     
-                    {/* NEW: Enables Tooltips on Tokens (Pointer Events Auto allows hover capture) */}
                     {activeStatusList.length > 0 && (
                         <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-auto" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
                             {activeStatusList.map((st, i) => (
-                                <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="cursor-help hover:text-[#00f0ff] transition-colors">{st}{i < activeStatusList.length - 1 ? ',' : ''}</span>
+                                <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="cursor-help hover:text-[#00f0ff] transition-colors">{st}{i < activeStatusList.length - 1 ? ',' : ''}</span>
                             ))}
                         </div>
                     )}
@@ -749,8 +1025,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                                 let finalAoe = isBlind ? 0 : (c.a || 0);
                                                 if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-                                                pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: c.name, d: c.d, a: finalAoe, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw, elementCore: c.elementCore, terrain: c.terrain, desc: c.desc, isBasic: false, cost: c.cost } }))
-                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : 'TARGET SKILL')}</button>
+                                                pushUpdate(s => ({ ...s, activeAction: { 
+                                                    type: c.coreMobility === 'Blink' ? 'blink' : undefined,
+                                                    source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, 
+                                                    name: c.name, d: c.d, a: finalAoe, u: c.u, m: c.m, coreMobility: c.coreMobility,
+                                                    range: finalRange, effectName: c.effectName, effectCore: c.effectCore, 
+                                                    elementRaw: c.elementRaw, elementCore: c.elementCore, terrain: c.terrain, 
+                                                    desc: c.desc, isBasic: false, cost: c.cost 
+                                                } }))
+                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (c.coreMobility === 'Blink' ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
                                         </>
                                     )}
                                 </div>
@@ -887,6 +1170,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
 
                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+                            const shapeMatch = desc.match(/(line|cluster)/i);
+                            let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                            if (!isBlind && shapeMatch) {
+                                if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
+                                if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
+                            }
+
                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                             const pEff = effMatch ? effMatch[1] : null;
 
@@ -910,7 +1200,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                             if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
                                             
                                             let finalRange = isBlind ? '1' : eRange;
-                                            let finalAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                                            let finalAoe = isBlind ? 0 : parsedAoe;
                                             if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
                                             pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
@@ -976,16 +1266,19 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 </div>
 
                 {activeAction && (
-                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.type === 'move' ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
+                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
                         <div className="font-mono">
-                            <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.type === 'move' ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>
-                                {activeAction.type === 'move' ? 'Movement Array Active' : 'Targeting Array Active'} // Source: {activeAction.source}
+                            <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>
+                                {activeAction.type === 'move' ? 'Movement Array Active' : activeAction.type === 'blink' ? 'Displacement Array Active' : 'Targeting Array Active'} // Source: {activeAction.source}
                             </span>
                             <span className="font-bold text-xl uppercase tracking-wider block mb-1">
-                                {activeAction.type === 'move' ? 'Repositioning' : activeAction.name}
+                                {activeAction.type === 'move' ? 'Repositioning' : activeAction.type === 'blink' ? `Blinking [${activeAction.m} Hexes]` : activeAction.name}
                             </span>
-                            {activeAction.type !== 'move' && (
+                            {activeAction.type !== 'move' && activeAction.type !== 'blink' && (
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400">
+                                    
+                                    {activeAction.isImprovised && <span className="text-[#ff6600] animate-pulse uppercase">⚠ IMPROVISED (1d6) ⚠</span>}
+
                                     {activeAction.d !== undefined && <span>DMG: {activeAction.d}</span>}
                                     
                                     {activeAction.elementCore && (
@@ -996,7 +1289,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         </span>
                                     )}
 
-                                    {activeAction.a !== undefined && <span>AoE: {activeAction.a}</span>}
+                                    {activeAction.a !== undefined && <span>AoE: {activeAction.a === 'line3' ? '3-HEX LINE' : activeAction.a === 'cluster3' ? '3-HEX CLUSTER' : `${activeAction.a} RADIUS`}</span>}
                                     
                                     {activeAction.effectName && (
                                         <span className="text-purple-400">
@@ -1012,7 +1305,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 </div>
                             )}
                         </div>
-                        <button className={`font-bold px-4 py-2 uppercase tracking-wider text-sm border transition-colors ${activeAction.type === 'move' ? 'bg-[#166534] text-white border-[#22c55e] hover:bg-white hover:text-[#166534]' : 'bg-red-600 text-white border-red-500 hover:bg-white hover:text-red-600'}`} onClick={clearActiveAction}>Clear</button>
+                        <button className={`font-bold px-4 py-2 uppercase tracking-wider text-sm border transition-colors ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'bg-[#166534] text-white border-[#22c55e] hover:bg-white hover:text-[#166534]' : 'bg-red-600 text-white border-red-500 hover:bg-white hover:text-red-600'}`} onClick={clearActiveAction}>Clear</button>
                     </div>
                 )}
 
