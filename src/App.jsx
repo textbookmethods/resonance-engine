@@ -63,6 +63,8 @@ export default function App() {
                         data.players[pid].customCards = data.players[pid].customCards || [];
                         data.players[pid].savedSkills = data.players[pid].savedSkills || [];
                         data.players[pid].statuses = data.players[pid].statuses || [];
+                        // FIX: Retroactively patches legacy sheets that had undefined resonance pools
+                        if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
                     });
                 }
                 if (data.encounter?.enemies) {

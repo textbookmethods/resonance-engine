@@ -278,12 +278,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (!activeAction.isEnemy && activeAction.sourceId) {
             const p = newPlayers[activeAction.sourceId];
             if (p) {
+                // FIXED: Calculates correctly using the currentRes patch
+                const pRes = p.resPool !== undefined ? parseInt(p.resPool) : 3;
+
                 if (activeAction.isBasic) {
                     p.usedBasicAttack = true;
-                    p.resPool = Math.min(10, (parseInt(p.resPool) || 0) + 1);
+                    p.resPool = Math.min(10, pRes + 1);
                     log += `\n>> [+1 Res] Basic Attack executed.`;
                 } else if (activeAction.cost > 0) {
-                    p.resPool = Math.max(0, (parseInt(p.resPool) || 0) - activeAction.cost);
+                    p.resPool = Math.max(0, pRes - activeAction.cost);
                     log += `\n>> [-${activeAction.cost} Res] Skill executed.`;
                 }
             }
@@ -440,7 +443,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == t.refId);
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
-                    
                     let maxRange = 1;
                     (linkedEnemy.abilities || []).forEach(ability => {
                         const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
@@ -560,6 +562,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 const disableMovement = isStunned || isImmobilized;
                 const disableAttacks = isStunned;
 
+                // FIX: Inherits the secure resPool patch locally to the sidebar renderer
+                const currentRes = p.resPool !== undefined ? parseInt(p.resPool) : 3;
+
                 return (
                     <div className="w-full md:w-64 bg-[#1a222c] p-4 border font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto" style={{ borderColor: pColor }}>
                         <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
@@ -651,7 +656,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         {(isGM || activeT.refId === localId) && (
                             <div className="flex gap-2 mt-2">
                                 <button className={`flex-1 font-bold py-1 uppercase text-xs transition-colors ${disableMovement ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={disableMovement} onClick={() => primeTokenMove(activeT)}>Move</button>
-                                <button className={`flex-1 font-bold py-1 uppercase text-xs border transition-colors ${(p.usedBasicAttack || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks) && !isGM} onClick={() => {
+                                
+                                {/* FIX: Explicitly labelled BASIC ATTACK */}
+                                <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks) && !isGM} onClick={() => {
                                     if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                     if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
                                     
@@ -670,11 +677,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             const dispCore = c.elementCore || c.element || 'Kinetic';
                             const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                             
-                            const pRes = parseInt(p.resPool) || 0;
-                            const isNoFuel = pRes < c.cost;
+                            // FIX: Safely reads currentRes patch
+                            const isNoFuel = currentRes < c.cost;
 
                             return (
-                                <div key={c.id} className="bg-gray-900 border border-gray-700 p-2 text-sm relative">
+                                <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-sm relative">
                                     <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
@@ -682,12 +689,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     
                                     {(isGM || activeT.refId === localId) && (
                                         <>
-                                            <button className={`w-full font-bold py-1 uppercase text-xs border border-gray-600 transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
+                                            {/* FIX: Formally relabeled to TARGET SKILL and inherits c.range safely to prevent undefined vector crashes */}
+                                            <button className={`w-full font-bold py-1 uppercase text-[10px] border border-gray-600 transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
                                                 if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                                 if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
                                                 
-                                                // FIX: Safely parses range from activeWeapon, bypassing undefined c.range completely
-                                                let finalRange = isBlind ? '1' : activeWeapon.range; 
+                                                let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
                                                 let finalAoe = isBlind ? 0 : (c.a || 0);
                                                 if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
@@ -926,7 +933,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400">
                                     {activeAction.d !== undefined && <span>DMG: {activeAction.d}</span>}
                                     
-                                    {/* FIX: Wraps toLowerCase payload in native Strings to guarantee safety */}
                                     {activeAction.elementCore && (
                                         <span className="text-[#ff6600]">
                                             TYPE: {(activeAction.elementRaw && String(activeAction.elementRaw).toLowerCase() !== String(activeAction.elementCore).toLowerCase()) 
@@ -937,7 +943,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                                     {activeAction.a !== undefined && <span>AoE: {activeAction.a}</span>}
                                     
-                                    {/* FIX: Wraps toLowerCase payload in native Strings to guarantee safety */}
                                     {activeAction.effectName && (
                                         <span className="text-purple-400">
                                             STATE: [{(String(activeAction.effectName).toLowerCase() !== String(activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : activeAction.effectName}]

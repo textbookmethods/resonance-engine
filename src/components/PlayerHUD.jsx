@@ -86,6 +86,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
     const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
     
+    // FIX: Natively calculates current resonance with 3 fallback if missing
+    const currentRes = player.resPool !== undefined ? safeInt(player.resPool) : 3;
+
     const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
 
     const front = safeInt(player.dpFront); const supp = safeInt(player.dpSupport); const back = safeInt(player.dpBack);
@@ -160,13 +163,19 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     
     const rollImprovised = () => {
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
-        updatePlayer('resPool', Math.max(0, safeInt(player.resPool) - 1));
+        updatePlayer('resPool', Math.max(0, currentRes - 1));
         const roll = Math.floor(Math.random() * 6) + 1;
         let outcome = "";
         if (roll <= 2) outcome = "Backlash (Failure & Consequence)";
         else if (roll <= 4) outcome = "Surge (Success at a Cost)";
         else outcome = "Cascade (Total Success)";
         alert(`Improvised Skill Roll: ${roll}\nOutcome: ${outcome}`);
+    };
+
+    const primeMove = () => { 
+        if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
+        if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
+        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
     };
     
     const primeWeapon = () => { 
@@ -184,11 +193,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     
     const primeCard = (c) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
-        if (safeInt(player.resPool) < c.cost) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
+        if (currentRes < c.cost) return alert(`System Locked: Insufficient Resonance. Required: ${c.cost}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
         let finalRange = isBlind ? '1' : activeWeapon.range;
-        let finalAoe = isBlind ? 0 : (c.a || 0);
+        let finalAoe = isBlind ? 0 : c.a;
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, cost: c.cost, name: c.name || 'Custom Action', d: c.d, a: finalAoe, u: c.u, range: finalRange, effectName: c.effectName, effectCore: c.effectCore, elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', desc: c.desc } })); 
@@ -373,12 +382,12 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
             <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col items-center justify-center">
                 <h2 className="text-[#ff6600] font-bold text-2xl tracking-widest mb-4">RESONANCE</h2>
-                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{player.resPool || 0}<span className="text-3xl text-gray-500">/10</span></div>
+                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{currentRes}<span className="text-3xl text-gray-500">/10</span></div>
                 <div className="grid grid-cols-2 gap-2 w-full mb-4">
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 1))}>+1 Assist</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 2))}>+2 Tag-Team</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 2))}>+2 Exploit</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, safeInt(player.resPool) + 1))}>+1 Banter</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Assist</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Tag-Team</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Exploit</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Banter</button>
                 </div>
                 <button className={`w-full font-bold p-3 uppercase transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#00f0ff] text-black hover:bg-white'}`} disabled={disableAttacks} onClick={rollImprovised}>
                     {disableAttacks ? 'SYSTEM LOCKED' : 'Improvised Skill (-1 Res)'}
@@ -439,9 +448,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     {customCards.map(c => {
                         const dispRaw = c.elementRaw || c.element || 'Kinetic';
                         const dispCore = c.elementCore || c.element || 'Kinetic';
-                        const showType = (dispRaw.toLowerCase() !== dispCore.toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                        const pRes = parseInt(player.resPool) || 0;
-                        const isNoFuel = pRes < c.cost;
+                        const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+                        
+                        const isNoFuel = currentRes < c.cost;
 
                         return (
                             <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
