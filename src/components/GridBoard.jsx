@@ -52,6 +52,7 @@ const STATE_DESCRIPTIONS = {
 };
 
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
 const getCoreState = (input) => {
     if (!input) return '';
@@ -186,7 +187,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             const crushed = isCrushed(t.pos, currentGrid);
             if (t.type === 'enemy') {
                 if (crushed) {
-                    const eIndex = eList.findIndex(e => e.uid == t.refId);
+                    const eIndex = eList.findIndex(e => String(e.uid) === String(t.refId));
                     if (eIndex !== -1 && eList[eIndex].currentHp > 0) {
                         eList[eIndex].currentHp = 0;
                         deadEnemyUids.add(t.refId);
@@ -204,7 +205,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
                     } else {
                         if (p.statuses && (p.statuses.includes('Crushed [1/3]') || p.statuses.includes('Crushed [2/3]'))) {
-                            p.statuses = p.statuses.filter(st => !st.startsWith('Crushed ['));
+                            p.statuses = p.statuses.filter(st => !String(st).startsWith('Crushed ['));
                             evLog += `\n>> AGENT ESCAPED: ${p.name || 'Agent'} successfully broke free from Entombment.`;
                         }
                     }
@@ -241,12 +242,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }
 
         const hexDirs = [
-            {q: 1, r: 0, s: -1},  // 0: Right
-            {q: 0, r: 1, s: -1},  // 1: Bottom Right
-            {q: -1, r: 1, s: 0},  // 2: Bottom Left
-            {q: -1, r: 0, s: 1},  // 3: Left
-            {q: 0, r: -1, s: 1},  // 4: Top Left
-            {q: 1, r: -1, s: 0}   // 5: Top Right
+            {q: 1, r: 0, s: -1},  
+            {q: 0, r: 1, s: -1},  
+            {q: -1, r: 1, s: 0},  
+            {q: -1, r: 0, s: 1},  
+            {q: 0, r: -1, s: 1},  
+            {q: 1, r: -1, s: 0}   
         ];
 
         const d = hexDirs[dirIdx] || hexDirs[0];
@@ -278,8 +279,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         const targetRow = Math.floor(index / COLS);
         
         pushUpdate(s => {
-            const newTokens = [...(s.tokens || [])].filter(Boolean);
-            const tIdx = findActiveTokenIndex(activeAction, newTokens);
+            const action = s.activeAction || activeAction;
+            const newTokens = deepClone(s.tokens || []).filter(Boolean);
+            const tIdx = findActiveTokenIndex(action, newTokens);
             
             if (tIdx !== -1) {
                 const t = newTokens[tIdx];
@@ -305,10 +307,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 t.pos = index;
                 if (targetCell.terrain === 'major') alert("⚠️ HAZARD WARNING: Token entered Major Terrain. Stop movement and manually resolve environmental damage or status effects.");
 
-                let finalPlayers = s.players;
+                let finalPlayers = deepClone(s.players || {});
                 let finalLog = s.globalLog;
                 if (t.type === 'player') {
-                    const res = evaluateCrush(newTokens, s.grid, s.players, s.encounter?.enemies || [], new Set(), "");
+                    const res = evaluateCrush(newTokens, s.grid, finalPlayers, s.encounter?.enemies || [], new Set(), "");
                     if (res.logStr) {
                         finalPlayers = res.pObj;
                         finalLog = { message: res.logStr, timestamp: Date.now() };
@@ -324,8 +326,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
     const executeBlink = (index) => {
         pushUpdate(s => {
-            const newTokens = [...(s.tokens || [])].filter(Boolean);
-            const tIdx = findActiveTokenIndex(activeAction, newTokens);
+            const action = s.activeAction || activeAction;
+            const newTokens = deepClone(s.tokens || []).filter(Boolean);
+            const tIdx = findActiveTokenIndex(action, newTokens);
             
             if (tIdx !== -1) {
                 const t = newTokens[tIdx];
@@ -334,22 +337,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                 t.pos = index;
                 
-                let log = `\n>> AGENT RELOCATED: Executed [${activeAction.coreMobility || 'Blink'}] displacement vector for ${activeAction.m || 1} hexes.`;
-                let newEnemyPoolTotal = encounter?.enemyPoolTotal || 0;
-                let newPlayers = { ...s.players };
+                let log = `\n>> AGENT RELOCATED: Executed [${action.coreMobility || 'Blink'}] displacement vector for ${action.m || 1} hexes.`;
+                let newEnemyPoolTotal = s.encounter?.enemyPoolTotal || 0;
+                let newPlayers = deepClone(s.players || {});
 
-                if (activeAction.isEnemy) {
-                    newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - (activeAction.cost || 0));
-                    log += `\n>> [-${activeAction.cost || 0} Res] Hostile Action executed.`;
-                } else if (activeAction.sourceId) {
-                    const p = newPlayers[activeAction.sourceId];
+                if (action.isEnemy) {
+                    newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - (action.cost || 0));
+                    log += `\n>> [-${action.cost || 0} Res] Hostile Action executed.`;
+                } else if (action.sourceId) {
+                    const p = newPlayers[action.sourceId];
                     if (p) {
                         const pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
-                        if (activeAction.isImprovised) {
+                        if (action.isImprovised) {
                             p.resPool = Math.max(0, pRes - 1);
                             log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
                         } else {
-                            const costDeduction = parseInt(activeAction.cost) || 0;
+                            const costDeduction = parseInt(action.cost) || 0;
                             p.resPool = Math.max(0, pRes - costDeduction);
                             if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`;
                         }
@@ -358,369 +361,368 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                 const res = evaluateCrush(newTokens, s.grid, newPlayers, s.encounter?.enemies || [], new Set(), log);
 
-                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...s.encounter, enemyPoolTotal: newEnemyPoolTotal }, activeAction: null, globalLog: { message: res.logStr, timestamp: Date.now() } };
+                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemyPoolTotal: newEnemyPoolTotal }, activeAction: null, globalLog: { message: res.logStr, timestamp: Date.now() } };
             }
             return s;
         });
     };
 
     const resolveCombat = (targetHex) => {
-        const rawDmg = safeInt(activeAction.d);
-        
-        const dispRaw = activeAction.elementRaw || activeAction.element || 'Kinetic';
-        const dispCore = activeAction.elementCore || activeAction.element || 'Kinetic';
-        const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
+        pushUpdate(s => {
+            const action = s.activeAction || activeAction;
+            if (!action) return s;
 
-        let newPlayers = { ...players };
-        let newEnemies = [...(encounter?.enemies || [])].filter(Boolean);
-        let newTokens = JSON.parse(JSON.stringify(activeTokens));
-        
-        let hitCount = 0;
-        let attackerPosIdx = null;
-        
-        const attIdx = findActiveTokenIndex(activeAction, newTokens);
-        if (attIdx !== -1) attackerPosIdx = newTokens[attIdx].pos;
-        
-        let actualTargetHex = targetHex;
-        let log = `--- COMBAT LOG: ${activeAction.name || 'Action'} [${showType}] ---\n`;
+            const rawDmg = safeInt(action.d);
+            const dispRaw = action.elementRaw || action.element || 'Kinetic';
+            const dispCore = action.elementCore || action.element || 'Kinetic';
+            const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
 
-        if (activeAction.isImprovised) {
-            const roll = Math.floor(Math.random() * 6) + 1;
-            log += `\n>> IMPROVISED ROLL: [${roll}]`;
-            if (roll >= 5) {
-                log += `\n>> CASCADE: Reality bent to Agent's will.\n`;
-            } else if (roll >= 3) {
-                const fbDmg = safeInt(activeAction.originalCost);
-                log += `\n>> SURGE: Action succeeds, but Agent suffers ${fbDmg} feedback damage.\n`;
-                if (!activeAction.isEnemy && activeAction.sourceId) {
-                    const p = newPlayers[activeAction.sourceId];
-                    if (p) p.currentHp = Math.max(0, p.currentHp - fbDmg);
-                }
-            } else {
-                log += `\n>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`;
-                if (attIdx !== -1) {
-                    actualTargetHex = newTokens[attIdx].pos;
-                }
-            }
-        }
-        
-        log += `Base Damage: ${rawDmg}\n`;
+            let newPlayers = deepClone(s.players || {});
+            let newEnemies = deepClone(s.encounter?.enemies || []).filter(Boolean);
+            let newTokens = deepClone(s.tokens || []).filter(Boolean);
+            let newGrid = deepClone(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }));
+            
+            let hitCount = 0;
+            let attackerPosIdx = null;
+            
+            const attIdx = findActiveTokenIndex(action, newTokens);
+            if (attIdx !== -1) attackerPosIdx = newTokens[attIdx].pos;
+            
+            let actualTargetHex = targetHex;
+            let log = `--- COMBAT LOG: ${action.name || 'Action'} [${showType}] ---\n`;
 
-        const originPosIdx = attIdx !== -1 ? newTokens[attIdx].pos : null;
-        const aoeHexes = getAoEHexes(actualTargetHex, originPosIdx, activeAction.a);
-
-        const isExecute = activeAction.effectCore === 'Execute';
-        let deadEnemyUids = new Set();
-        const consumeStates = ['Invulnerable', 'Shielded', 'Vulnerable', 'Evasive'];
-
-        newTokens.forEach(t => {
-            if (aoeHexes.includes(t.pos)) {
-                hitCount++;
-                const targetCoords = getHexCoords(t.pos);
-                
-                let isFlanking = false;
-                if ((!activeAction.a || activeAction.a === '0' || activeAction.a === 0) && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
-                    const aCoords = getHexCoords(attackerPosIdx);
-                    const dx = aCoords.x - targetCoords.x; 
-                    const dy = aCoords.y - targetCoords.y;
-                    let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
-                    if (isNaN(angle)) angle = 0;
-                    if (angle < 0) angle += 360; 
-                    const facingAngle = (t.facing || 0) * 60; 
-                    let diff = Math.abs(angle - facingAngle);
-                    if (isNaN(diff)) diff = 0;
-                    if (diff > 180) diff = 360 - diff;
-                    if (diff > 90) isFlanking = true; 
-                }
-
-                let baseCellElem = activeGrid[t.pos]?.terrainElement;
-                let isOnSteamReact = baseCellElem === 'Cryo' && dispCore === 'Thermal';
-                let isOnCombustReact = baseCellElem === 'Toxic' && dispCore === 'Thermal';
-                let isOnConductReact = (baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro';
-                let isOnAnnihilateReact = (baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void');
-
-                let targetWasHit = false;
-                
-                if (t.type === 'enemy') {
-                    const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
-                    if (eIndex !== -1) {
-                        targetWasHit = true;
-                        const enemy = newEnemies[eIndex];
-                        let newHp = enemy.currentHp;
-                        let barriers = [...(enemy.currentBarriers || [])];
-                        let staggered = enemy.staggered;
-                        
-                        let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
-                        let incomingDmg = rawDmg;
-
-                        const rpsMult = getAffinityMultiplier(dispCore, enemy.affinity);
-                        if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${enemy.affinity || 'Kinetic'})`; }
-                        if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${enemy.affinity || 'Kinetic'})`; }
-
-                        if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
-
-                        if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; }
-                        if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
-                        if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; }
-                        if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
-                        
-                        if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
-                        if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
-                        if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
-                        if (coreStates.includes('Evasive') && !isExecute) log += `\n>> [Evasive] triggered.`;
-
-                        if (isExecute) {
-                            barriers.fill(0);
-                            newHp = 0;
-                            staggered = true;
-                            log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`;
-                        } else {
-                            let dmgRemaining = incomingDmg;
-                            for (let i = 0; i < barriers.length; i++) {
-                                if (barriers[i] > 0 && dmgRemaining > 0) {
-                                    if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
-                                    else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
-                                }
-                            }
-                            newHp = Math.max(0, (enemy.currentHp || 0) - dmgRemaining);
-                            if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
-                            log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.`;
-                            if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
-                        }
-
-                        let updatedStatuses = (enemy.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
-                        
-                        if (activeAction.effectName && !isExecute) {
-                            let newlyAppliedCore = activeAction.effectCore || getCoreState(activeAction.effectName);
-                            updatedStatuses.push(activeAction.effectName);
-                            log += `\n>> State [${activeAction.effectName}] applied to ${enemy.name}!`;
-
-                            if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
-                            else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
-                            else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
-                            else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
-                        }
-
-                        if (newHp <= 0) {
-                            log += `\n>> TARGET DESTROYED! Entity purged from grid.`;
-                            deadEnemyUids.add(enemy.uid);
-                        } else {
-                            newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered, statuses: updatedStatuses };
-                        }
+            if (action.isImprovised) {
+                const roll = Math.floor(Math.random() * 6) + 1;
+                log += `\n>> IMPROVISED ROLL: [${roll}]`;
+                if (roll >= 5) {
+                    log += `\n>> CASCADE: Reality bent to Agent's will.\n`;
+                } else if (roll >= 3) {
+                    const fbDmg = safeInt(action.originalCost);
+                    log += `\n>> SURGE: Action succeeds, but Agent suffers ${fbDmg} feedback damage.\n`;
+                    if (!action.isEnemy && action.sourceId) {
+                        const p = newPlayers[action.sourceId];
+                        if (p) p.currentHp = Math.max(0, safeInt(p.currentHp) - fbDmg);
                     }
-                } 
-                else if (t.type === 'player') {
-                    const p = newPlayers[t.refId];
-                    if (p) {
-                        targetWasHit = true;
-                        const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
-                        const wpn = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
-                        let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
-                        let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
-
-                        let coreStates = (p.statuses || []).map(st => getCoreState(st));
-                        let forcedEvasion = coreStates.includes('Evasive');
-
-                        let incomingDmg = rawDmg;
-                        const rpsMult = getAffinityMultiplier(dispCore, p.affinity || 'Kinetic');
-                        if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${p.affinity || 'Kinetic'})`; }
-                        if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${p.affinity || 'Kinetic'})`; }
-
-                        if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
-                        
-                        if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; }
-                        if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
-                        if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; }
-                        if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
-
-                        if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
-                        if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
-                        if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
-
-                        if (isExecute) {
-                            p.currentHp = 0;
-                            log += `\n>> AGENT EXECUTED! [Critical System Failure]`;
-                        } else {
-                            let mitigation = 0; let mitType = "None"; let trueFlank = isFlanking || (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0');
-                            
-                            if (forcedEvasion) {
-                                trueFlank = true; mitType = "Forced Evasion [State]";
-                                if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; }
-                                else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
-                            } else if (trueFlank) {
-                                if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
-                                else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
-                            } else {
-                                if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } 
-                                else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
-                            }
-
-                            const finalDmg = Math.max(0, incomingDmg - mitigation);
-                            const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
-                            p.currentHp = Math.max(0, (p.currentHp ?? derivedMaxHp) - finalDmg);
-                            log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
-                        }
-
-                        p.statuses = (p.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
-
-                        if (activeAction.effectName && !isExecute) {
-                            let newlyAppliedCore = activeAction.effectCore || getCoreState(activeAction.effectName);
-                            p.statuses = [...(p.statuses || []), activeAction.effectName];
-                            log += `\n>> State [${activeAction.effectName}] applied to ${p.name}!`;
-
-                            if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
-                            else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
-                            else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
-                            else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
-                        }
-                    }
-                }
-
-                if (targetWasHit && safeInt(activeAction.m) > 0 && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
-                    if (activeAction.coreMobility === 'Push' || activeAction.coreMobility === 'Pull') {
-                        let pushPos = t.pos;
-                        let collisionDmg = 0;
-                        const mobDist = safeInt(activeAction.m);
-                        
-                        for (let step = 0; step < mobDist; step++) {
-                            const adjHexes = getAdjacentHexes(pushPos);
-                            const validHexes = adjHexes.filter(h => s.grid && s.grid[h] && s.grid[h].terrain !== 'severe');
-                            
-                            if (validHexes.length === 0) { collisionDmg += (mobDist - step); break; }
-                            
-                            validHexes.sort((a,b) => {
-                                const distA = getHexDistance(a, attackerPosIdx);
-                                const distB = getHexDistance(b, attackerPosIdx);
-                                return activeAction.coreMobility === 'Push' ? distB - distA : distA - distB; 
-                            });
-                            
-                            const bestHex = validHexes[0];
-                            const currentDist = getHexDistance(pushPos, attackerPosIdx);
-                            const bestDist = getHexDistance(bestHex, attackerPosIdx);
-                            
-                            if (activeAction.coreMobility === 'Push' && bestDist <= currentDist) { collisionDmg += (mobDist - step); break; }
-                            if (activeAction.coreMobility === 'Pull' && bestDist >= currentDist) { collisionDmg += (mobDist - step); break; }
-                            
-                            pushPos = bestHex;
-                        }
-                        
-                        t.pos = pushPos;
-                        log += `\n>> FORCED MOVEMENT: Entity thrown via [${activeAction.coreMobility}] momentum.`;
-
-                        if (collisionDmg > 0) {
-                            if (t.type === 'enemy') {
-                                const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
-                                if (eIndex !== -1) {
-                                    newEnemies[eIndex].currentHp = Math.max(0, newEnemies[eIndex].currentHp - collisionDmg);
-                                    if (newEnemies[eIndex].currentHp <= 0) deadEnemyUids.add(t.refId);
-                                }
-                            } else if (t.type === 'player') {
-                                const p = newPlayers[t.refId];
-                                if (p) p.currentHp = Math.max(0, p.currentHp - collisionDmg);
-                            }
-                            log += `\n>> SLAM COLLISION: Entity struck impassable terrain for ${collisionDmg} physical damage.`;
-                        }
-                    }
-                }
-            }
-        });
-
-        if (hitCount === 0) log += `\nNo valid targets in payload array.`;
-
-        let newEnemyPoolTotal = encounter?.enemyPoolTotal || 0;
-        
-        if (activeAction.isEnemy) {
-            newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - safeInt(activeAction.cost));
-            log += `\n>> [-${safeInt(activeAction.cost)} Res] Hostile Action executed.`;
-        } else if (activeAction.sourceId) {
-            const p = newPlayers[activeAction.sourceId];
-            if (p) {
-                const pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
-
-                if (activeAction.isBasic) {
-                    p.usedBasicAttack = true;
-                    p.resPool = pRes >= 10 ? pRes : pRes + 1; 
-                    log += `\n>> [+1 Res] Basic Attack executed.`;
-                } else if (activeAction.isImprovised) {
-                    p.resPool = Math.max(0, pRes - 1);
-                    log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
                 } else {
-                    const costDeduction = safeInt(activeAction.cost);
-                    p.resPool = Math.max(0, pRes - costDeduction);
-                    if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`;
-                }
-            }
-        }
-
-        let newGrid = [...activeGrid];
-        let steamCount = 0; let combustCount = 0; let conductCount = 0; let annihilateCount = 0; let changedCount = 0;
-        
-        newGrid = newGrid.map((cell, idx) => {
-            if (aoeHexes.includes(idx)) {
-                let cellChanged = false;
-                let newTerrain = cell.terrain;
-                let newElem = cell.terrainElement;
-
-                if (activeAction.terrain) {
-                    if (cell.terrain === 'severe' && activeAction.terrain !== 'clear') {
-                        // Terrain generation blocked by Bedrock
-                    } else {
-                        newTerrain = activeAction.terrain === 'clear' ? null : activeAction.terrain;
-                        newElem = activeAction.terrain === 'clear' ? null : dispCore;
-                        cellChanged = true;
-                        changedCount++;
+                    log += `\n>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`;
+                    if (attIdx !== -1) {
+                        actualTargetHex = newTokens[attIdx].pos;
                     }
                 }
-
-                let baseCellElem = cell.terrainElement || newElem;
-                
-                if (baseCellElem === 'Cryo' && dispCore === 'Thermal') {
-                    newTerrain = 'steam'; newElem = 'Steam'; steamCount++; cellChanged = true;
-                } else if (baseCellElem === 'Toxic' && dispCore === 'Thermal') {
-                    newTerrain = null; newElem = null; combustCount++; cellChanged = true;
-                } else if ((baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro') {
-                    newTerrain = 'minor'; newElem = 'Electro'; conductCount++; cellChanged = true;
-                } else if ((baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void')) {
-                    newTerrain = null; newElem = null; annihilateCount++; cellChanged = true;
-                }
-
-                if (cellChanged) return { ...cell, terrain: newTerrain, terrainElement: newElem };
             }
-            return cell;
+            
+            log += `Base Damage: ${rawDmg}\n`;
+
+            const originPosIdx = attIdx !== -1 ? newTokens[attIdx].pos : null;
+            const aoeHexes = getAoEHexes(actualTargetHex, originPosIdx, action.a);
+
+            const isExecute = action.effectCore === 'Execute';
+            let deadEnemyUids = new Set();
+            const consumeStates = ['Invulnerable', 'Shielded', 'Vulnerable', 'Evasive'];
+
+            newTokens.forEach(t => {
+                if (aoeHexes.includes(t.pos)) {
+                    hitCount++;
+                    const targetCoords = getHexCoords(t.pos);
+                    
+                    let isFlanking = false;
+                    if ((!action.a || action.a === '0' || action.a === 0) && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
+                        const aCoords = getHexCoords(attackerPosIdx);
+                        const dx = aCoords.x - targetCoords.x; 
+                        const dy = aCoords.y - targetCoords.y;
+                        let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                        if (isNaN(angle)) angle = 0;
+                        if (angle < 0) angle += 360; 
+                        const facingAngle = (t.facing || 0) * 60; 
+                        let diff = Math.abs(angle - facingAngle);
+                        if (isNaN(diff)) diff = 0;
+                        if (diff > 180) diff = 360 - diff;
+                        if (diff > 90) isFlanking = true; 
+                    }
+
+                    let baseCellElem = newGrid[t.pos]?.terrainElement;
+                    let isOnSteamReact = baseCellElem === 'Cryo' && dispCore === 'Thermal';
+                    let isOnCombustReact = baseCellElem === 'Toxic' && dispCore === 'Thermal';
+                    let isOnConductReact = (baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro';
+                    let isOnAnnihilateReact = (baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void');
+
+                    let targetWasHit = false;
+                    
+                    if (t.type === 'enemy') {
+                        const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
+                        if (eIndex !== -1) {
+                            targetWasHit = true;
+                            const enemy = newEnemies[eIndex];
+                            let newHp = safeInt(enemy.currentHp);
+                            let barriers = [...(enemy.currentBarriers || [])];
+                            let staggered = enemy.staggered;
+                            
+                            let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
+                            let incomingDmg = rawDmg;
+
+                            const rpsMult = getAffinityMultiplier(dispCore, enemy.affinity);
+                            if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${enemy.affinity || 'Kinetic'})`; }
+                            if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${enemy.affinity || 'Kinetic'})`; }
+
+                            if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
+
+                            if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; }
+                            if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
+                            if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; }
+                            if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
+                            
+                            if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                            if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                            if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
+                            if (coreStates.includes('Evasive') && !isExecute) log += `\n>> [Evasive] triggered.`;
+
+                            if (isExecute) {
+                                barriers.fill(0);
+                                newHp = 0;
+                                staggered = true;
+                                log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`;
+                            } else {
+                                let dmgRemaining = incomingDmg;
+                                for (let i = 0; i < barriers.length; i++) {
+                                    if (barriers[i] > 0 && dmgRemaining > 0) {
+                                        if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
+                                        else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
+                                    }
+                                }
+                                newHp = Math.max(0, newHp - dmgRemaining);
+                                if (enemy.currentBarriers && enemy.currentBarriers.some(b => b > 0) && barriers.every(b => b === 0)) staggered = true; 
+                                log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.`;
+                                if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
+                            }
+
+                            let updatedStatuses = (enemy.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
+                            
+                            if (action.effectName && !isExecute) {
+                                let newlyAppliedCore = action.effectCore || getCoreState(action.effectName);
+                                updatedStatuses.push(action.effectName);
+                                log += `\n>> State [${action.effectName}] applied to ${enemy.name}!`;
+
+                                if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
+                                else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
+                                else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
+                                else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
+                            }
+
+                            if (newHp <= 0) {
+                                log += `\n>> TARGET DESTROYED! Entity purged from grid.`;
+                                deadEnemyUids.add(enemy.uid);
+                            } else {
+                                newEnemies[eIndex] = { ...enemy, currentBarriers: barriers, currentHp: newHp, staggered, statuses: updatedStatuses };
+                            }
+                        }
+                    } 
+                    else if (t.type === 'player') {
+                        const p = newPlayers[t.refId];
+                        if (p) {
+                            targetWasHit = true;
+                            const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
+                            const wpn = safeArmory.find(w => w.id === (p.weaponId || 'w01')) || safeArmory[0];
+                            let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0);
+                            let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0;
+
+                            let coreStates = (p.statuses || []).map(st => getCoreState(st));
+                            let forcedEvasion = coreStates.includes('Evasive');
+
+                            let incomingDmg = rawDmg;
+                            const rpsMult = getAffinityMultiplier(dispCore, p.affinity || 'Kinetic');
+                            if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${p.affinity || 'Kinetic'})`; }
+                            if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${p.affinity || 'Kinetic'})`; }
+
+                            if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
+                            
+                            if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; }
+                            if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
+                            if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; }
+                            if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
+
+                            if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                            if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                            if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
+
+                            if (isExecute) {
+                                p.currentHp = 0;
+                                log += `\n>> AGENT EXECUTED! [Critical System Failure]`;
+                            } else {
+                                let mitigation = 0; let mitType = "None"; let trueFlank = isFlanking || (action.a !== undefined && action.a !== 0 && action.a !== '0');
+                                
+                                if (forcedEvasion) {
+                                    trueFlank = true; mitType = "Forced Evasion [State]";
+                                    if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; }
+                                    else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
+                                } else if (trueFlank) {
+                                    if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
+                                    else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
+                                } else {
+                                    if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } 
+                                    else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
+                                }
+
+                                const finalDmg = Math.max(0, incomingDmg - mitigation);
+                                const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+                                p.currentHp = Math.max(0, safeInt(p.currentHp ?? derivedMaxHp) - finalDmg);
+                                log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
+                            }
+
+                            p.statuses = (p.statuses || []).filter(st => !consumeStates.includes(getCoreState(st)));
+
+                            if (action.effectName && !isExecute) {
+                                let newlyAppliedCore = action.effectCore || getCoreState(action.effectName);
+                                p.statuses = [...(p.statuses || []), action.effectName];
+                                log += `\n>> State [${action.effectName}] applied to ${p.name}!`;
+
+                                if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2;
+                                else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
+                                else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0;
+                                else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
+                            }
+                        }
+                    }
+
+                    if (targetWasHit && safeInt(action.m) > 0 && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
+                        if (action.coreMobility === 'Push' || action.coreMobility === 'Pull') {
+                            let pushPos = t.pos;
+                            let collisionDmg = 0;
+                            const mobDist = safeInt(action.m);
+                            
+                            for (let step = 0; step < mobDist; step++) {
+                                const adjHexes = getAdjacentHexes(pushPos);
+                                const validHexes = adjHexes.filter(h => newGrid && newGrid[h] && newGrid[h].terrain !== 'severe');
+                                
+                                if (validHexes.length === 0) { collisionDmg += (mobDist - step); break; }
+                                
+                                validHexes.sort((a,b) => {
+                                    const distA = getHexDistance(a, attackerPosIdx);
+                                    const distB = getHexDistance(b, attackerPosIdx);
+                                    return action.coreMobility === 'Push' ? distB - distA : distA - distB; 
+                                });
+                                
+                                const bestHex = validHexes[0];
+                                const currentDist = getHexDistance(pushPos, attackerPosIdx);
+                                const bestDist = getHexDistance(bestHex, attackerPosIdx);
+                                
+                                if (action.coreMobility === 'Push' && bestDist <= currentDist) { collisionDmg += (mobDist - step); break; }
+                                if (action.coreMobility === 'Pull' && bestDist >= currentDist) { collisionDmg += (mobDist - step); break; }
+                                
+                                pushPos = bestHex;
+                            }
+                            
+                            t.pos = pushPos;
+                            log += `\n>> FORCED MOVEMENT: Entity thrown via [${action.coreMobility}] momentum.`;
+
+                            if (collisionDmg > 0) {
+                                if (t.type === 'enemy') {
+                                    const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
+                                    if (eIndex !== -1) {
+                                        newEnemies[eIndex].currentHp = Math.max(0, newEnemies[eIndex].currentHp - collisionDmg);
+                                        if (newEnemies[eIndex].currentHp <= 0) deadEnemyUids.add(t.refId);
+                                    }
+                                } else if (t.type === 'player') {
+                                    const p = newPlayers[t.refId];
+                                    if (p) p.currentHp = Math.max(0, safeInt(p.currentHp) - collisionDmg);
+                                }
+                                log += `\n>> SLAM COLLISION: Entity struck impassable terrain for ${collisionDmg} physical damage.`;
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (hitCount === 0) log += `\nNo valid targets in payload array.`;
+
+            let newEnemyPoolTotal = s.encounter?.enemyPoolTotal || 0;
+            
+            if (action.isEnemy) {
+                newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - safeInt(action.cost));
+                log += `\n>> [-${safeInt(action.cost)} Res] Hostile Action executed.`;
+            } else if (action.sourceId) {
+                const p = newPlayers[action.sourceId];
+                if (p) {
+                    const pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
+
+                    if (action.isBasic) {
+                        p.usedBasicAttack = true;
+                        p.resPool = pRes >= 10 ? pRes : pRes + 1; 
+                        log += `\n>> [+1 Res] Basic Attack executed.`;
+                    } else if (action.isImprovised) {
+                        p.resPool = Math.max(0, pRes - 1);
+                        log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
+                    } else {
+                        const costDeduction = safeInt(action.cost);
+                        p.resPool = Math.max(0, pRes - costDeduction);
+                        if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`;
+                    }
+                }
+            }
+
+            let steamCount = 0; let combustCount = 0; let conductCount = 0; let annihilateCount = 0; let changedCount = 0;
+            
+            newGrid = newGrid.map((cell, idx) => {
+                if (aoeHexes.includes(idx)) {
+                    let cellChanged = false;
+                    let newTerrain = cell.terrain;
+                    let newElem = cell.terrainElement;
+
+                    if (action.terrain) {
+                        if (cell.terrain === 'severe' && action.terrain !== 'clear') {
+                            // Blocked by Bedrock
+                        } else {
+                            newTerrain = action.terrain === 'clear' ? null : action.terrain;
+                            newElem = action.terrain === 'clear' ? null : dispCore;
+                            cellChanged = true;
+                            changedCount++;
+                        }
+                    }
+
+                    let baseCellElem = cell.terrainElement || newElem;
+                    
+                    if (baseCellElem === 'Cryo' && dispCore === 'Thermal') {
+                        newTerrain = 'steam'; newElem = 'Steam'; steamCount++; cellChanged = true;
+                    } else if (baseCellElem === 'Toxic' && dispCore === 'Thermal') {
+                        newTerrain = null; newElem = null; combustCount++; cellChanged = true;
+                    } else if ((baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro') {
+                        newTerrain = 'minor'; newElem = 'Electro'; conductCount++; cellChanged = true;
+                    } else if ((baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void')) {
+                        newTerrain = null; newElem = null; annihilateCount++; cellChanged = true;
+                    }
+
+                    if (cellChanged) return { ...cell, terrain: newTerrain, terrainElement: newElem };
+                }
+                return cell;
+            });
+
+            if (changedCount > 0) log += `\n>> TERRAIN SHIFT: ${changedCount} hex(es) painted.`;
+            if (steamCount > 0) log += `\n>> ELEMENTAL REACTION: ${steamCount} hex(es) triggered a Steam Explosion!`;
+            if (combustCount > 0) log += `\n>> ELEMENTAL REACTION: ${combustCount} hex(es) ignited in a Toxic Combustion!`;
+            if (conductCount > 0) log += `\n>> ELEMENTAL REACTION: ${conductCount} hex(es) conducted Chain Lightning!`;
+            if (annihilateCount > 0) log += `\n>> ELEMENTAL REACTION: ${annihilateCount} hex(es) underwent Matter Annihilation!`;
+
+            if (deadEnemyUids.size > 0) {
+                newEnemies = newEnemies.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
+                newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
+            }
+            
+            const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, log);
+
+            if (deadEnemyUids.size > 0) {
+                res.eList = res.eList.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
+                newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
+            }
+
+            return {
+                ...s,
+                players: res.pObj,
+                encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal },
+                tokens: newTokens,
+                grid: newGrid,
+                activeAction: null,
+                globalLog: { message: res.logStr, timestamp: Date.now() }
+            };
         });
-
-        if (changedCount > 0) log += `\n>> TERRAIN SHIFT: ${changedCount} hex(es) painted.`;
-        if (steamCount > 0) log += `\n>> ELEMENTAL REACTION: ${steamCount} hex(es) triggered a Steam Explosion!`;
-        if (combustCount > 0) log += `\n>> ELEMENTAL REACTION: ${combustCount} hex(es) ignited in a Toxic Combustion!`;
-        if (conductCount > 0) log += `\n>> ELEMENTAL REACTION: ${conductCount} hex(es) conducted Chain Lightning!`;
-        if (annihilateCount > 0) log += `\n>> ELEMENTAL REACTION: ${annihilateCount} hex(es) underwent Matter Annihilation!`;
-
-        if (deadEnemyUids.size > 0) {
-            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
-            newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
-        }
-        
-        const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, log);
-
-        if (deadEnemyUids.size > 0) {
-            res.eList = res.eList.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
-            newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
-        }
-
-        pushUpdate(s => ({ 
-            ...s, 
-            players: res.pObj, 
-            encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal }, 
-            tokens: newTokens, 
-            grid: newGrid,
-            activeAction: null,
-            globalLog: { message: res.logStr, timestamp: Date.now() }
-        }));
-
-        if (selectedToken && deadEnemyUids.size > 0) {
-            const stillExists = newTokens.some(t => t.id === selectedToken);
-            if (!stillExists) setSelectedToken(null);
-        }
     };
 
     const handleHexClick = (index) => {
@@ -730,7 +732,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             else resolveCombat(index);
         } else if (paintBrush) {
             pushUpdate(s => {
-                const newGrid = [...(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }))];
+                const newGrid = deepClone(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }));
                 newGrid[index] = { ...newGrid[index], terrain: paintBrush === 'clear' ? null : paintBrush, terrainElement: null };
                 
                 const res = evaluateCrush(s.tokens || [], newGrid, s.players || {}, s.encounter?.enemies || [], new Set(), "");
@@ -746,13 +748,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
     const primeTokenMove = (t) => {
         if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot move Hostile entities.");
-        if (!isGM && t.type === 'player' && t.refId !== localId) return alert("Access Denied: Cannot reposition other Agents.");
+        if (!isGM && t.type === 'player' && String(t.refId) !== String(localId)) return alert("Access Denied: Cannot reposition other Agents.");
 
         let srcName = 'Unknown';
         let coreStates = [];
 
         if (t.type === 'enemy') {
-            const e = (encounter?.enemies || []).find(en => en.uid == t.refId);
+            const e = (encounter?.enemies || []).find(en => String(en.uid) === String(t.refId));
             if (e) { srcName = e.name; coreStates = (e.statuses || []).map(st => getCoreState(st)); }
         } else if (t.type === 'player') {
             const p = players[t.refId];
@@ -780,9 +782,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const rotateToken = (e, id, dir) => {
         e.stopPropagation();
         pushUpdate(s => {
-            const newTokens = [...(s.tokens || [])];
+            const newTokens = deepClone(s.tokens || []);
             const idx = newTokens.findIndex(t => t.id === id);
-            if (idx !== -1) newTokens[idx].facing = (newTokens[idx].facing + dir + 6) % 6; 
+            if (idx !== -1) newTokens[idx].facing = ((newTokens[idx].facing || 0) + dir + 6) % 6; 
             return { ...s, tokens: newTokens };
         });
     };
@@ -887,7 +889,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             let activeStatusList = [];
 
             if (t.type === 'enemy') {
-                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == t.refId);
+                const linkedEnemy = (encounter?.enemies || []).find(e => String(e.uid) === String(t.refId));
                 if (linkedEnemy) {
                     activeStatusList = linkedEnemy.statuses || [];
                     let maxRange = 1;
@@ -936,7 +938,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 );
             }
 
-            const showHoverControls = selectedToken === t.id && (isGM || (t.type === 'player' && t.refId === localId));
+            const showHoverControls = selectedToken === t.id && (isGM || (t.type === 'player' && String(t.refId) === String(localId)));
 
             return (
                 <div 
@@ -950,7 +952,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
                         setSelectedToken(selectedToken === t.id ? null : t.id); 
                     }}
-                    style={{ backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, transform: `rotate(${t.facing * 60}deg)`, cursor: activeAction ? 'crosshair' : 'pointer' }}
+                    style={{ backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, transform: `rotate(${(t.facing || 0) * 60}deg)`, cursor: activeAction ? 'crosshair' : 'pointer' }}
                 >
                     <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 hover:border-b-white transition-colors" title="Front Arc"></div>
                     
@@ -981,6 +983,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     };
 
     const renderSidebar = () => {
+        const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
+
         if (selectedToken !== null) {
             const activeT = activeTokens.find(t => t.id === selectedToken);
             if (!activeT) return null;
@@ -1028,10 +1032,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         <div className="bg-black border border-gray-700 p-2 text-center font-bold flex items-center justify-center gap-2" style={{ color: pColor }}>
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase">Hit Points</div>
-                                {isGM || (activeT.refId === localId) ? (
+                                {isGM || (String(activeT.refId) === String(localId)) ? (
                                     <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" style={{ color: pColor }} value={p.currentHp ?? 30} onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
-                                        pushUpdate(s => ({ ...s, players: { ...s.players, [activeT.refId]: { ...p, currentHp: val } } }));
+                                        pushUpdate(s => {
+                                            const pClone = deepClone(s.players || {});
+                                            if (pClone[activeT.refId]) pClone[activeT.refId].currentHp = val;
+                                            return { ...s, players: pClone };
+                                        });
                                     }}/> 
                                 ) : (
                                     <div className="text-2xl" style={{ color: pColor }}>{p.currentHp ?? 30}</div>
@@ -1041,11 +1049,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             <div className="flex-1">
                                 <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div>
                                 <div className="flex justify-center items-center gap-1">
-                                    {isGM || (activeT.refId === localId) ? (
+                                    {isGM || (String(activeT.refId) === String(localId)) ? (
                                         <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl" style={{ color: pColor }} value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
-                                                const newT = [...(s.tokens || [])];
+                                                const newT = deepClone(s.tokens || []);
                                                 const tIdx = newT.findIndex(tok => tok.id === activeT.id);
                                                 if (tIdx !== -1) newT[tIdx].movementRemaining = val;
                                                 return { ...s, tokens: newT };
@@ -1055,11 +1063,11 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         <div className="text-2xl" style={{ color: pColor }}>{activeT.movementRemaining ?? activeT.speed ?? 3}</div>
                                     )}
                                     <span className="text-gray-600 text-lg">/</span>
-                                    {isGM || (activeT.refId === localId) ? (
+                                    {isGM || (String(activeT.refId) === String(localId)) ? (
                                         <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
-                                                const newT = [...(s.tokens || [])];
+                                                const newT = deepClone(s.tokens || []);
                                                 const tIdx = newT.findIndex(tok => tok.id === activeT.id);
                                                 if (tIdx !== -1) newT[tIdx].speed = val;
                                                 return { ...s, tokens: newT };
@@ -1079,22 +1087,33 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 {(p.statuses || []).map((st, i) => (
                                     <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
-                                        {(isGM || activeT.refId === localId) && (
+                                        {(isGM || String(activeT.refId) === String(localId)) && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
-                                                const newS = [...p.statuses]; newS.splice(i, 1);
-                                                pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: newS } } }));
+                                                pushUpdate(state => {
+                                                    const pClone = deepClone(state.players || {});
+                                                    if (pClone[activeT.refId] && pClone[activeT.refId].statuses) {
+                                                        pClone[activeT.refId].statuses.splice(i, 1);
+                                                    }
+                                                    return { ...state, players: pClone };
+                                                });
                                             }}>✕</button>
                                         )}
                                     </span>
                                 ))}
                             </div>
-                            {(isGM || activeT.refId === localId) && (
+                            {(isGM || String(activeT.refId) === String(localId)) && (
                                 <div className="flex gap-1">
                                     <input type="text" id="pState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none" placeholder="Add Status..." />
                                     <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => {
                                         const val = document.getElementById('pState').value;
                                         if (val) {
-                                            pushUpdate(state => ({ ...state, players: { ...state.players, [activeT.refId]: { ...p, statuses: [...(p.statuses||[]), val] } } }));
+                                            pushUpdate(state => {
+                                                const pClone = deepClone(state.players || {});
+                                                if (pClone[activeT.refId]) {
+                                                    pClone[activeT.refId].statuses = [...(pClone[activeT.refId].statuses || []), val];
+                                                }
+                                                return { ...state, players: pClone };
+                                            });
                                             document.getElementById('pState').value = '';
                                         }
                                     }}>+</button>
@@ -1102,18 +1121,19 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             )}
                         </div>
 
-                        {(isGM || activeT.refId === localId) && (
+                        {(isGM || String(activeT.refId) === String(localId)) && (
                             <div className="flex gap-2 mt-2">
-                                <button className={`flex-1 font-bold py-1 uppercase text-xs transition-colors ${disableMovement ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={disableMovement} onClick={() => primeTokenMove(activeT)}>Move</button>
-                                <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks) && !isGM} onClick={() => {
+                                <button className={`flex-1 font-bold py-1 uppercase text-xs transition-colors ${(disableMovement || !isMyTurn) && !isGM ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={(disableMovement || !isMyTurn) && !isGM} onClick={() => primeTokenMove(activeT)}>Move</button>
+                                <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks || !isMyTurn) && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks || !isMyTurn) && !isGM ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks || !isMyTurn) && !isGM} onClick={() => {
+                                    if (!isGM && !isMyTurn) return alert("System Locked: Hostile turn in progress.");
                                     if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                     if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
                                     
                                     let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
                                     if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
 
-                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name || 'Weapon Attack', d: calcBaseDmg, a: 0, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: getCoreElement(activeWeapon.element || 'Kinetic'), isBasic: true, cost: 0 } }))
-                                }}>{(disableAttacks ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK'))}</button>
+                                    pushUpdate(s => ({ ...s, activeAction: { type: null, isImprovised: false, originalCost: 0, m: 0, coreMobility: null, effectName: null, terrain: null, desc: null, a: 0, u: 0, source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name || 'Weapon Attack', d: calcBaseDmg, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: getCoreElement(activeWeapon.element || 'Kinetic'), effectCore: null, isBasic: true, cost: 0 } }))
+                                }}>{(disableAttacks && !isGM) ? 'LOCKED' : (p.usedBasicAttack && !isGM ? 'EXHAUSTED' : 'BASIC ATTACK')}</button>
                             </div>
                         )}
                         
@@ -1141,25 +1161,26 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                         {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                         
-                                        {(isGM || activeT.refId === localId) && (
+                                        {(isGM || String(activeT.refId) === String(localId)) && (
                                             <>
-                                                <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
+                                                <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks || !isMyTurn) && !isGM} onClick={() => {
+                                                    if (!isGM && !isMyTurn) return alert("System Locked: Hostile turn in progress.");
                                                     if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                                     if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${cardCost}.`);
                                                     
-                                                    let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
+                                                    let finalRange = isBlind ? '1' : (c.range || '1');
                                                     let finalAoe = isBlind ? 0 : (c.a || 0);
                                                     if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
                                                     pushUpdate(s => ({ ...s, activeAction: { 
-                                                        type: isBlink ? 'blink' : undefined,
+                                                        type: isBlink ? 'blink' : null,
                                                         source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, 
-                                                        name: c.name || 'Custom Action', d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMob,
-                                                        range: finalRange, effectName: c.effectName, effectCore: c.effectCore || getCoreState(c.effectName), 
-                                                        elementRaw: c.elementRaw || 'Kinetic', elementCore: dispCore, terrain: c.terrain, 
-                                                        desc: c.desc, isBasic: false, cost: cardCost 
+                                                        name: c.name || 'Custom Action', d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMob || null,
+                                                        range: finalRange, effectName: c.effectName || null, effectCore: c.effectCore || getCoreState(c.effectName) || null, 
+                                                        elementRaw: c.elementRaw || 'Kinetic', elementCore: dispCore, terrain: c.terrain || null, 
+                                                        desc: c.desc || null, isBasic: false, isImprovised: false, originalCost: 0, cost: cardCost 
                                                     } }))
-                                                }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
+                                                }}>{(disableAttacks && !isGM) ? 'LOCKED' : (isNoFuel && !isGM ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
                                             </>
                                         )}
                                     </div>
@@ -1171,7 +1192,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             }
 
             if (activeT.type === 'enemy') {
-                const linkedEnemy = (encounter?.enemies || []).find(e => e.uid == activeT.refId);
+                const linkedEnemy = (encounter?.enemies || []).find(e => String(e.uid) === String(activeT.refId));
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
                 const eCoreStates = (linkedEnemy.statuses || []).map(st => getCoreState(st));
@@ -1194,8 +1215,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     <input type="number" className="w-full bg-transparent text-center outline-none text-2xl" value={linkedEnemy.currentHp} onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
                                         pushUpdate(s => {
-                                            const newE = [...(s.encounter?.enemies || [])];
-                                            const eIdx = newE.findIndex(en => en.uid == activeT.refId);
+                                            const newE = deepClone(s.encounter?.enemies || []);
+                                            const eIdx = newE.findIndex(en => String(en.uid) === String(activeT.refId));
                                             if (eIdx !== -1) newE[eIdx].currentHp = val;
                                             return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                         });
@@ -1212,7 +1233,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         <input type="number" className="w-6 bg-transparent text-right outline-none text-2xl text-[#ff6600]" value={activeT.movementRemaining ?? activeT.speed ?? 3} onChange={(e) => {
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
-                                                const newT = [...(s.tokens || [])];
+                                                const newT = deepClone(s.tokens || []);
                                                 const tIdx = newT.findIndex(tok => tok.id === activeT.id);
                                                 if (tIdx !== -1) newT[tIdx].movementRemaining = val;
                                                 return { ...s, tokens: newT };
@@ -1226,7 +1247,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         <input type="number" className="w-6 bg-transparent text-left outline-none text-lg text-gray-500" value={activeT.speed ?? 3} onChange={(e) => {
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
-                                                const newT = [...(s.tokens || [])];
+                                                const newT = deepClone(s.tokens || []);
                                                 const tIdx = newT.findIndex(tok => tok.id === activeT.id);
                                                 if (tIdx !== -1) newT[tIdx].speed = val;
                                                 return { ...s, tokens: newT };
@@ -1252,8 +1273,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         {isGM && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
                                                 pushUpdate(s => {
-                                                    const newE = [...(s.encounter?.enemies || [])];
-                                                    const eIdx = newE.findIndex(en => en.uid == linkedEnemy.uid);
+                                                    const newE = deepClone(s.encounter?.enemies || []);
+                                                    const eIdx = newE.findIndex(en => String(en.uid) === String(linkedEnemy.uid));
                                                     if (eIdx !== -1) newE[eIdx].statuses.splice(i, 1);
                                                     return { ...s, encounter: { ...s.encounter, enemies: newE } };
                                                 });
@@ -1270,8 +1291,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         const val = document.getElementById('eState').value;
                                         if (val) {
                                             pushUpdate(s => {
-                                                const newE = [...(s.encounter?.enemies || [])];
-                                                const eIdx = newE.findIndex(en => en.uid == linkedEnemy.uid);
+                                                const newE = deepClone(s.encounter?.enemies || []);
+                                                const eIdx = newE.findIndex(en => String(en.uid) === String(linkedEnemy.uid));
                                                 if (eIdx !== -1) newE[eIdx].statuses.push(val);
                                                 return { ...s, encounter: { ...s.encounter, enemies: newE } };
                                             });
@@ -1324,7 +1345,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                     <div>
                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)]} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
+                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                     </div>
                                     
@@ -1341,7 +1362,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                             let finalAoe = isBlind ? 0 : parsedAoe;
                                             if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, cost: eCost, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
+                                            pushUpdate(s => ({ ...s, activeAction: { type: null, isBasic: false, isImprovised: false, originalCost: eCost, m: 0, coreMobility: null, u: 0, desc: null, source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, cost: eCost, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff || null, effectCore: getCoreState(pEff) || null, elementRaw: parsedElement || 'Kinetic', elementCore: getCoreElement(parsedElement) || 'Kinetic', terrain: pTerrain || null } }))
                                         }}>
                                             {disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}
                                         </button>
@@ -1439,6 +1460,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     {activeAction.terrain && (
                                         <span className="text-yellow-400">
                                             TERRAIN: [{String(activeAction.terrain).toUpperCase()}]
+                                        </span>
+                                    )}
+
+                                    {safeInt(activeAction.m) > 0 && (
+                                        <span className="text-blue-400">
+                                            MOBILITY: {safeInt(activeAction.m)} [{String(activeAction.coreMobility || '').toUpperCase()}]
                                         </span>
                                     )}
                                 </div>

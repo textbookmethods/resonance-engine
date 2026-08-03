@@ -48,9 +48,19 @@ const STATE_DESCRIPTIONS = {
     'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
 };
 
+const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+const safeArray = (arr) => {
+    if (!arr) return [];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    return [];
+};
+
 const getCoreElement = (input) => {
     if (!input) return 'Kinetic';
-    const clean = input.toLowerCase().trim();
+    const clean = String(input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
         if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
     }
@@ -59,12 +69,12 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const match = input.match(/\[(.*?)\]/);
-    const clean = (match ? match[1] : input).toLowerCase().trim();
+    const match = String(input).match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : String(input)).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return input; 
+    return String(input); 
 };
 
 export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
@@ -74,12 +84,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const template = bestiary.find(b => b.id === bestiaryId);
         if (!template) return;
         const newEnemy = { ...template, uid: Date.now(), currentHp: template.hp || 0, currentBarriers: template.barriers ? [...template.barriers] : [], siphonActive: false, staggered: false, statuses: [] };
-        updateEnc({ enemies: [...(encounter?.enemies || []), newEnemy] });
+        updateEnc({ enemies: [...safeArray(encounter?.enemies), newEnemy] });
     };
 
-    // NEW: Accepts eCost from the UI mapping loop and checks against Global Limits
     const primeEnemyAbility = (enemy, cleanName, desc, eCost) => {
-        const eStates = (enemy.statuses || []).map(s => getCoreState(s));
+        const eStates = safeArray(enemy.statuses).map(s => getCoreState(s));
         if (eStates.includes('Stunned')) return alert("System Locked: Entity is STUNNED.");
 
         const currentHostileRes = encounter?.enemyPoolTotal || 0;
@@ -118,7 +127,27 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             alert("Warning: Entity is BLIND. Targeting optics restricted to adjacent hexes.");
         }
 
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, cost: eCost, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch, terrain: pTerrain } }));
+        pushUpdate(s => ({ ...s, activeAction: { 
+            type: null,
+            source: enemy.name || 'Hostile', 
+            sourceId: enemy.uid || null, 
+            isEnemy: true, 
+            isBasic: false,
+            isImprovised: false,
+            originalCost: eCost,
+            cost: eCost, 
+            name: cleanName || 'Hostile Action', 
+            d: parsedDmg, 
+            a: parsedAoe, 
+            u: 0, m: 0, coreMobility: null,
+            range: eRange || '1', 
+            effectName: parsedEff || null, 
+            effectCore: coreEff || null, 
+            elementRaw: rawMatch || 'Kinetic', 
+            elementCore: coreMatch || 'Kinetic', 
+            terrain: pTerrain || null,
+            desc: null
+        } }));
     };
 
     const handleNextRound = () => {
@@ -126,18 +155,18 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             const newRound = (s.encounter?.round || 0) + 1;
             let log = [];
             let deadEnemyUids = new Set();
-            let newEnemies = [...(s.encounter?.enemies || [])];
-            let newPlayers = { ...(s.players || {}) };
-            let newTokens = [...(s.tokens || [])];
+            const newEnemies = deepClone(safeArray(s.encounter?.enemies));
+            const newPlayers = deepClone(s.players || {});
+            const newTokens = deepClone(safeArray(s.tokens));
 
             newEnemies.forEach(e => {
-                let coreStates = (e.statuses || []).map(st => getCoreState(st));
+                let coreStates = safeArray(e.statuses).map(st => getCoreState(st));
                 let dotDmg = 0;
                 let activeDoTs = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 
                 if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
 
-                const t = newTokens.find(tok => tok.type === 'enemy' && tok.refId == e.uid);
+                const t = newTokens.find(tok => tok.type === 'enemy' && String(tok.refId) === String(e.uid));
                 if (t && s.grid) {
                     if (s.grid[t.pos]?.terrain === 'major') { dotDmg += 5; activeDoTs.push('Major Terrain'); }
                     if (s.grid[t.pos]?.terrain === 'steam') { dotDmg += 5; activeDoTs.push('Steam Burn'); }
@@ -149,18 +178,18 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     if (e.currentHp <= 0) deadEnemyUids.add(e.uid);
                 }
                 
-                e.statuses = (e.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
+                e.statuses = safeArray(e.statuses).filter(st => getCoreState(st) !== 'Knockdown');
             });
 
             Object.keys(newPlayers).forEach(pid => {
                 let p = newPlayers[pid];
-                let coreStates = (p.statuses || []).map(st => getCoreState(st));
+                let coreStates = safeArray(p.statuses).map(st => getCoreState(st));
                 let dotDmg = 0;
                 let activeDoTs = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 
                 if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
 
-                const t = newTokens.find(tok => tok.type === 'player' && tok.refId === pid);
+                const t = newTokens.find(tok => tok.type === 'player' && String(tok.refId) === String(pid));
                 if (t && s.grid) {
                     if (s.grid[t.pos]?.terrain === 'major') { dotDmg += 5; activeDoTs.push('Major Terrain'); }
                     if (s.grid[t.pos]?.terrain === 'steam') { dotDmg += 5; activeDoTs.push('Steam Burn'); }
@@ -170,7 +199,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     p.currentHp = 0;
                     log.push(`AGENT CRUSHED! [${p.name}]'s Entombment timer expired.`);
                 } else if (p.statuses && p.statuses.includes('Crushed [1/3]')) {
-                    p.statuses = p.statuses.filter(st => st !== 'Crushed [1/3]');
+                    p.statuses = safeArray(p.statuses).filter(st => st !== 'Crushed [1/3]');
                     p.statuses.push('Crushed [2/3]');
                     log.push(`AGENT ENTOMBED! [${p.name}]'s structural integrity failing. [2/3]`);
                 }
@@ -180,13 +209,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     log.push(`Agent [${p.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
                 }
 
-                // NEW: Resonance Overload automatically dissipates back down to the safe cap of 10
                 if (p.resPool > 10) {
                     p.resPool = 10;
                     log.push(`AGENT ALERT: [${p.name || 'Agent'}]'s Resonance Overload dissipated back to 10.`);
                 }
 
-                p.statuses = (p.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
+                p.statuses = safeArray(p.statuses).filter(st => getCoreState(st) !== 'Knockdown');
                 p.usedParry = false; p.usedIntercept = false; p.usedEvade = false; p.usedBasicAttack = false;
             });
 
@@ -194,11 +222,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 let coreStates = [];
                 let baseSpeed = t.speed ?? 3;
                 if (t.type === 'enemy') {
-                    const e = newEnemies.find(en => en.uid == t.refId);
-                    if (e) coreStates = (e.statuses || []).map(st => getCoreState(st));
+                    const e = newEnemies.find(en => String(en.uid) === String(t.refId));
+                    if (e) coreStates = safeArray(e.statuses).map(st => getCoreState(st));
                 } else {
                     const p = newPlayers[t.refId];
-                    if (p) coreStates = (p.statuses || []).map(st => getCoreState(st));
+                    if (p) coreStates = safeArray(p.statuses).map(st => getCoreState(st));
                 }
 
                 let dynSpeed = baseSpeed;
@@ -209,24 +237,27 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 t.movementRemaining = dynSpeed;
             });
 
+            let activeEnemies = newEnemies;
+            let activeTokensList = newTokens;
+
             if (deadEnemyUids.size > 0) {
-                newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
-                newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+                activeEnemies = activeEnemies.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
+                activeTokensList = activeTokensList.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
                 log.push(`>> ${deadEnemyUids.size} entities purged due to terminal damage.`);
             }
 
             if (log.length > 0) {
-                return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers, globalLog: { message: "ROUND ADVANCE PROTOCOLS:\n\n" + log.join('\n'), timestamp: Date.now() } };
+                return { ...s, encounter: { ...s.encounter, round: newRound, enemies: activeEnemies }, tokens: activeTokensList, players: newPlayers, globalLog: { message: "ROUND ADVANCE PROTOCOLS:\n\n" + log.join('\n'), timestamp: Date.now() } };
             }
 
-            return { ...s, encounter: { ...s.encounter, round: newRound, enemies: newEnemies }, tokens: newTokens, players: newPlayers };
+            return { ...s, encounter: { ...s.encounter, round: newRound, enemies: activeEnemies }, tokens: activeTokensList, players: newPlayers };
         });
     };
 
     const handleNewEncounter = () => {
         if (window.confirm("Initialize new encounter? This resets rounds to 0, clears the board, and restores all Agent Resonance to 3.")) {
             pushUpdate(s => {
-                const newPlayers = { ...(s.players || {}) };
+                const newPlayers = deepClone(s.players || {});
                 Object.keys(newPlayers).forEach(pid => {
                     newPlayers[pid] = { 
                         ...newPlayers[pid], 
@@ -241,7 +272,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     ...s,
                     encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
                     tokens: [],
-                    grid: Array(150).fill({ type: 'empty', terrain: null }),
+                    grid: Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }),
                     players: newPlayers,
                     activeAction: null
                 };
@@ -251,7 +282,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
     const grantGlobalXP = (amount) => {
         pushUpdate(s => {
-            const newP = { ...(s.players || {}) };
+            const newP = deepClone(s.players || {});
             Object.keys(newP).forEach(pid => {
                 newP[pid].xp = (parseInt(newP[pid].xp) || 0) + amount;
             });
@@ -261,8 +292,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     };
 
     const isOverload = (encounter?.round || 0) >= 4;
-    const enemiesList = (encounter?.enemies || []).filter(Boolean);
-    const enemyTokens = (tokens || []).filter(tok => tok && tok.type === 'enemy').sort((a,b) => a.id - b.id);
+    const enemiesList = safeArray(encounter?.enemies);
+    const enemyTokens = safeArray(tokens).filter(tok => tok && tok.type === 'enemy').sort((a,b) => a.id - b.id);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 font-mono text-sm">
@@ -330,7 +361,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     {enemiesList.length === 0 && <div className="text-gray-500 text-center mt-10 border border-dashed border-gray-700 p-8">No active entities on the grid.</div>}
                     
                     {enemiesList.map((enemy, idx) => {
-                        const myToken = enemyTokens.find(t => t.refId == enemy.uid);
+                        const myToken = enemyTokens.find(t => String(t.refId) === String(enemy.uid));
 
                         return (
                             <div key={enemy.uid} className={`border p-3 flex flex-col xl:flex-row gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
@@ -345,13 +376,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                     </div>
                                     
                                     <div className="flex flex-wrap gap-1 mb-3">
-                                        {(enemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">No active states.</span>}
-                                        {(enemy.statuses || []).map((st, sIdx) => (
-                                            <span key={sIdx} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
+                                        {safeArray(enemy.statuses).length === 0 && <span className="text-xs text-gray-600">No active states.</span>}
+                                        {safeArray(enemy.statuses).map((st, sIdx) => (
+                                            <span key={sIdx} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'State'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                                 {st} <button className="text-red-400 hover:text-white" onClick={() => {
                                                     pushUpdate(s => {
-                                                        const newE = [...(s.encounter?.enemies || [])];
-                                                        if (newE[idx]) newE[idx].statuses.splice(sIdx, 1);
+                                                        const newE = deepClone(safeArray(s.encounter?.enemies));
+                                                        const eIdx = newE.findIndex(en => String(en.uid) === String(enemy.uid));
+                                                        if (eIdx !== -1) newE[eIdx].statuses.splice(sIdx, 1);
                                                         return { ...s, encounter: { ...s.encounter, enemies: newE } };
                                                     });
                                                 }}>✕</button>
@@ -360,17 +392,26 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                     </div>
 
                                     <div className="mt-2 space-y-2">
-                                        {(enemy.abilities || []).map((ability, aIdx) => {
+                                        {safeArray(enemy.abilities).map((ability, aIdx) => {
                                             const parts = (ability || '').split(':');
                                             const rawName = parts[0];
                                             const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                                             
+                                            const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
+                                            const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
+                                            const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
+
+                                            const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
+                                            const shapeMatch = desc.match(/(line|cluster)/i);
+                                            let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
+                                            if (!isBlind && shapeMatch) {
+                                                if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
+                                                if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
+                                            }
+
                                             const costMatch = ability.match(/\((\d+)\s*Res\)/i) || ability.match(/\[(\d+)\s*Res\]/i);
                                             const eCost = costMatch ? parseInt(costMatch[1]) : 0;
-
-                                            const eCoreStates = (enemy.statuses || []).map(st => getCoreState(st));
-                                            const disableAttacks = eCoreStates.includes('Stunned');
 
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
@@ -378,15 +419,35 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
                                             const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
 
+                                            let eRange = "1";
+                                            const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
+                                            if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
+                                            
+                                            const eCoreStates = safeArray(enemy.statuses).map(st => getCoreState(st));
+                                            const disableAttacks = eCoreStates.includes('Stunned');
+
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                                     <div>
                                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)]} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
+                                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc, eCost)}>
+                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
+                                                        if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
+                                                        
+                                                        const currentHostileRes = encounter?.enemyPoolTotal || 0;
+                                                        if (currentHostileRes < eCost) {
+                                                            return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${eCost} RES\nCurrent Pool: ${currentHostileRes} RES`);
+                                                        }
+
+                                                        let finalRange = isBlind ? '1' : eRange;
+                                                        let finalAoe = isBlind ? 0 : parsedAoe;
+                                                        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+
+                                                        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, cost: eCost, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
+                                                    }}>
                                                         {disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}
                                                     </button>
                                                 </div>
@@ -396,16 +457,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                 </div>
                                 
                                 <div className="flex items-center gap-4 w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0 shrink-0">
-                                    {(enemy.currentBarriers || []).map((bar, bIdx) => (
+                                    {safeArray(enemy.currentBarriers).map((bar, bIdx) => (
                                         <div key={bIdx} className="text-center shrink-0">
                                             <div className="text-[10px] text-[#00f0ff] font-bold">BAR {bIdx+1}</div>
                                             <input type="number" className="w-12 bg-gray-900 border border-[#00f0ff] text-center text-white outline-none" value={bar} onChange={(e) => {
                                                 const val = parseInt(e.target.value) || 0;
                                                 pushUpdate(s => {
-                                                    const newE = [...(s.encounter?.enemies || [])];
-                                                    if (newE[idx]) {
-                                                        newE[idx].currentBarriers[bIdx] = val;
-                                                        if (val <= 0 && bar > 0) newE[idx].staggered = true;
+                                                    const newE = deepClone(safeArray(s.encounter?.enemies));
+                                                    const eIdx = newE.findIndex(en => String(en.uid) === String(enemy.uid));
+                                                    if (eIdx !== -1) {
+                                                        newE[eIdx].currentBarriers[bIdx] = val;
+                                                        if (val <= 0 && bar > 0) newE[eIdx].staggered = true;
                                                     }
                                                     return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                                 });
@@ -417,13 +479,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                         <input type="number" className="w-16 bg-gray-900 border border-[#ff6600] text-center text-white font-bold text-lg outline-none" value={enemy.currentHp || 0} onChange={(e) => {
                                             const val = parseInt(e.target.value) || 0;
                                             pushUpdate(s => {
-                                                const newE = [...(s.encounter?.enemies || [])];
-                                                if (newE[idx]) newE[idx].currentHp = val;
+                                                const newE = deepClone(safeArray(s.encounter?.enemies));
+                                                const eIdx = newE.findIndex(en => String(en.uid) === String(enemy.uid));
+                                                if (eIdx !== -1) newE[eIdx].currentHp = val;
                                                 return { ...s, encounter: { ...s.encounter, enemies: newE }};
                                             });
                                         }} />
                                     </div>
-                                    <button className="text-gray-600 hover:text-red-500 ml-2 text-xl font-bold transition-colors px-2 shrink-0" onClick={() => updateEnc({ enemies: enemiesList.filter(e => e.uid !== enemy.uid) })}>✕</button>
+                                    <button className="text-gray-600 hover:text-red-500 ml-2 text-xl font-bold transition-colors px-2 shrink-0" onClick={() => updateEnc({ enemies: enemiesList.filter(e => String(e.uid) !== String(enemy.uid)) })}>✕</button>
                                 </div>
                             </div>
                         );

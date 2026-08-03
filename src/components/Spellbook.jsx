@@ -37,6 +37,13 @@ const STATE_DESCRIPTIONS = {
     'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
 };
 
+const safeArray = (arr) => {
+    if (!arr) return [];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    return [];
+};
+
 const getCoreState = (input) => {
     if (!input) return '';
     const match = String(input).match(/\[(.*?)\]/);
@@ -44,7 +51,7 @@ const getCoreState = (input) => {
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return input; 
+    return String(input); 
 };
 
 const formatAoe = (a) => {
@@ -55,7 +62,7 @@ const formatAoe = (a) => {
 
 export default function Spellbook({ players = {}, localId, pushUpdate }) {
     const player = players[localId] || {};
-    const savedSkills = player.savedSkills || [];
+    const savedSkills = safeArray(player.savedSkills);
 
     const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
@@ -65,7 +72,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
     };
 
     const equipToHUD = (skill) => {
-        const currentHUD = player.customCards || [];
+        const currentHUD = safeArray(player.customCards);
         if (currentHUD.length >= 4) {
             return alert("HUD is full. Remove an active skill on the Combat HUD first.");
         }
@@ -102,7 +109,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
 
                         return (
-                            <div key={skill.id} className="bg-black border border-gray-700 p-4 relative group flex flex-col transition-colors hover:border-[#00f0ff]">
+                            <div key={skill.id || Math.random()} className="bg-black border border-gray-700 p-4 relative group flex flex-col transition-colors hover:border-[#00f0ff]">
                                 <button className="absolute top-2 right-2 text-gray-500 hover:text-red-500 font-bold" onClick={() => deleteSkill(skill.id)}>✕</button>
                                 
                                 <div className="flex-1 mb-4 pr-4">
@@ -112,17 +119,17 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                         TYPE: [{showType}]
                                     </div>
                                     
-                                    <div className="text-[#ff6600] font-bold text-xs mb-3">COST: -{skill.cost} RES</div>
+                                    <div className="text-[#ff6600] font-bold text-xs mb-3">COST: -{skill.cost || 0} RES</div>
                                     
                                     <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 mb-3">
-                                        <div><span className="text-gray-500">Damage:</span> {skill.d}</div>
+                                        <div><span className="text-gray-500">Damage:</span> {skill.d || 0}</div>
                                         <div><span className="text-gray-500">AoE:</span> {formatAoe(skill.a)}</div>
-                                        <div><span className="text-gray-500">Utility:</span> {skill.u}</div>
+                                        <div><span className="text-gray-500">Utility:</span> {skill.u || 0}</div>
                                         <div><span className="text-gray-500">Affinity:</span> {skill.alpha || 1}</div>
                                     </div>
                                     
                                     {skill.effectName && (
-                                        <div title={STATE_DESCRIPTIONS[getCoreState(skill.effectName)]} className="mb-3 bg-purple-900 border border-purple-500 text-white text-[10px] px-2 py-1 font-bold inline-block cursor-help">
+                                        <div title={STATE_DESCRIPTIONS[getCoreState(skill.effectName)] || 'State'} className="mb-3 bg-purple-900 border border-purple-500 text-white text-[10px] px-2 py-1 font-bold inline-block cursor-help">
                                             Effect: [{(String(skill.effectName).toLowerCase() !== String(skill.effectCore || '').toLowerCase() && skill.effectCore) ? `${skill.effectName} : ${skill.effectCore}` : skill.effectName}]
                                         </div>
                                     )}
@@ -135,7 +142,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
 
                                     {skill.m > 0 && (
                                         <div className="mb-3 bg-black border border-blue-500 text-blue-400 text-[10px] px-2 py-1 font-bold inline-block w-fit">
-                                            Mobility: {skill.m} [{String(skill.coreMobility).toUpperCase()}]
+                                            Mobility: {skill.m} [{String(skill.coreMobility || '').toUpperCase()}]
                                         </div>
                                     )}
 

@@ -6,9 +6,9 @@ import 'firebase/compat/database';
 import PlayerHUD from './components/PlayerHUD';
 import GridBoard from './components/GridBoard';
 import GMDashboard from './components/GMDashboard';
-import Reference from './components/Reference';
 import Rulebook from './components/Rulebook';
 import Spellbook from './components/Spellbook';
+import Reference from './components/Reference';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDFah77C7Jcp6dSbA1cgqNM39QAg_ik65k",
@@ -26,10 +26,18 @@ if (isFirebaseConfigured && !firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 
+// UNIVERSAL ARRAY REPAIR: Prevents Firebase Object/Array corruption crashes
+const safeArray = (arr) => {
+    if (!arr) return [];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    return [];
+};
+
 const DEFAULT_STATE = {
     players: {}, 
     encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
-    grid: Array(150).fill({ type: 'empty', terrain: null }),
+    grid: Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }),
     tokens: [],
     activeAction: null,
     globalLog: null
@@ -38,8 +46,6 @@ const DEFAULT_STATE = {
 export default function App() {
     const [role, setRole] = useState(null); 
     const [activeTab, setActiveTab] = useState('player');
-    
-    // UPDATED: Session IDs default to blank to prevent accidental public sandbox logins
     const [sessionIdInput, setSessionIdInput] = useState('');
     const [sessionId, setSessionId] = useState('');
     
@@ -55,47 +61,73 @@ export default function App() {
     });
 
     useEffect(() => {
-        if (!isFirebaseConfigured || !role) return;
+        if (!isFirebaseConfigured || !role || !sessionId) return;
         
         setDbStatus('Connecting...');
         const roomRef = firebase.database().ref('sessions/' + sessionId);
         
-        roomRef.on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                if (data.players) {
-                    Object.keys(data.players).forEach(pid => {
-                        if (data.players[pid]) {
-                            data.players[pid].customCards = data.players[pid].customCards || [];
-                            data.players[pid].savedSkills = data.players[pid].savedSkills || [];
-                            data.players[pid].statuses = data.players[pid].statuses || [];
-                            if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
-                        }
-                    });
-                }
-                
-                if (data.encounter?.enemies) {
-                    data.encounter.enemies = data.encounter.enemies.filter(Boolean);
-                    data.encounter.enemies.forEach(e => { if (e) e.statuses = e.statuses || []; });
-                }
-                if (data.tokens) {
-                    data.tokens = data.tokens.filter(Boolean);
-                }
+        const listener = roomRef.on('value', (snapshot) => {
+            let data = snapshot.val();
+            let needsUpdate = false;
 
-                setGameState(data);
-            } else {
-                roomRef.set(DEFAULT_STATE);
+            if (!data) {
+                data = JSON.parse(JSON.stringify(DEFAULT_STATE));
+                needsUpdate = true;
             }
+
+            if (!data.players) { data.players = {}; needsUpdate = true; }
+
+            // FIXED: Secure Agent Creation integrated into the listener to prevent race conditions
+            if (role === 'player' && !data.players[localId]) {
+                data.players[localId] = {
+                    name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
+                    currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, 
+                    resPool: 3, customCards: [], savedSkills: [], statuses: [], 
+                    usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false,
+                    affinityRaw: '', affinity: 'Kinetic', affinityLocked: false
+                };
+                needsUpdate = true;
+            }
+
+            // Universal Data Sweeper
+            Object.keys(data.players).forEach(pid => {
+                if (data.players[pid]) {
+                    data.players[pid].customCards = safeArray(data.players[pid].customCards);
+                    data.players[pid].savedSkills = safeArray(data.players[pid].savedSkills);
+                    data.players[pid].statuses = safeArray(data.players[pid].statuses);
+                    if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
+                }
+            });
+            
+            if (data.encounter) {
+                data.encounter.enemies = safeArray(data.encounter.enemies);
+                data.encounter.enemies.forEach(e => { 
+                    if (e) {
+                        e.statuses = safeArray(e.statuses);
+                        if (e.currentBarriers && typeof e.currentBarriers === 'object' && !Array.isArray(e.currentBarriers)) {
+                            e.currentBarriers = Object.values(e.currentBarriers);
+                        }
+                    } 
+                });
+            }
+            if (data.tokens) data.tokens = safeArray(data.tokens);
+
+            if (needsUpdate) {
+                roomRef.set(data);
+            } else {
+                setGameState(data);
+            }
+            
             setDbStatus('Connected to ' + sessionId);
         });
 
-        return () => roomRef.off();
-    }, [sessionId, role]);
+        return () => roomRef.off('value', listener);
+    }, [sessionId, role, localId]);
 
     const pushUpdate = (updater) => {
         setGameState(prev => {
             const next = updater(prev);
-            if (isFirebaseConfigured && role) {
+            if (isFirebaseConfigured && sessionId) {
                 firebase.database().ref('sessions/' + sessionId).set(next);
             }
             return next;
@@ -104,7 +136,7 @@ export default function App() {
 
     const hardResetSession = () => {
         if (window.confirm("CRITICAL WARNING: This will permanently wipe ALL Agent character sheets, custom grimoires, and grid data for this Session ID. Players will need to refresh their browsers to generate new sheets. Proceed?")) {
-            if (isFirebaseConfigured && role) {
+            if (isFirebaseConfigured && sessionId) {
                 firebase.database().ref('sessions/' + sessionId).set(DEFAULT_STATE);
                 alert("Session Data Purged. Ready for new campaign.");
             }
@@ -112,26 +144,12 @@ export default function App() {
     };
 
     const joinSession = (selectedRole) => {
-        if (!sessionIdInput.trim()) return alert("Please enter a valid Session ID.");
-        setSessionId(sessionIdInput.trim().toUpperCase());
+        const cleanId = sessionIdInput.trim().toUpperCase();
+        if (!cleanId) return alert("Please enter a valid Session ID.");
+        
+        setSessionId(cleanId);
         setRole(selectedRole);
         setActiveTab(selectedRole === 'gm' ? 'gm' : 'player');
-
-        if (selectedRole === 'player') {
-            pushUpdate(s => {
-                if (!s.players || !s.players[localId]) {
-                    const newAgent = { 
-                        name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
-                        currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, 
-                        resPool: 3, customCards: [], savedSkills: [], statuses: [], 
-                        usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false,
-                        affinityRaw: '', affinity: 'Kinetic', affinityLocked: false
-                    };
-                    return { ...s, players: { ...(s.players || {}), [localId]: newAgent } };
-                }
-                return s;
-            });
-        }
     };
 
     const leaveSession = () => {

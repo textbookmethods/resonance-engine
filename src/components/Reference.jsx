@@ -1,101 +1,179 @@
-import { useState } from 'react';
+/* eslint-disable react/no-unescaped-entities */
+import React, { useState } from 'react';
 import { bestiary } from '../data/bestiary';
+import { armory } from '../data/armory';
+
+const safeArray = (arr) => {
+    if (!arr) return [];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    return [];
+};
 
 export default function Reference() {
-    const [filter, setFilter] = useState('');
-    
+    const [activeTab, setActiveTab] = useState('bestiary');
+    const [affinityFilter, setAffinityFilter] = useState('All');
+    const [tierFilter, setTierFilter] = useState('All');
+
+    const validBestiary = safeArray(bestiary);
+    const validArmory = safeArray(armory);
+
+    const affinities = ['All', 'Thermal', 'Cryo', 'Toxic', 'Void', 'Radiant', 'Electro', 'Kinetic'];
+    const tiers = ['All', 1, 2, 3, 4, 5];
+
+    const filteredBestiary = validBestiary.filter(b => {
+        const passAffinity = affinityFilter === 'All' || String(b.affinity).toLowerCase() === String(affinityFilter).toLowerCase();
+        const passTier = tierFilter === 'All' || parseInt(b.tier) === parseInt(tierFilter);
+        return passAffinity && passTier;
+    });
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
-            {/* Bestiary Search Database */}
-            <div className="bg-[#1a222c] p-4 border border-slate-700 lg:col-span-2 h-[75vh] flex flex-col">
-                <h2 className="text-white font-bold text-xl mb-4 border-b border-gray-700 pb-2">Database: Bestiary</h2>
+        <div className="flex flex-col md:flex-row gap-6 h-[75vh] font-mono text-sm">
+            <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-slate-700 flex flex-col gap-2 shrink-0 overflow-y-auto shadow-xl">
+                <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Database</h2>
                 
-                {/* Filters */}
-                <div className="flex gap-2 mb-4">
-                    {['', 'Minion', 'Striker', 'Elite', 'Boss'].map(f => (
-                        <button 
-                            key={f} 
-                            className={`px-3 py-1 border transition-colors ${filter === f ? 'bg-[#00f0ff] text-black border-[#00f0ff] font-bold' : 'border-gray-600 text-gray-400 hover:bg-gray-800 hover:text-white'}`} 
-                            onClick={() => setFilter(f)}
-                        >
-                            {f || 'ALL ENTITIES'}
-                        </button>
-                    ))}
-                </div>
-                
-                {/* Entity Roster */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pr-2 pb-4">
-                    {bestiary.filter(b => filter ? b.type === filter : true).map(b => (
-                        <div key={b.id} className="bg-black border border-gray-700 p-4 hover:border-gray-500 transition-colors">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="font-bold text-[#ff6600] text-lg uppercase tracking-wide">{b.name}</div>
-                                <div className="text-xs text-gray-400 bg-gray-900 px-2 py-1 border border-gray-700 font-bold">
-                                    T{b.tier} {b.type}
+                <button 
+                    className={`p-3 text-left transition-colors border-l-4 ${activeTab === 'bestiary' ? 'bg-black border-[#ff6600] text-[#ff6600] font-bold shadow-inner' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                    onClick={() => setActiveTab('bestiary')}
+                >
+                    Hostile Bestiary
+                </button>
+                <button 
+                    className={`p-3 text-left transition-colors border-l-4 ${activeTab === 'armory' ? 'bg-black border-[#00f0ff] text-[#00f0ff] font-bold shadow-inner' : 'bg-transparent border-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                    onClick={() => setActiveTab('armory')}
+                >
+                    Armory / Weapons
+                </button>
+            </div>
+
+            <div className="flex-1 bg-[#1a222c] p-6 md:p-10 border border-slate-700 overflow-y-auto text-gray-300 shadow-inner">
+                {activeTab === 'bestiary' && (
+                    <div className="animate-fade-in flex flex-col h-full">
+                        <div className="flex flex-col md:flex-row justify-between items-end mb-6 border-b border-gray-700 pb-4 gap-4">
+                            <div>
+                                <h1 className="text-3xl text-white font-bold text-[#ff6600]">HOSTILE ARCHIVE</h1>
+                                <p className="text-gray-500 text-xs tracking-widest uppercase mt-1">Classified Threat Database</p>
+                            </div>
+                            
+                            <div className="flex gap-4">
+                                <div>
+                                    <label className="block text-[10px] text-gray-400 uppercase tracking-widest mb-1">Filter by Affinity</label>
+                                    <select className="bg-black border border-gray-600 p-2 text-white outline-none text-xs w-32" value={affinityFilter} onChange={e => setAffinityFilter(e.target.value)}>
+                                        {affinities.map(a => <option key={a} value={a}>{a}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-gray-400 uppercase tracking-widest mb-1">Filter by Tier</label>
+                                    <select className="bg-black border border-gray-600 p-2 text-white outline-none text-xs w-24" value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
+                                        {tiers.map(t => <option key={t} value={t}>{t === 'All' ? 'All' : `Tier ${t}`}</option>)}
+                                    </select>
                                 </div>
                             </div>
-                            
-                            <div className="flex justify-between text-gray-300 mb-1 border-b border-gray-800 pb-1">
-                                <span>Base HP:</span> 
-                                <span className="text-white font-bold">{b.hp}</span>
-                            </div>
-                            
-                            <div className="flex justify-between text-[#00f0ff] mb-3">
-                                <span>Barriers:</span> 
-                                <span>{b.barriers.length > 0 ? b.barriers.join(' / ') : 'None'}</span>
-                            </div>
-                            
-                            <div className="pt-2">
-                                <div className="text-[10px] text-gray-500 mb-1 tracking-widest uppercase font-bold">Signature Abilities:</div>
-                                <ul className="text-gray-400 list-disc list-inside space-y-1 text-xs">
-                                    {b.abilities.map((a, i) => (
-                                        <li key={i} className="leading-snug">{a}</li>
-                                    ))}
-                                </ul>
-                            </div>
                         </div>
-                    ))}
-                </div>
-            </div>
-            
-            {/* Rules Directory */}
-            <div className="bg-[#1a222c] p-4 border border-slate-700 h-[75vh] overflow-y-auto space-y-6">
-                <h2 className="text-white font-bold text-xl mb-4 border-b border-gray-700 pb-2">Quick Directory</h2>
-                
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-2 uppercase tracking-wide">Ability Cost Math</span>
-                    <div className="bg-black p-3 border border-gray-700 text-gray-300 text-center text-lg shadow-inner">
-                        R_cost = ⌈ α × (d + u + a²) ⌉
+
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {filteredBestiary.length === 0 ? (
+                                <div className="col-span-2 text-center text-gray-600 py-10 border border-dashed border-gray-700">No records found matching these parameters.</div>
+                            ) : (
+                                filteredBestiary.map(enemy => (
+                                    <div key={enemy.id} className="bg-black border border-gray-700 p-4 relative group">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-bold text-white text-lg uppercase tracking-wider">{enemy.name}</h3>
+                                                <div className="flex gap-2 mt-1">
+                                                    <span className="text-[10px] font-bold text-gray-400 bg-gray-900 px-2 py-0.5 border border-gray-600">TIER {enemy.tier}</span>
+                                                    <span className="text-[10px] font-bold text-[#ff6600] border border-[#ff6600] px-2 py-0.5 uppercase">{enemy.affinity || 'Kinetic'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xl font-bold text-[#ff6600] leading-none">{enemy.hp} HP</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 mb-4 border-b border-gray-800 pb-3 mt-3">
+                                            <span className="text-[10px] text-gray-500 uppercase tracking-widest mr-2">Barriers:</span>
+                                            {safeArray(enemy.barriers).length === 0 ? (
+                                                <span className="text-xs text-gray-600">None</span>
+                                            ) : (
+                                                safeArray(enemy.barriers).map((b, i) => (
+                                                    <span key={i} className="text-xs font-bold text-[#00f0ff] bg-blue-900/30 px-2 py-0.5 border border-[#00f0ff]">{b}</span>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] text-gray-500 uppercase tracking-widest">Known Abilities:</div>
+                                            {safeArray(enemy.abilities).map((ab, i) => {
+                                                const parts = ab.split(':');
+                                                const namePart = parts[0];
+                                                const descPart = parts.slice(1).join(':');
+                                                return (
+                                                    <div key={i} className="bg-gray-900 border border-gray-800 p-2 text-xs">
+                                                        <span className="text-[#00f0ff] font-bold block mb-1">{namePart}</span>
+                                                        <span className="text-gray-400 leading-relaxed">{descPart}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
 
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">The Slate (Grid Rules)</span>
-                    <p className="text-gray-400 leading-relaxed text-xs">All combat should start on featureless terrain to encourage player interaction. Players and GMs must negotiate and build the battlefield dynamically using their abilities.</p>
-                </div>
-                
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Hex Movement</span>
-                    <p className="text-gray-400 leading-relaxed text-xs">All adjacent hexes cost 1 movement point. Minor terrain doubles movement cost. Major terrain blocks shift abilities. Severe terrain is impassable and breaks line of sight.</p>
-                </div>
-                
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Facing Arcs</span>
-                    <p className="text-gray-400 leading-relaxed text-xs">Tokens command a 3-hex front arc. Frontline parries only mitigate damage originating within this arc. Attacks from the rear 3 hexes count as Flanking and bypass base mitigation entirely.</p>
-                </div>
+                {activeTab === 'armory' && (
+                    <div className="animate-fade-in flex flex-col h-full">
+                        <div className="mb-6 border-b border-gray-700 pb-4">
+                            <h1 className="text-3xl text-white font-bold text-[#00f0ff]">ARMORY DATABASE</h1>
+                            <p className="text-gray-500 text-xs tracking-widest uppercase mt-1">Agent Standard Issue & Masterwork Equipment</p>
+                        </div>
 
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Defensive Actions</span>
-                    <p className="text-gray-400 leading-relaxed text-xs">
-                        <strong>Front Parry:</strong> Blocks front-arc attacks.<br/>
-                        <strong>Support Intercept:</strong> Protects adjacent allies.<br/>
-                        <strong>Backline Evasion:</strong> Dodges Flanking (rear 3 hexes) and AoE.
-                    </p>
-                </div>
-                
-                <div>
-                    <span className="text-[#00f0ff] font-bold block mb-1 uppercase tracking-wide">Round 4 Overload</span>
-                    <p className="text-gray-400 leading-relaxed text-xs">At Round 4, atmospheric Resonance reaches critical mass. All Resonance generation doubles, and all damage sources are multiplied by 1.5x.</p>
-                </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {validArmory.map(wpn => {
+                                const rList = [];
+                                if (wpn.reqF) rList.push(`${wpn.reqF}F`);
+                                if (wpn.reqS) rList.push(`${wpn.reqS}S`);
+                                if (wpn.reqB) rList.push(`${wpn.reqB}B`);
+                                const reqStr = rList.length > 0 ? `Req: ${rList.join('/')}` : 'No Requirements';
+
+                                return (
+                                    <div key={wpn.id} className="bg-black border border-gray-700 p-4 flex flex-col justify-between h-full">
+                                        <div>
+                                            <h3 className="font-bold text-[#00f0ff] text-md uppercase tracking-wider mb-1 truncate" title={wpn.name}>{wpn.name}</h3>
+                                            <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-800 pb-2">
+                                                Type: <span className="text-white">{wpn.element || 'Kinetic'}</span>
+                                            </div>
+
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs text-gray-500">Base Dmg:</span>
+                                                <span className="text-sm text-white font-bold">{wpn.baseDmg}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-xs text-gray-500">Range:</span>
+                                                <span className="text-sm text-white font-bold">{wpn.range} Hexes</span>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="bg-gray-900 border border-gray-800 p-2 mb-2">
+                                                <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Discipline Lock</div>
+                                                <div className="text-xs font-bold text-yellow-500">{reqStr}</div>
+                                            </div>
+
+                                            {wpn.bonusDesc && (
+                                                <div className="bg-gray-900 border border-gray-800 p-2">
+                                                    <div className="text-[10px] text-[#ff6600] font-bold uppercase tracking-wider mb-1">Synergy Bonus</div>
+                                                    <div className="text-xs text-gray-300">{wpn.bonusDesc}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

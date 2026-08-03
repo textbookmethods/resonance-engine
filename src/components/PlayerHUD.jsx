@@ -38,6 +38,16 @@ const MOBILITY_DICTIONARY = {
     'Pull': ['pull', 'attract', 'draw', 'drag', 'snare', 'hook', 'catch', 'leash']
 };
 
+const CLASS_AFFINITIES = {
+    'Vanguard': { states: ['Knockdown', 'Bleed', 'Shielded', 'Burn', 'Execute'] },
+    'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] },
+    'Conduit': { states: ['Stunned', 'Shocked', 'Shielded', 'Haste', 'Immobilized'] },
+    'Paladin': { states: ['Shielded', 'Burn', 'Knockdown', 'Invulnerable'] },
+    'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable', 'Poisoned'] },
+    'Skirmisher': { states: ['Haste', 'Evasive', 'Bleed', 'Slowed'] },
+    'Rookie': { states: ['Haste', 'Bleed'] }
+};
+
 const STATE_DESCRIPTIONS = {
     'Execute': 'Instantly reduces HP to 0. Bypasses all defenses.',
     'Bleed': 'Takes 3 HP damage at the end of the round.',
@@ -56,25 +66,14 @@ const STATE_DESCRIPTIONS = {
     'Invulnerable': 'Completely negates the next incoming attack, then shatters.'
 };
 
-const CLASS_AFFINITIES = {
-    'Vanguard': { states: ['Knockdown', 'Bleed', 'Shielded', 'Burn', 'Execute'] },
-    'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] },
-    'Conduit': { states: ['Stunned', 'Shocked', 'Shielded', 'Haste', 'Immobilized'] },
-    'Paladin': { states: ['Shielded', 'Burn', 'Knockdown', 'Invulnerable'] },
-    'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable', 'Poisoned'] },
-    'Skirmisher': { states: ['Haste', 'Evasive', 'Bleed', 'Slowed'] },
-    'Rookie': { states: ['Haste', 'Bleed'] }
-};
-
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
-const getCoreElement = (input) => {
-    if (!input) return 'Kinetic';
-    const clean = String(input).toLowerCase().trim();
-    for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
-        if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
-    }
-    return 'Kinetic'; 
+const safeArray = (arr) => {
+    if (!arr) return [];
+    if (Array.isArray(arr)) return arr.filter(Boolean);
+    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    return [];
 };
 
 const getCoreState = (input) => {
@@ -85,6 +84,15 @@ const getCoreState = (input) => {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
     return String(input); 
+};
+
+const getCoreElement = (input) => {
+    if (!input) return 'Kinetic';
+    const clean = String(input).toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
+        if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
+    }
+    return 'Kinetic'; 
 };
 
 const getCoreMobility = (input) => {
@@ -174,7 +182,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
     const builderCoreElement = getCoreElement(builder.elementRaw);
     const builderCoreState = getCoreState(builder.effectName);
-    const weaponCoreElement = getCoreElement(activeWeapon.element);
+    const weaponCoreElement = getCoreElement(activeWeapon.element || 'Kinetic');
     
     const activeAffinity = player.affinityLocked ? (player.affinity || 'Kinetic') : getCoreElement(player.affinityRaw || 'Kinetic');
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
@@ -182,9 +190,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
     const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
 
-    const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
+    const myToken = safeArray(tokens).find(t => t.type === 'player' && String(t.refId) === String(localId));
     
-    const statuses = player.statuses || [];
+    const statuses = safeArray(player.statuses);
     const activeCoreStates = statuses.map(st => getCoreState(st));
     const isStunned = activeCoreStates.includes('Stunned');
     const isShocked = activeCoreStates.includes('Shocked');
@@ -198,15 +206,15 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const refreshTurn = () => {
         safePush(s => {
             const newP = { ...(s.players?.[localId] || {}), usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false };
-            const newT = [...(s.tokens || [])];
-            const tIdx = newT.findIndex(t => t.type === 'player' && t.refId === localId);
+            const newT = deepClone(safeArray(s.tokens));
+            const tIdx = newT.findIndex(t => t.type === 'player' && String(t.refId) === String(localId));
             if (tIdx !== -1) newT[tIdx].movementRemaining = newT[tIdx].speed ?? 3;
             return { ...s, players: { ...s.players, [localId]: newP }, tokens: newT };
         });
     };
 
     const saveToHUD = () => {
-        const cards = player.customCards || [];
+        const cards = safeArray(player.customCards);
         const actionName = builder.name || 'Custom Action';
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
         if (cards.some(c => String(c.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already equipped in your HUD. Please give this ability a unique name.`);
@@ -214,7 +222,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
     
     const saveToSpellbook = () => {
-        const archived = player.savedSkills || [];
+        const archived = safeArray(player.savedSkills);
         const actionName = builder.name || 'Custom Action';
         if (archived.some(s => String(s.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already in your Spellbook. Please give this ability a unique name.`);
         updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
@@ -222,7 +230,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
 
     const archiveEquippedCard = (card) => {
-        const archived = player.savedSkills || [];
+        const archived = safeArray(player.savedSkills);
         if (archived.some(s => String(s.name).toLowerCase() === String(card.name).toLowerCase())) return alert(`"${card.name}" is already archived in your Spellbook.`);
         updatePlayer('savedSkills', [...archived, card]);
         alert(`"${card.name}" archived to Spellbook!`);
@@ -239,12 +247,30 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (player.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
-        let finalRange = isBlind ? '1' : activeWeapon.range;
+        let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
 
         const rawWpn = activeWeapon.element || 'Kinetic';
         const coreWpn = getCoreElement(rawWpn);
-        safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
+        
+        safePush(s => ({ ...s, activeAction: { 
+            type: null,
+            source: player.name || 'Player', 
+            sourceId: localId || null, 
+            isEnemy: false, 
+            isBasic: true, 
+            isImprovised: false,
+            originalCost: 0,
+            cost: 0, 
+            name: activeWeapon.name || 'Weapon Attack', 
+            d: calcBaseDmg, 
+            a: 0, 
+            u: 0, m: 0, coreMobility: null,
+            range: finalRange, 
+            effectName: null, effectCore: null, 
+            elementRaw: rawWpn, elementCore: coreWpn, 
+            terrain: null, desc: null 
+        } })); 
     };
     
     const primeCard = (c, isImprovised = false, originalCost = 0) => { 
@@ -253,7 +279,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
-        let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
+        let finalRange = isBlind ? '1' : (c.range || '1');
         let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
@@ -262,14 +288,27 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
 
         safePush(s => ({ ...s, activeAction: { 
-            type: isBlink ? 'blink' : undefined,
-            source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, 
-            isImprovised: isImprovised, originalCost: safeInt(originalCost), cost: requiredRes, 
+            type: isBlink ? 'blink' : null,
+            source: player.name || 'Player', 
+            sourceId: localId || null, 
+            isEnemy: false, 
+            isBasic: false, 
+            isImprovised: isImprovised || false, 
+            originalCost: safeInt(originalCost), 
+            cost: requiredRes, 
             name: c.name || (isImprovised ? 'Improvised Action' : 'Custom Action'), 
-            d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMobility,
-            range: finalRange, effectName: c.effectName, effectCore: c.effectCore || getCoreState(c.effectName), 
-            elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'), 
-            terrain: c.terrain, desc: c.desc 
+            d: safeInt(c.d), 
+            a: finalAoe, 
+            u: safeInt(c.u), 
+            m: safeInt(c.m), 
+            coreMobility: coreMobility || null,
+            range: finalRange || '1', 
+            effectName: c.effectName || null, 
+            effectCore: c.effectCore || getCoreState(c.effectName) || null, 
+            elementRaw: c.elementRaw || 'Kinetic', 
+            elementCore: c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'), 
+            terrain: c.terrain || null, 
+            desc: c.desc || null 
         } })); 
     };
 
@@ -284,13 +323,12 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         return `Req: ${r.join('/')}`;
     };
 
-    const customCards = player.customCards || [];
+    const customCards = safeArray(player.customCards);
     const isOverload = currentRes > 10;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
             
-            {/* NEW: Universal Top Warning Bar tracks Global Hostile Resonance clearly */}
             {!isMyTurn ? (
                 <div className="col-span-1 lg:col-span-3 bg-red-950 border border-red-500 text-red-400 p-3 flex justify-between items-center font-bold tracking-widest uppercase animate-pulse shadow-md">
                     <span>⚠ STANDBY: HOSTILE TURN IN PROGRESS</span>
@@ -462,7 +500,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 </div>
             </div>
 
-            {/* NEW: Overload UI integrates uncapped Teamwork arrays directly */}
             <div className={`bg-[#1a222c] p-4 border flex flex-col items-center justify-center relative overflow-hidden transition-colors ${isOverload ? 'border-red-500 shadow-[0_0_30px_rgba(255,0,0,0.2)]' : 'border-slate-700'}`}>
                 {isOverload && <div className="absolute inset-0 bg-red-900/20 animate-pulse pointer-events-none"></div>}
                 
@@ -569,25 +606,25 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 <div className="grid grid-cols-2 gap-2 border-t border-gray-700 pt-4">
                     {customCards.map(c => {
                         const dispRaw = c.elementRaw || c.element || 'Kinetic';
-                        const dispCore = c.elementCore || c.element || 'Kinetic';
+                        const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic');
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                         
                         const cardCost = parseInt(c.cost) || 0;
                         const isNoFuel = currentRes < cardCost;
 
-                        const coreMob = getCoreMobility(c.mobilityName || c.mobility);
+                        const coreMob = getCoreMobility(c.mobilityName || c.mobility || '');
                         const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
 
                         return (
-                            <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
+                            <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
                                 <div className="flex-1 pr-6 pb-2">
                                     <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
-                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
+                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
-                                    {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {c.m} [{coreMob.toUpperCase()}]</div>}
+                                    {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
