@@ -247,7 +247,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
     };
     
-    // FIXED: Guaranteed strict integer cost parsing and fallback string values to prevent NaN state crashes
     const primeCard = (c, isImprovised = false, originalCost = 0) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         const requiredRes = isImprovised ? 1 : safeInt(c.cost);
@@ -286,13 +285,21 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
 
     const customCards = player.customCards || [];
+    const isOverload = currentRes > 10;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono text-sm">
             
-            {!isMyTurn && (
-                <div className="col-span-1 lg:col-span-3 bg-red-950 border border-red-500 text-red-400 p-3 text-center font-bold tracking-widest uppercase animate-pulse shadow-md">
-                    ⚠ STANDBY: HOSTILE TURN IN PROGRESS. OFFENSIVE ARRAYS LOCKED.
+            {/* NEW: Universal Top Warning Bar tracks Global Hostile Resonance clearly */}
+            {!isMyTurn ? (
+                <div className="col-span-1 lg:col-span-3 bg-red-950 border border-red-500 text-red-400 p-3 flex justify-between items-center font-bold tracking-widest uppercase animate-pulse shadow-md">
+                    <span>⚠ STANDBY: HOSTILE TURN IN PROGRESS</span>
+                    <span>HOSTILE RES: {encounter?.enemyPoolTotal || 0}</span>
+                </div>
+            ) : (
+                <div className="col-span-1 lg:col-span-3 bg-black border border-[#00f0ff] text-[#00f0ff] p-3 flex justify-between items-center font-bold tracking-widest uppercase shadow-md">
+                    <span>▶ AGENT PHASE ACTIVE</span>
+                    <span className="text-gray-500">HOSTILE RES: <span className="text-[#ff6600]">{encounter?.enemyPoolTotal || 0}</span></span>
                 </div>
             )}
 
@@ -455,14 +462,24 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 </div>
             </div>
 
-            <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col items-center justify-center">
-                <h2 className="text-[#ff6600] font-bold text-2xl tracking-widest mb-4">RESONANCE</h2>
-                <div className="text-8xl text-white mb-6 drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]">{currentRes}<span className="text-3xl text-gray-500">/10</span></div>
-                <div className="grid grid-cols-2 gap-2 w-full mb-4">
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Assist</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Tag-Team</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Exploit</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Banter</button>
+            {/* NEW: Overload UI integrates uncapped Teamwork arrays directly */}
+            <div className={`bg-[#1a222c] p-4 border flex flex-col items-center justify-center relative overflow-hidden transition-colors ${isOverload ? 'border-red-500 shadow-[0_0_30px_rgba(255,0,0,0.2)]' : 'border-slate-700'}`}>
+                {isOverload && <div className="absolute inset-0 bg-red-900/20 animate-pulse pointer-events-none"></div>}
+                
+                <h2 className={`font-bold text-2xl tracking-widest mb-4 z-10 ${isOverload ? 'text-red-500' : 'text-[#ff6600]'}`}>
+                    {isOverload ? '⚠ OVERLOAD ⚠' : 'RESONANCE'}
+                </h2>
+                
+                <div className={`text-8xl mb-6 z-10 transition-colors ${isOverload ? 'text-red-400 drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] animate-pulse' : 'text-white drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]'}`}>
+                    {currentRes}<span className="text-3xl text-gray-500">/10</span>
+                </div>
+                
+                <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest text-center z-10">Teamwork Extends Cap:</div>
+                <div className="grid grid-cols-2 gap-2 w-full mb-4 z-10">
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 1)}>+1 Assist</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 2)}>+2 Tag-Team</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 2)}>+2 Exploit</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 1)}>+1 Banter</button>
                 </div>
             </div>
 

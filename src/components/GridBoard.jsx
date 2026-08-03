@@ -63,6 +63,15 @@ const getCoreState = (input) => {
     return String(input); 
 };
 
+const getCoreElement = (input) => {
+    if (!input) return 'Kinetic';
+    const clean = String(input).toLowerCase().trim();
+    for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
+        if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
+    }
+    return 'Kinetic'; 
+};
+
 const getCoreMobility = (input) => {
     if (!input) return '';
     const clean = String(input).toLowerCase().trim();
@@ -206,7 +215,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         return { pObj, eList, logStr: evLog };
     };
 
-    // FIXED: Bounds-checked dirIdx and added array guards to prevent undefined object property access crashes
     const getAoEHexes = (targetIdx, originPosIdx, aType) => {
         if (targetIdx === null || targetIdx === undefined || targetIdx === -1) return [];
         let hexes = [targetIdx];
@@ -263,7 +271,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const findActiveTokenIndex = (action, tokenList) => {
         if (!action) return -1;
         if (action.isTokenId) return tokenList.findIndex(t => t.id === action.sourceId);
-        return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && t.refId == action.sourceId);
+        return tokenList.findIndex(t => t.type === (action.isEnemy ? 'enemy' : 'player') && String(t.refId) === String(action.sourceId));
     };
 
     const executeMove = (index) => {
@@ -327,9 +335,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 t.pos = index;
                 
                 let log = `\n>> AGENT RELOCATED: Executed [${activeAction.coreMobility || 'Blink'}] displacement vector for ${activeAction.m || 1} hexes.`;
-                
+                let newEnemyPoolTotal = encounter?.enemyPoolTotal || 0;
                 let newPlayers = { ...s.players };
-                if (!activeAction.isEnemy && activeAction.sourceId) {
+
+                if (activeAction.isEnemy) {
+                    newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - (activeAction.cost || 0));
+                    log += `\n>> [-${activeAction.cost || 0} Res] Hostile Action executed.`;
+                } else if (activeAction.sourceId) {
                     const p = newPlayers[activeAction.sourceId];
                     if (p) {
                         const pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
@@ -346,14 +358,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                 const res = evaluateCrush(newTokens, s.grid, newPlayers, s.encounter?.enemies || [], new Set(), log);
 
-                return { ...s, tokens: newTokens, players: res.pObj, activeAction: null, globalLog: { message: res.logStr, timestamp: Date.now() } };
+                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...s.encounter, enemyPoolTotal: newEnemyPoolTotal }, activeAction: null, globalLog: { message: res.logStr, timestamp: Date.now() } };
             }
             return s;
         });
     };
 
     const resolveCombat = (targetHex) => {
-        const rawDmg = parseInt(activeAction.d) || 0;
+        const rawDmg = safeInt(activeAction.d);
         
         const dispRaw = activeAction.elementRaw || activeAction.element || 'Kinetic';
         const dispCore = activeAction.elementCore || activeAction.element || 'Kinetic';
@@ -370,7 +382,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (attIdx !== -1) attackerPosIdx = newTokens[attIdx].pos;
         
         let actualTargetHex = targetHex;
-        let log = `--- COMBAT LOG: ${activeAction.name} [${showType}] ---\n`;
+        let log = `--- COMBAT LOG: ${activeAction.name || 'Action'} [${showType}] ---\n`;
 
         if (activeAction.isImprovised) {
             const roll = Math.floor(Math.random() * 6) + 1;
@@ -414,8 +426,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
                     if (isNaN(angle)) angle = 0;
                     if (angle < 0) angle += 360; 
-                    const facingAngle = t.facing * 60; 
+                    const facingAngle = (t.facing || 0) * 60; 
                     let diff = Math.abs(angle - facingAngle);
+                    if (isNaN(diff)) diff = 0;
                     if (diff > 180) diff = 360 - diff;
                     if (diff > 90) isFlanking = true; 
                 }
@@ -429,7 +442,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 let targetWasHit = false;
                 
                 if (t.type === 'enemy') {
-                    const eIndex = newEnemies.findIndex(e => e.uid == t.refId);
+                    const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
                     if (eIndex !== -1) {
                         targetWasHit = true;
                         const enemy = newEnemies[eIndex];
@@ -596,7 +609,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
                         if (collisionDmg > 0) {
                             if (t.type === 'enemy') {
-                                const eIndex = newEnemies.findIndex(e => e.uid == t.refId);
+                                const eIndex = newEnemies.findIndex(e => String(e.uid) === String(t.refId));
                                 if (eIndex !== -1) {
                                     newEnemies[eIndex].currentHp = Math.max(0, newEnemies[eIndex].currentHp - collisionDmg);
                                     if (newEnemies[eIndex].currentHp <= 0) deadEnemyUids.add(t.refId);
@@ -614,21 +627,25 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
         if (hitCount === 0) log += `\nNo valid targets in payload array.`;
 
-        // FIXED: Sanitized Resonance Deduction to prevent NaN value pollution
-        if (!activeAction.isEnemy && activeAction.sourceId) {
+        let newEnemyPoolTotal = encounter?.enemyPoolTotal || 0;
+        
+        if (activeAction.isEnemy) {
+            newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - safeInt(activeAction.cost));
+            log += `\n>> [-${safeInt(activeAction.cost)} Res] Hostile Action executed.`;
+        } else if (activeAction.sourceId) {
             const p = newPlayers[activeAction.sourceId];
             if (p) {
                 const pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
 
                 if (activeAction.isBasic) {
                     p.usedBasicAttack = true;
-                    p.resPool = Math.min(10, pRes + 1);
+                    p.resPool = pRes >= 10 ? pRes : pRes + 1; 
                     log += `\n>> [+1 Res] Basic Attack executed.`;
                 } else if (activeAction.isImprovised) {
                     p.resPool = Math.max(0, pRes - 1);
                     log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`;
                 } else {
-                    const costDeduction = parseInt(activeAction.cost) || 0;
+                    const costDeduction = safeInt(activeAction.cost);
                     p.resPool = Math.max(0, pRes - costDeduction);
                     if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`;
                 }
@@ -679,21 +696,21 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (annihilateCount > 0) log += `\n>> ELEMENTAL REACTION: ${annihilateCount} hex(es) underwent Matter Annihilation!`;
 
         if (deadEnemyUids.size > 0) {
-            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
-            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+            newEnemies = newEnemies.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
+            newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
         }
         
         const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, log);
 
         if (deadEnemyUids.size > 0) {
-            res.eList = res.eList.filter(e => !deadEnemyUids.has(e.uid));
-            newTokens = newTokens.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(Number(t.refId))));
+            res.eList = res.eList.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
+            newTokens = newTokens.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
         }
 
         pushUpdate(s => ({ 
             ...s, 
             players: res.pObj, 
-            encounter: { ...(s.encounter || {}), enemies: res.eList }, 
+            encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal }, 
             tokens: newTokens, 
             grid: newGrid,
             activeAction: null,
@@ -839,7 +856,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         }
                     }
                 } else if (activeAction.type === 'blink') {
-                    if (dist > 0 && dist <= (activeAction.m || 1) && cell.terrain !== 'severe') isMovable = true;
+                    if (dist > 0 && dist <= safeInt(activeAction.m || 1) && cell.terrain !== 'severe') isMovable = true;
                 } else {
                     if (dist >= minR && dist <= maxR && cell.terrain !== 'severe' && cell.terrain !== 'steam') isTargetable = true;
                     if (hoveredHex !== null && aoeHexes.includes(idx)) isAoETarget = true;
@@ -885,7 +902,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     displayChar = linkedEnemy.name ? linkedEnemy.name.substring(0,2).toUpperCase() : 'E';
 
                     hpDisplay = (
-                        <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: '#ff6600', color: '#ff6600', transform: `rotate(-${t.facing * 60}deg)` }}>
+                        <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: '#ff6600', color: '#ff6600', transform: `rotate(-${(t.facing || 0) * 60}deg)` }}>
                             <span className="text-white mb-0.5">{linkedEnemy.name || 'Hostile'}</span>
                             <span>T{linkedEnemy.tier || 1} | RNG {maxRange} | {linkedEnemy.currentHp} HP</span>
                         </div>
@@ -912,7 +929,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 txtColor = ['Vanguard', 'Conduit', 'Sniper'].includes(pClass) ? '#ffffff' : '#000000';
                 displayChar = p.name ? p.name.substring(0,2).toUpperCase() : 'P1';
                 hpDisplay = (
-                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: tBg, color: tBg, transform: `rotate(-${t.facing * 60}deg)` }}>
+                    <div className="absolute -bottom-10 bg-black text-[10px] font-bold px-1.5 py-1 border rounded flex flex-col items-center leading-none pointer-events-none z-50 shadow-md whitespace-nowrap" style={{ borderColor: tBg, color: tBg, transform: `rotate(-${(t.facing || 0) * 60}deg)` }}>
                         <span className="text-white mb-0.5">{p.name || 'Agent'}</span>
                         <span>{pClass} | {p.currentHp ?? derivedMaxHp} HP</span>
                     </div>
@@ -941,7 +958,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     {hpDisplay}
                     
                     {activeStatusList.length > 0 && (
-                        <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-auto" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
+                        <div className="absolute -top-6 bg-purple-900 border border-purple-400 text-white text-[8px] font-bold px-1 py-0.5 rounded flex gap-1 whitespace-nowrap z-50 pointer-events-auto" style={{ transform: `rotate(-${(t.facing || 0) * 60}deg)` }}>
                             {activeStatusList.map((st, i) => (
                                 <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="cursor-help hover:text-[#00f0ff] transition-colors">{st}{i < activeStatusList.length - 1 ? ',' : ''}</span>
                             ))}
@@ -949,7 +966,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     )}
 
                     {showHoverControls && ( 
-                        <div className="absolute -top-12 flex gap-1 z-50 bg-black/80 p-1 border border-gray-600 rounded shadow-lg" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
+                        <div className="absolute -top-12 flex gap-1 z-50 bg-black/80 p-1 border border-gray-600 rounded shadow-lg" style={{ transform: `rotate(-${(t.facing || 0) * 60}deg)` }}>
                             <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600 transition-colors" onClick={(e) => rotateToken(e, t.id, -1)} title="Rotate Left">↶</button>
                             <button className="bg-[#22c55e] text-black w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:border-[#22c55e] transition-colors" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button>
                             <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600 transition-colors" onClick={(e) => rotateToken(e, t.id, 1)} title="Rotate Right">↷</button>
@@ -1060,7 +1077,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {(p.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(p.statuses || []).map((st, i) => (
-                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
+                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
                                         {(isGM || activeT.refId === localId) && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
@@ -1092,10 +1109,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
                                     if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn.");
                                     
-                                    let finalRange = isBlind ? '1' : activeWeapon.range;
+                                    let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
                                     if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
 
-                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: activeWeapon.element || 'Kinetic', isBasic: true, cost: 0 } }))
+                                    pushUpdate(s => ({ ...s, activeAction: { source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, name: activeWeapon.name || 'Weapon Attack', d: calcBaseDmg, a: 0, range: finalRange, elementRaw: activeWeapon.element || 'Kinetic', elementCore: getCoreElement(activeWeapon.element || 'Kinetic'), isBasic: true, cost: 0 } }))
                                 }}>{(disableAttacks ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK'))}</button>
                             </div>
                         )}
@@ -1104,46 +1121,48 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         {(p.customCards || []).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
                         {(p.customCards || []).map(c => {
                             const dispRaw = c.elementRaw || c.element || 'Kinetic';
-                            const dispCore = c.elementCore || c.element || 'Kinetic';
+                            const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic');
                             const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                             
                             const cardCost = parseInt(c.cost) || 0;
                             const isNoFuel = currentRes < cardCost;
 
+                            const coreMob = getCoreMobility(c.mobilityName || c.mobility || '');
+                            const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
+
                             return (
-                                <div key={c.id} className="bg-black border border-[#00f0ff] p-2 text-sm relative">
-                                    <div className="font-bold mb-1" style={{ color: pColor }}>{c.name}</div>
-                                    <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
-                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
-                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
-                                    
-                                    {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
-                                    
-                                    {(isGM || activeT.refId === localId) && (
-                                        <>
-                                            <button className={`w-full font-bold py-1 uppercase text-[10px] border border-gray-600 transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
-                                                if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
-                                                if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${cardCost}.`);
-                                                
-                                                let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
-                                                let finalAoe = isBlind ? 0 : (c.a || 0);
-                                                if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+                                <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-sm relative group flex flex-col">
+                                    <div className="flex-1 pr-6 pb-2">
+                                        <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
+                                        <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
+                                        <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
+                                        {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
+                                        
+                                        {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
+                                        {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
+                                        
+                                        {(isGM || activeT.refId === localId) && (
+                                            <>
+                                                <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks) && !isGM} onClick={() => {
+                                                    if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
+                                                    if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${cardCost}.`);
+                                                    
+                                                    let finalRange = isBlind ? '1' : (activeWeapon.range || '1');
+                                                    let finalAoe = isBlind ? 0 : (c.a || 0);
+                                                    if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-                                                const mobilityRaw = c.mobilityName || c.mobility || '';
-                                                const coreMobility = getCoreMobility(mobilityRaw);
-                                                const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
-
-                                                pushUpdate(s => ({ ...s, activeAction: { 
-                                                    type: isBlink ? 'blink' : undefined,
-                                                    source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, 
-                                                    name: c.name || 'Custom Action', d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMobility,
-                                                    range: finalRange, effectName: c.effectName, effectCore: c.effectCore || getCoreState(c.effectName), 
-                                                    elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', terrain: c.terrain, 
-                                                    desc: c.desc, isBasic: false, cost: cardCost 
-                                                } }));
-                                            }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (getCoreMobility(c.mobilityName || c.mobility) === 'Blink' ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
-                                        </>
-                                    )}
+                                                    pushUpdate(s => ({ ...s, activeAction: { 
+                                                        type: isBlink ? 'blink' : undefined,
+                                                        source: p.name || 'Player', sourceId: activeT.refId, isEnemy: false, 
+                                                        name: c.name || 'Custom Action', d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMob,
+                                                        range: finalRange, effectName: c.effectName, effectCore: c.effectCore || getCoreState(c.effectName), 
+                                                        elementRaw: c.elementRaw || 'Kinetic', elementCore: dispCore, terrain: c.terrain, 
+                                                        desc: c.desc, isBasic: false, cost: cardCost 
+                                                    } }))
+                                                }}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
@@ -1228,7 +1247,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {(linkedEnemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(linkedEnemy.statuses || []).map((st, i) => (
-                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)]} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
+                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
                                         {isGM && (
                                             <button className="text-red-400 hover:text-white" onClick={() => {
@@ -1288,6 +1307,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
                             }
 
+                            const costMatch = ability.match(/\((\d+)\s*Res\)/i) || ability.match(/\[(\d+)\s*Res\]/i);
+                            const eCost = costMatch ? parseInt(costMatch[1]) : 0;
+
                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                             const pEff = effMatch ? effMatch[1] : null;
 
@@ -1310,13 +1332,18 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
                                             if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
                                             
+                                            const currentHostileRes = encounter?.enemyPoolTotal || 0;
+                                            if (currentHostileRes < eCost) {
+                                                return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${eCost} RES\nCurrent Pool: ${currentHostileRes} RES`);
+                                            }
+
                                             let finalRange = isBlind ? '1' : eRange;
                                             let finalAoe = isBlind ? 0 : parsedAoe;
                                             if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
+                                            pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, cost: eCost, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
                                         }}>
-                                            {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
+                                            {disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}
                                         </button>
                                     )}
                                 </div>
@@ -1373,17 +1400,18 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 
                 <div className="absolute top-4 right-4 bg-black border border-gray-700 px-4 py-2 z-50 text-xs font-mono uppercase text-gray-400 shadow-md">
                     <div className="mb-1">Phase: <span className="font-bold text-white">{encounter?.round === 0 ? 'Deployment' : `Round ${encounter?.round}`}</span></div>
-                    <div>Active Turn: <span className={`font-bold ${encounter?.activeTurn === 'player' ? 'text-[#00f0ff]' : 'text-[#ff6600]'}`}>{encounter?.activeTurn === 'player' ? 'Agents' : 'Hostiles'}</span></div>
+                    <div className="mb-1">Active Turn: <span className={`font-bold ${encounter?.activeTurn === 'player' ? 'text-[#00f0ff]' : 'text-[#ff6600]'}`}>{encounter?.activeTurn === 'player' ? 'Agents' : 'Hostiles'}</span></div>
+                    <div className="border-t border-gray-700 pt-1 mt-1">Hostile Res: <span className="font-bold text-[#ff6600]">{encounter?.enemyPoolTotal || 0}</span></div>
                 </div>
 
                 {activeAction && (
                     <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
                         <div className="font-mono">
                             <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>
-                                {activeAction.type === 'move' ? 'Movement Array Active' : activeAction.type === 'blink' ? 'Displacement Array Active' : 'Targeting Array Active'} // Source: {activeAction.source}
+                                {activeAction.type === 'move' ? 'Movement Array Active' : activeAction.type === 'blink' ? 'Displacement Array Active' : 'Targeting Array Active'} // Source: {activeAction.source || 'Player'}
                             </span>
                             <span className="font-bold text-xl uppercase tracking-wider block mb-1">
-                                {activeAction.type === 'move' ? 'Repositioning' : activeAction.type === 'blink' ? `Blinking [${activeAction.m || 1} Hexes]` : activeAction.name}
+                                {activeAction.type === 'move' ? 'Repositioning' : activeAction.type === 'blink' ? `Blinking [${safeInt(activeAction.m) || 1} Hexes]` : (activeAction.name || 'Action')}
                             </span>
                             {activeAction.type !== 'move' && activeAction.type !== 'blink' && (
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400">

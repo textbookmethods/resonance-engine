@@ -77,9 +77,15 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         updateEnc({ enemies: [...(encounter?.enemies || []), newEnemy] });
     };
 
-    const primeEnemyAbility = (enemy, cleanName, desc) => {
+    // NEW: Accepts eCost from the UI mapping loop and checks against Global Limits
+    const primeEnemyAbility = (enemy, cleanName, desc, eCost) => {
         const eStates = (enemy.statuses || []).map(s => getCoreState(s));
         if (eStates.includes('Stunned')) return alert("System Locked: Entity is STUNNED.");
+
+        const currentHostileRes = encounter?.enemyPoolTotal || 0;
+        if (currentHostileRes < eCost) {
+            return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${eCost} RES\nCurrent Pool: ${currentHostileRes} RES`);
+        }
 
         const isBlind = eStates.includes('Blind');
 
@@ -112,7 +118,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             alert("Warning: Entity is BLIND. Targeting optics restricted to adjacent hexes.");
         }
 
-        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch, terrain: pTerrain } }));
+        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, cost: eCost, name: cleanName, d: parsedDmg, a: parsedAoe, range: eRange, effectName: parsedEff, effectCore: coreEff, elementRaw: rawMatch, elementCore: coreMatch, terrain: pTerrain } }));
     };
 
     const handleNextRound = () => {
@@ -172,6 +178,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (dotDmg > 0 && p.currentHp > 0) {
                     p.currentHp = Math.max(0, p.currentHp - dotDmg);
                     log.push(`Agent [${p.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
+                }
+
+                // NEW: Resonance Overload automatically dissipates back down to the safe cap of 10
+                if (p.resPool > 10) {
+                    p.resPool = 10;
+                    log.push(`AGENT ALERT: [${p.name || 'Agent'}]'s Resonance Overload dissipated back to 10.`);
                 }
 
                 p.statuses = (p.statuses || []).filter(st => getCoreState(st) !== 'Knockdown');
@@ -296,10 +308,10 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 </div>
 
                 <div className="border-t border-gray-700 pt-4 mt-auto">
-                    <div className="text-gray-400 mb-2">Global Enemy Pool</div>
-                    <div className="flex items-center justify-between bg-black border border-gray-600 p-2">
+                    <div className="text-[#ff6600] mb-2 uppercase tracking-widest text-xs font-bold animate-pulse">Global Hostile Resonance</div>
+                    <div className="flex items-center justify-between bg-black border border-[#ff6600] p-2">
                         <button className="px-3 text-lg font-bold text-gray-400 hover:text-[#ff6600]" onClick={() => updateEnc({ enemyPoolTotal: Math.max(0, (encounter?.enemyPoolTotal || 0) - 1)})}>-</button>
-                        <span className="text-2xl text-[#ff6600] font-bold">{encounter?.enemyPoolTotal || 0}</span>
+                        <span className="text-3xl text-white font-bold">{encounter?.enemyPoolTotal || 0}</span>
                         <button className="px-3 text-lg font-bold text-gray-400 hover:text-[#ff6600]" onClick={() => updateEnc({ enemyPoolTotal: (encounter?.enemyPoolTotal || 0) + 1})}>+</button>
                     </div>
                 </div>
@@ -354,6 +366,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                                             
+                                            const costMatch = ability.match(/\((\d+)\s*Res\)/i) || ability.match(/\[(\d+)\s*Res\]/i);
+                                            const eCost = costMatch ? parseInt(costMatch[1]) : 0;
+
                                             const eCoreStates = (enemy.statuses || []).map(st => getCoreState(st));
                                             const disableAttacks = eCoreStates.includes('Stunned');
 
@@ -371,8 +386,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>
-                                                        {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
+                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc, eCost)}>
+                                                        {disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}
                                                     </button>
                                                 </div>
                                             );
