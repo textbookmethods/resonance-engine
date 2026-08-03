@@ -32,7 +32,6 @@ const STATE_DICTIONARY = {
     'Invulnerable': ['invulnerable', 'stasis', 'immune', 'god', 'untouchable', 'aegis']
 };
 
-// NEW: Maps player terminology into pure physics vectors
 const MOBILITY_DICTIONARY = {
     'Blink': ['blink', 'teleport', 'jump', 'leap', 'bound', 'dash', 'phase', 'tunnel', 'burrow', 'step'],
     'Push': ['push', 'repel', 'throw', 'knockback', 'slam', 'blow', 'blast', 'drive'],
@@ -101,6 +100,23 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
     const isEleSyn = playerAffinity === spellElementCore;
     const isStateSyn = cls.states.includes(spellEffectCore);
 
+    // NEW: RPS Inverse Penalty Check (Spell element vs Agent's Innate Element)
+    const pElem = playerAffinity ? playerAffinity.toLowerCase() : 'kinetic';
+    const sElem = spellElementCore ? spellElementCore.toLowerCase() : 'kinetic';
+
+    const isOpposed = 
+        (sElem === 'toxic' && pElem === 'thermal') ||
+        (sElem === 'thermal' && pElem === 'cryo') ||
+        (sElem === 'cryo' && pElem === 'toxic') ||
+        (sElem === 'radiant' && pElem === 'void') ||
+        (sElem === 'void' && pElem === 'radiant') ||
+        (sElem === 'electro' && pElem === 'kinetic') ||
+        (sElem === 'kinetic' && pElem === 'electro');
+
+    if (isOpposed) {
+        return { alpha: 2.0, label: 'Resistance (Opposed RPS Element)' };
+    }
+
     if (uValue >= 5 && !isStateSyn) {
         return { alpha: 2.0, label: 'Resistance (Untrained High-Tier State)' };
     }
@@ -118,7 +134,6 @@ const getAoeCost = (a) => {
 };
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    // NEW: builder payload includes m (Mobility integer) and mobilityName (string concept)
     const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
     const player = players[localId] || {};
@@ -166,8 +181,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
-    
-    // UPDATED: Cost formula natively processes +m logic
     const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
 
     const myToken = tokens.find(t => t.type === 'player' && t.refId === localId);
@@ -235,7 +248,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
     };
     
-    // UPDATED: Dynamically checks if the spell is a self-displacement and triggers a Blink Array instead
     const primeCard = (c, isImprovised = false, originalCost = 0) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
         const requiredRes = isImprovised ? 1 : c.cost;
@@ -496,7 +508,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         <option value="severe">Severe (+5)</option>
                     </select></div>
 
-                    {/* NEW: Matrix row for Mobility Vectors */}
                     <div className="flex justify-between items-center"><span>Mobility (m):</span><select className="w-32 bg-black border border-gray-600 p-1 text-white" value={String(builder.m)} onChange={e=>setBuilder({...builder, m: safeInt(e.target.value)})}>
                         <option value="0">None</option>
                         <option value="1">1 Hex</option>
@@ -544,7 +555,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                         const isNoFuel = currentRes < c.cost;
 
-                        // NEW: Checks if the card acts as a Self-Displacement (Blink) mechanism
                         const coreMob = getCoreMobility(c.mobilityName);
                         const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
 

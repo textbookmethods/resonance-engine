@@ -152,6 +152,7 @@ export default function Rulebook() {
                             <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
                                 <li><strong>RPS Advantage (1.5x Damage):</strong> Thermal beats Cryo. Cryo beats Toxic. Toxic beats Thermal. Radiant and Void destroy each other. Electro and Kinetic destroy each other.</li>
                                 <li><strong>Synergy (0.75x Cost):</strong> The ability mechanically aligns with your <strong>Innate Element Affinity</strong>, your Class Playstyle, or your Weapon Element.</li>
+                                <li><strong>Resistance (2.0x Cost):</strong> You are attempting to force a Severe or Terminal state effect that directly opposes your Class training, OR you are channeling an Element that opposes your Innate Affinity in the RPS matrix (e.g., a Thermal Agent trying to channel Toxic, or a Radiant Agent channeling Void).</li>
                             </ul>
 
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8 border-t border-gray-700 pt-6">Improvised Skills (Crafting on the fly)</h3>
