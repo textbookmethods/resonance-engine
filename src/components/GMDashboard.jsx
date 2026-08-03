@@ -308,7 +308,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             <div className="lg:col-span-3 bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-[75vh]">
                 <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
                     <h2 className="text-[#ff6600] font-bold text-xl">Active Hostiles</h2>
-                    <select className="bg-black text-white border border-gray-600 p-2 outline-none cursor-pointer" onChange={(e) => { if(e.target.value) addEnemy(parseInt(e.target.value)); e.target.value=""; }}>
+                    <select className="bg-black text-white border border-gray-600 p-2 outline-none cursor-pointer" onChange={(e) => { if(e.target.value) addEnemy(parseInt(e.target.value)); e.target.selectedIndex = 0; }}>
                         <option value="">+ Deploy Entity...</option>
                         {bestiary.map(b => <option key={b.id} value={b.id}>T{b.tier} - {b.name}</option>)}
                     </select>
@@ -354,17 +354,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                                             
-                                            const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
-                                            const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
-                                            const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
-
-                                            const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
-                                            const shapeMatch = desc.match(/(line|cluster)/i);
-                                            let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
-                                            if (!isBlind && shapeMatch) {
-                                                if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
-                                                if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
-                                            }
+                                            const eCoreStates = (enemy.statuses || []).map(st => getCoreState(st));
+                                            const disableAttacks = eCoreStates.includes('Stunned');
 
                                             const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
                                             const pEff = effMatch ? effMatch[1] : null;
@@ -372,10 +363,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
                                             const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
 
-                                            let eRange = "1";
-                                            const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
-                                            if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
-                                            
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                                     <div>
@@ -384,15 +371,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
-                                                        if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
-                                                        
-                                                        let finalRange = isBlind ? '1' : eRange;
-                                                        let finalAoe = isBlind ? 0 : parsedAoe;
-                                                        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-
-                                                        pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
-                                                    }}>
+                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc)}>
                                                         {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
                                                     </button>
                                                 </div>
