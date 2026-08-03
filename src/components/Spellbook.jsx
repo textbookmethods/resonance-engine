@@ -133,7 +133,6 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                         </div>
                                     )}
 
-                                    {/* NEW: Displays Mobility parameters inside the Grimoire */}
                                     {skill.m > 0 && (
                                         <div className="mb-3 bg-black border border-blue-500 text-blue-400 text-[10px] px-2 py-1 font-bold inline-block w-fit">
                                             Mobility: {skill.m} [{String(skill.coreMobility).toUpperCase()}]

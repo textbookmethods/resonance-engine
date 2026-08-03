@@ -105,6 +105,10 @@ export default function Rulebook() {
                                     <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
                                     Completely impassable. Blocks line-of-sight for targeting.
                                 </li>
+                                <li className="bg-black border-l-4 border-slate-400 p-3">
+                                    <strong className="text-slate-300">Steam (Elemental Reaction Override)</strong><br/>
+                                    If an active Cryo hex is hit by a Thermal spell, it reacts. The Engine generates a Steam Explosion (+5 Damage to occupants) and converts the terrain into Steam. Steam blocks Line-of-Sight and deals 5 Kinetic damage at the end of the round.
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -117,6 +121,9 @@ export default function Rulebook() {
                         <div>
                             <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Hostile Barriers & Staggering</h3>
                             <p className="leading-relaxed">Enemies do not use DP. They possess raw HP and layered Barriers. The Engine automatically routes incoming damage to shatter barriers first. Once an enemy's final barrier is reduced to 0, the Engine marks them as <strong>STAGGERED</strong> (highlighted in yellow), meaning subsequent attacks deal full damage directly to their HP pool.</p>
+
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Flanking Bonus</h3>
+                            <p className="leading-relaxed">The Engine natively evaluates positional vectors. If a single-target attack strikes an entity from outside its <strong>180-degree forward facing arc (the back three hexes)</strong>, the incoming damage is automatically multiplied by <strong>1.5x</strong> before mitigation.</p>
                         </div>
                     </div>
                 )}
@@ -129,7 +136,6 @@ export default function Rulebook() {
                             <h3 className="text-[#ff6600] font-bold text-lg mb-2 mt-6">Building Abilities</h3>
                             <p className="leading-relaxed mb-4">Players do not have pre-written spell lists. They use the HUD to build custom abilities on the fly using the mathematical Engine formula:</p>
                             
-                            {/* UPDATED: Added +m to the visual formula rendering */}
                             <div className="bg-black p-4 border border-[#ff6600] text-center text-xl font-bold tracking-widest text-white shadow-inner my-4">R_cost = ⌈ α × (d + u + t + m + a) ⌉</div>
                             
                             <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-8">
@@ -138,18 +144,16 @@ export default function Rulebook() {
                                 <li><strong>t (Terrain Gen):</strong> Adds a physical Grid effect (1 = Minor, 2 = Clear, 3 = Major, 5 = Severe).</li>
                                 <li><strong>m (Mobility):</strong> Self Displacement or Target Movement (0-10 Hexes).</li>
                                 <li><strong>a (AoE Shape):</strong> 3-Hex Lines and Clusters cost 1. Circular radii costs scale quadratically.</li>
-                                <li><strong>α (Affinity):</strong> Synergy (0.75), Neutral (1.0), or Resistance (2.0).</li>
+                                <li><strong>α (Affinity):</strong> Evaluates Synergy or RPS matchups.</li>
                             </ul>
 
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8">Automated Affinity (α)</h3>
-                            <p className="leading-relaxed mb-4">Players cannot manually declare Affinity. The Engine calculates it automatically based on your Class Specialization, Equipped Weapon, and the concepts you type into the Matrix.</p>
+                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8">Automated Elemental Affinity (α) & RPS</h3>
+                            <p className="leading-relaxed mb-4">The Engine automatically calculates Affinity bonuses during Synthesis, and Rock-Paper-Scissors multipliers during combat detonation:</p>
                             <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
+                                <li><strong>RPS Advantage (1.5x Damage):</strong> Thermal beats Cryo. Cryo beats Toxic. Toxic beats Thermal. Radiant and Void destroy each other. Electro and Kinetic destroy each other.</li>
                                 <li><strong>Synergy (0.75x Cost):</strong> The ability mechanically aligns with your <strong>Innate Element Affinity</strong>, your Class Playstyle, or your Weapon Element.</li>
-                                <li><strong>Neutral (1.0x Cost):</strong> No direct alignment. Standard execution.</li>
-                                <li><strong>Resistance (2.0x Cost):</strong> You are attempting to force a Severe or Terminal state effect that directly opposes your Class training (e.g., A Conduit attempting to Execute with brute force).</li>
                             </ul>
 
-                            {/* NEW: Explicit documentation for the Improvised Skill override */}
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-8 border-t border-gray-700 pt-6">Improvised Skills (Crafting on the fly)</h3>
                             <p className="leading-relaxed mb-4">Instead of archiving a built spell, you can immediately execute it from the Matrix for a flat cost of <strong>1 Resonance</strong>, regardless of its original R_cost. Doing so forces the Engine to roll a 1d6 upon detonation:</p>
                             <ul className="list-disc list-inside text-gray-400 space-y-2 ml-4">
@@ -199,7 +203,6 @@ export default function Rulebook() {
                                     <strong>Major Terrain:</strong> If an entity is standing in Major Terrain (e.g. Magma) when the round ends, they take 5 Environmental Damage.
                                 </li>
                                 
-                                {/* NEW: Explicit documentation for the Mobility Dictionary implementation */}
                                 <li className="bg-gray-900 border border-gray-700 p-3">
                                     <strong className="text-blue-400 text-lg uppercase tracking-wider block mb-1">Mobility Vectors</strong>
                                     <strong>Blink (Self):</strong> Words like *Teleport, Jump, Dash, Tunnel*. The Engine transforms the ability into a dynamic relocation array, allowing the Agent to move instantly across the grid, bypassing movement limits and hazardous terrain. <br/>
@@ -214,7 +217,6 @@ export default function Rulebook() {
                             <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
                                 <li><strong>[Execute]:</strong> Target is instantly erased from the grid. Bypasses all HP, shatters all remaining barriers, and ignores player defensive stats. HP is violently reduced to 0.</li>
                                 
-                                {/* UPDATED: Escapable Entombment mechanic documentation */}
                                 <li><strong>[Entombment]:</strong> If an entity occupies a Severe hex, and every single valid hex within a 2-hex radius is also Severe, the Engine will automatically crush them! Hostiles are executed immediately. Agents receive an Entombment Timer; if they do not escape by the end of the third round, they are Executed.</li>
                             </ul>
                         </div>

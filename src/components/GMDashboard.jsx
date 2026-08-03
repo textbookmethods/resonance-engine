@@ -132,9 +132,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
 
                 const t = newTokens.find(tok => tok.type === 'enemy' && tok.refId == e.uid);
-                if (t && s.grid && s.grid[t.pos]?.terrain === 'major') {
-                    dotDmg += 5;
-                    activeDoTs.push('Major Terrain');
+                if (t && s.grid) {
+                    if (s.grid[t.pos]?.terrain === 'major') { dotDmg += 5; activeDoTs.push('Major Terrain'); }
+                    if (s.grid[t.pos]?.terrain === 'steam') { dotDmg += 5; activeDoTs.push('Steam Burn'); }
                 }
 
                 if (dotDmg > 0) {
@@ -155,9 +155,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (activeDoTs.length > 0) dotDmg += activeDoTs.length * 3;
 
                 const t = newTokens.find(tok => tok.type === 'player' && tok.refId === pid);
-                if (t && s.grid && s.grid[t.pos]?.terrain === 'major') {
-                    dotDmg += 5;
-                    activeDoTs.push('Major Terrain');
+                if (t && s.grid) {
+                    if (s.grid[t.pos]?.terrain === 'major') { dotDmg += 5; activeDoTs.push('Major Terrain'); }
+                    if (s.grid[t.pos]?.terrain === 'steam') { dotDmg += 5; activeDoTs.push('Steam Burn'); }
                 }
 
                 if (p.statuses && p.statuses.includes('Crushed [2/3]')) {
@@ -249,7 +249,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     };
 
     const isOverload = (encounter?.round || 0) >= 4;
-    // FIX: Apply filter(Boolean) sweep to active maps
     const enemiesList = (encounter?.enemies || []).filter(Boolean);
     const enemyTokens = (tokens || []).filter(tok => tok && tok.type === 'enemy').sort((a,b) => a.id - b.id);
 
@@ -392,7 +391,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                         let finalAoe = isBlind ? 0 : parsedAoe;
                                                         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-                                                        pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, elementRaw: parsedElement, elementCore: parsedElement, terrain: pTerrain } }))
+                                                        pushUpdate(s => ({ ...s, activeAction: { source: linkedEnemy.name, sourceId: linkedEnemy.uid, isEnemy: true, name: cleanName, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
                                                     }}>
                                                         {disableAttacks ? 'LOCKED' : 'TARGET SKILL'}
                                                     </button>

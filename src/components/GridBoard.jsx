@@ -55,6 +55,26 @@ const getCoreState = (input) => {
     return input; 
 };
 
+const getAffinityMultiplier = (atkElem, defElem) => {
+    if (!defElem || !atkElem) return 1.0;
+    const a = atkElem.toLowerCase();
+    const d = defElem.toLowerCase();
+    
+    if (a === 'thermal' && d === 'cryo') return 1.5;
+    if (a === 'cryo' && d === 'toxic') return 1.5;
+    if (a === 'toxic' && d === 'thermal') return 1.5;
+    if (a === 'radiant' && d === 'void') return 1.5;
+    if (a === 'void' && d === 'radiant') return 1.5;
+    if (a === 'electro' && d === 'kinetic') return 1.5;
+    if (a === 'kinetic' && d === 'electro') return 1.5;
+
+    if (a === 'cryo' && d === 'thermal') return 0.5;
+    if (a === 'toxic' && d === 'cryo') return 0.5;
+    if (a === 'thermal' && d === 'toxic') return 0.5;
+    
+    return 1.0;
+};
+
 export default function GridBoard({ players = {}, grid = [], tokens = [], encounter = {}, activeAction = null, pushUpdate, role, localId }) {
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
@@ -65,9 +85,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const isGM = role === 'gm';
 
     const COLS = 15; const ROWS = 10;
-    const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null });
     
-    // FIX: Applies redundant filter(Boolean) sweep specifically for Grid token mapping
+    const activeGrid = grid.length === 150 ? grid : Array(150).fill({ type: 'empty', terrain: null, terrainElement: null });
     const activeTokens = (tokens || []).filter(Boolean);
 
     const R = 36; const hexWidth = R * 2; const hexHeight = R * Math.sqrt(3); 
@@ -196,12 +215,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }
 
         const hexDirs = [
-            {q: 1, r: 0, s: -1},  // 0: Right
-            {q: 0, r: 1, s: -1},  // 1: Bottom Right
-            {q: -1, r: 1, s: 0},  // 2: Bottom Left
-            {q: -1, r: 0, s: 1},  // 3: Left
-            {q: 0, r: -1, s: 1},  // 4: Top Left
-            {q: 1, r: -1, s: 0}   // 5: Top Right
+            {q: 1, r: 0, s: -1},  
+            {q: 0, r: 1, s: -1},  
+            {q: -1, r: 1, s: 0},  
+            {q: -1, r: 0, s: 1},  
+            {q: 0, r: -1, s: 1},  
+            {q: 1, r: -1, s: 0}   
         ];
 
         if (aType === 'line3') {
@@ -365,7 +384,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             if (aoeHexes.includes(t.pos)) {
                 hitCount++;
                 const targetCoords = getHexCoords(t.pos);
-                let incomingDmg = rawDmg;
+                
+                let isFlanking = false;
+                if ((!activeAction.a || activeAction.a === '0' || activeAction.a === 0) && attackerPosIdx !== null && attackerPosIdx !== t.pos) {
+                    const aCoords = getHexCoords(attackerPosIdx);
+                    const dx = aCoords.x - targetCoords.x; 
+                    const dy = aCoords.y - targetCoords.y;
+                    let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                    if (angle < 0) angle += 360; 
+                    const facingAngle = t.facing * 60; 
+                    let diff = Math.abs(angle - facingAngle);
+                    if (diff > 180) diff = 360 - diff;
+                    // UPDATED: 180-degree tolerance arc ensures the 3 rear hexes strictly denote flanking
+                    if (diff > 90) isFlanking = true; 
+                }
+
+                let isOnReactionHex = activeGrid[t.pos]?.terrainElement === 'Cryo' && dispCore === 'Thermal';
                 let targetWasHit = false;
                 
                 if (t.type === 'enemy') {
@@ -378,6 +412,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let staggered = enemy.staggered;
                         
                         let coreStates = (enemy.statuses || []).map(st => getCoreState(st));
+                        let incomingDmg = rawDmg;
+
+                        const rpsMult = getAffinityMultiplier(dispCore, enemy.affinity);
+                        if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${enemy.affinity || 'Kinetic'})`; }
+                        if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${enemy.affinity || 'Kinetic'})`; }
+
+                        if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
+
+                        if (isOnReactionHex) { incomingDmg += 5; log += `\n>> STEAM BLAST: Entity caught in Cryo/Thermal Reaction! (+5 Dmg)`; }
                         
                         if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
                         if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
@@ -436,6 +479,14 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         let coreStates = (p.statuses || []).map(st => getCoreState(st));
                         let forcedEvasion = coreStates.includes('Evasive');
 
+                        let incomingDmg = rawDmg;
+                        const rpsMult = getAffinityMultiplier(dispCore, p.affinity || 'Kinetic');
+                        if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg (${dispCore} > ${p.affinity || 'Kinetic'})`; }
+                        if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg (${dispCore} < ${p.affinity || 'Kinetic'})`; }
+
+                        if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: Target struck outside facing arc! 1.5x Dmg`; }
+                        if (isOnReactionHex) { incomingDmg += 5; log += `\n>> STEAM BLAST: Entity caught in Cryo/Thermal Reaction! (+5 Dmg)`; }
+
                         if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
                         if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
                         if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
@@ -444,25 +495,13 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             p.currentHp = 0;
                             log += `\n>> AGENT EXECUTED! [Critical System Failure]`;
                         } else {
-                            let mitigation = 0; let mitType = "None"; let isFlanking = false;
+                            let mitigation = 0; let mitType = "None"; let trueFlank = isFlanking || (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0');
                             
-                            if (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0') {
-                                isFlanking = true; mitType = "AoE Target";
-                            } else if (attackerPosIdx) {
-                                const dx = attackerPosIdx.x - targetCoords.x; const dy = attackerPosIdx.y - targetCoords.y;
-                                let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
-                                if (angle < 0) angle += 360; 
-                                const facingAngle = t.facing * 60; 
-                                let diff = Math.abs(angle - facingAngle);
-                                if (diff > 180) diff = 360 - diff;
-                                if (diff > 60) isFlanking = true; 
-                            }
-
                             if (forcedEvasion) {
-                                isFlanking = true; mitType = "Forced Evasion [State]";
+                                trueFlank = true; mitType = "Forced Evasion [State]";
                                 if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; }
                                 else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
-                            } else if (isFlanking) {
+                            } else if (trueFlank) {
                                 if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } 
                                 else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
                             } else {
@@ -561,18 +600,41 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }
 
         let newGrid = [...activeGrid];
-        if (activeAction.terrain) {
-            let changedCount = 0;
-            newGrid = newGrid.map((cell, idx) => {
-                if (aoeHexes.includes(idx)) {
-                    if (cell.terrain === 'severe' && activeAction.terrain !== 'clear') return cell;
-                    changedCount++;
-                    return { ...cell, terrain: activeAction.terrain === 'clear' ? null : activeAction.terrain };
+        let reactionCount = 0;
+        let changedCount = 0;
+        
+        newGrid = newGrid.map((cell, idx) => {
+            if (aoeHexes.includes(idx)) {
+                let cellChanged = false;
+                let newTerrain = cell.terrain;
+                let newElem = cell.terrainElement;
+
+                if (activeAction.terrain) {
+                    if (cell.terrain === 'severe' && activeAction.terrain !== 'clear') {
+                        // Terrain generation blocked by Bedrock
+                    } else {
+                        newTerrain = activeAction.terrain === 'clear' ? null : activeAction.terrain;
+                        newElem = activeAction.terrain === 'clear' ? null : dispCore;
+                        cellChanged = true;
+                        changedCount++;
+                    }
                 }
-                return cell;
-            });
-            if (changedCount > 0) log += `\n>> TERRAIN SHIFT: ${changedCount} hex(es) converted to [${activeAction.terrain.toUpperCase()}].`;
-        }
+
+                let baseCellElem = cell.terrainElement || newElem;
+                if (baseCellElem === 'Cryo' && dispCore === 'Thermal') {
+                    newTerrain = 'steam'; 
+                    newElem = 'Steam';
+                    reactionCount++;
+                    cellChanged = true;
+                }
+
+                if (cellChanged) return { ...cell, terrain: newTerrain, terrainElement: newElem };
+            }
+            return cell;
+        });
+
+        if (changedCount > 0) log += `\n>> TERRAIN SHIFT: ${changedCount} hex(es) painted.`;
+        if (reactionCount > 0) log += `\n>> ELEMENTAL REACTION: ${reactionCount} hex(es) triggered a Steam Explosion!`;
 
         if (deadEnemyUids.size > 0) {
             newEnemies = newEnemies.filter(e => !deadEnemyUids.has(e.uid));
@@ -609,8 +671,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             else resolveCombat(index);
         } else if (paintBrush) {
             pushUpdate(s => {
-                const newGrid = [...(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null }))];
-                newGrid[index] = { ...newGrid[index], terrain: paintBrush === 'clear' ? null : paintBrush };
+                const newGrid = [...(s.grid?.length === 150 ? s.grid : Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }))];
+                newGrid[index] = { ...newGrid[index], terrain: paintBrush === 'clear' ? null : paintBrush, terrainElement: null };
                 
                 const res = evaluateCrush(s.tokens || [], newGrid, s.players || {}, s.encounter?.enemies || [], new Set(), "");
                 
@@ -656,12 +718,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }); 
     };
 
-    const rotateToken = (e, id) => {
+    const rotateToken = (e, id, dir) => {
         e.stopPropagation();
         pushUpdate(s => {
             const newTokens = [...(s.tokens || [])];
             const idx = newTokens.findIndex(t => t.id === id);
-            if (idx !== -1) newTokens[idx].facing = (newTokens[idx].facing + 1) % 6; 
+            if (idx !== -1) newTokens[idx].facing = (newTokens[idx].facing + dir + 6) % 6; 
             return { ...s, tokens: newTokens };
         });
     };
@@ -698,16 +760,19 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             let bgColor = '#1e293b'; let hexBorder = 'none'; let hexZ = 1;
 
             let titleStr = `Hex ${idx}`;
+            if (cell.terrainElement) titleStr += ` | ${cell.terrainElement}`;
             if (cell.terrain) {
                 let tDesc = cell.terrain === 'minor' ? 'Movement cost doubled.' :
                             cell.terrain === 'major' ? 'Deals 5 damage at round end.' :
-                            cell.terrain === 'severe' ? 'Impassable & Blocks Line-of-Sight.' : '';
-                titleStr += ` | ${String(cell.terrain).toUpperCase()}: ${tDesc}`;
+                            cell.terrain === 'severe' ? 'Impassable & Blocks Line-of-Sight.' :
+                            cell.terrain === 'steam' ? 'Blocks Line-of-Sight. Deals 5 Kinetic damage at round end.' : '';
+                titleStr += ` | [${String(cell.terrain).toUpperCase()}]: ${tDesc}`;
             }
 
             if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; 
             if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; 
             if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
+            if (cell.terrain === 'steam') bgColor = 'rgba(148, 163, 184, 0.7)'; 
 
             if (encounter?.round === 0 && !activeAction && !selectedToken && !paintBrush) {
                 const row = Math.floor(idx / COLS);
@@ -734,7 +799,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 } else if (activeAction.type === 'blink') {
                     if (dist > 0 && dist <= activeAction.m && cell.terrain !== 'severe') isMovable = true;
                 } else {
-                    if (dist >= minR && dist <= maxR && cell.terrain !== 'severe') isTargetable = true;
+                    if (dist >= minR && dist <= maxR && cell.terrain !== 'severe' && cell.terrain !== 'steam') isTargetable = true;
                     if (hoveredHex !== null && aoeHexes.includes(idx)) isAoETarget = true;
                 }
             }
@@ -828,11 +893,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     }}
                     style={{ backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, transform: `rotate(${t.facing * 60}deg)`, cursor: activeAction ? 'crosshair' : 'pointer' }}
                 >
-                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 hover:border-b-white transition-colors" onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isGM && t.type === 'enemy') return alert("Access Denied: Cannot rotate Hostile facing arc.");
-                        rotateToken(e, t.id);
-                    }} title="Rotate Facing Arc"></div>
+                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 hover:border-b-white transition-colors" title="Front Arc"></div>
                     
                     <span className="mt-1">{displayChar}</span>
                     {hpDisplay}
@@ -846,10 +907,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     )}
 
                     {showHoverControls && ( 
-                        <div className="absolute -top-10 flex gap-2 z-50" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
-                            <button className="bg-[#22c55e] text-black rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-white hover:border-[#22c55e] transition-colors shadow-lg" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button>
+                        <div className="absolute -top-12 flex gap-1 z-50 bg-black/80 p-1 border border-gray-600 rounded shadow-lg" style={{ transform: `rotate(-${t.facing * 60}deg)` }}>
+                            <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600 transition-colors" onClick={(e) => rotateToken(e, t.id, -1)} title="Rotate Left">↶</button>
+                            <button className="bg-[#22c55e] text-black w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:border-[#22c55e] transition-colors" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button>
+                            <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600 transition-colors" onClick={(e) => rotateToken(e, t.id, 1)} title="Rotate Right">↷</button>
                             {isGM && (
-                                <button className="bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-white hover:text-red-600 hover:border-red-600 transition-colors shadow-lg" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>
+                                <button className="bg-red-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-red-600 transition-colors ml-1" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>
                             )}
                         </div>
                     )}
@@ -1111,7 +1174,10 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         </div>
 
                         <div className="bg-gray-900 border border-gray-700 p-2 mt-1">
-                            <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Active States</div>
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Active States</span>
+                                {linkedEnemy.affinity && <span className="text-[#ff6600] text-[10px] font-bold uppercase border border-[#ff6600] px-1">Type: {linkedEnemy.affinity}</span>}
+                            </div>
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {(linkedEnemy.statuses || []).length === 0 && <span className="text-xs text-gray-600">None.</span>}
                                 {(linkedEnemy.statuses || []).map((st, i) => (
