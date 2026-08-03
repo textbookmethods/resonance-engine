@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 
 export default function Rulebook() {
     const [activeChapter, setActiveChapter] = useState('core');
+    const [flowTab, setFlowTab] = useState('agent');
 
     const chapters = [
         { id: 'core', label: '1. The Resonance Engine (VTT)' },
-        { id: 'flow', label: '2. Encounter Flow & Deployment' },
+        { id: 'flow', label: '2. Turn Flow & Deployment' },
         { id: 'prog', label: '3. Progression (XP & Affinity)' },
         { id: 'grid', label: '4. Grid Movement & Terrain' },
         { id: 'combat', label: '5. Automated Combat & Defense' },
@@ -44,16 +45,65 @@ export default function Rulebook() {
 
                 {activeChapter === 'flow' && (
                     <div className="space-y-6 animate-fade-in">
-                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">2. Encounter Flow & Deployment</h1>
+                        <h1 className="text-3xl text-white font-bold mb-6 border-b border-gray-700 pb-2">2. Turn Flow & Deployment</h1>
                         
-                        <div>
-                            <h3 className="text-[#00f0ff] font-bold text-lg mb-2">Round 0: Deployment Phase</h3>
-                            <p className="leading-relaxed mb-4">Every encounter begins in Round 0. During this phase, the grid visually splits into two sectors:</p>
-                            <ul className="list-disc list-inside text-gray-400 space-y-1 ml-4 mb-4">
-                                <li><strong>Northern Sector (Red):</strong> Hostile drop zone.</li>
-                                <li><strong>Southern Sector (Blue):</strong> Agent drop zone.</li>
-                            </ul>
+                        <div className="mb-4">
+                            <h3 className="text-white font-bold text-lg mb-2">Round 0: Deployment Phase</h3>
+                            <p className="leading-relaxed mb-4">Every encounter begins in Round 0. During this phase, the grid visually splits into two sectors. Hostiles must deploy in the North (Red). Agents must deploy in the South (Blue).</p>
                         </div>
+
+                        <div className="flex gap-4 mb-4 border-b border-gray-700 pb-2 mt-8">
+                            <button className={`px-4 py-2 font-bold uppercase tracking-widest transition-colors ${flowTab === 'agent' ? 'text-[#00f0ff] border-b-2 border-[#00f0ff]' : 'text-gray-500 hover:text-white'}`} onClick={() => setFlowTab('agent')}>Agent Turn</button>
+                            <button className={`px-4 py-2 font-bold uppercase tracking-widest transition-colors ${flowTab === 'gm' ? 'text-[#ff6600] border-b-2 border-[#ff6600]' : 'text-gray-500 hover:text-white'}`} onClick={() => setFlowTab('gm')}>GM Turn</button>
+                        </div>
+
+                        {flowTab === 'agent' && (
+                            <div className="space-y-4 animate-fade-in">
+                                <h3 className="text-[#00f0ff] font-bold text-lg">The Agent Phase</h3>
+                                <p className="leading-relaxed mb-4">During the Agent Phase, all players may take their turns simultaneously or in any order they coordinate. A standard Agent turn consists of the following steps:</p>
+                                
+                                <div className="bg-black border border-gray-700 p-4 space-y-4">
+                                    <div>
+                                        <strong className="text-white">1. Movement (Navigation Array)</strong><br/>
+                                        <span className="text-gray-400">Agents spend their available Movement Points (Speed) to reposition on the grid. Moving into Minor Terrain costs 2 points per hex.</span>
+                                    </div>
+                                    <div>
+                                        <strong className="text-white">2. Action (Offensive Array)</strong><br/>
+                                        <span className="text-gray-400">Agents may perform ONE action per round: A Basic Attack (generates +1 Res), an Equipped Custom Skill (consumes Res), or an Improvised Action (costs 1 Res, rolls 1d6).</span>
+                                    </div>
+                                    <div>
+                                        <strong className="text-white">3. Guard (Defensive Array)</strong><br/>
+                                        <span className="text-gray-400">Agents must manually click to arm ONE Defensive Stance: Parry (Front), Intercept (Support), or Evade (Backline). Once struck by an incoming attack, the defense exhausts until the next round.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {flowTab === 'gm' && (
+                            <div className="space-y-4 animate-fade-in">
+                                <h3 className="text-[#ff6600] font-bold text-lg">The GM Phase</h3>
+                                <p className="leading-relaxed mb-4">After all Agents have acted, the GM resolves Hostile actions and advances the world physics.</p>
+                                
+                                <div className="bg-black border border-gray-700 p-4 space-y-4">
+                                    <div>
+                                        <strong className="text-white">1. Hostile Maneuvers</strong><br/>
+                                        <span className="text-gray-400">The GM maneuvers entities using their Movement Points and fires Bestiary abilities based on their Tier mechanics and ranges.</span>
+                                    </div>
+                                    <div>
+                                        <strong className="text-white">2. Round Advancement</strong><br/>
+                                        <span className="text-gray-400">The GM clicks "Next +" on the operations dashboard. The Engine intercepts this button press and instantly processes all global mathematics simultaneously.</span>
+                                    </div>
+                                    <div>
+                                        <strong className="text-white">3. Environmental Processing (Automated)</strong><br/>
+                                        <span className="text-gray-400">The Engine calculates and deducts 3 HP for every active DoT (Bleed, Burn, Poisoned) globally. It then evaluates the Grid, deducting 5 HP for any token currently occupying Major Terrain or Steam.</span>
+                                    </div>
+                                    <div>
+                                        <strong className="text-white">4. State Cleanup (Automated)</strong><br/>
+                                        <span className="text-gray-400">The Engine clears temporary states like Knockdown, resets all Agent defensive guards, replenishes movement pools, and ticks Entombment Execution timers up by 1 phase.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -84,7 +134,7 @@ export default function Rulebook() {
                         <div>
                             <h3 className="text-[#00f0ff] font-bold text-lg mb-2 mt-6">Terrain Painted by Abilities</h3>
                             <p className="leading-relaxed mb-4">Players can dynamically alter the environment by adding a <strong>Terrain (t)</strong> generation effect to their synthesized spells. When executed, every hex within the spell's Area of Effect (AoE) radius is instantly painted with that terrain.</p>
-                            <ul className="space-y-4 list-none">
+                            <ul className="space-y-4 list-none mb-8">
                                 <li className="bg-black border-l-4 border-yellow-500 p-3">
                                     <strong className="text-yellow-500">Minor Terrain (t=1)</strong><br/>
                                     <span className="text-gray-400 text-xs">Examples: Mud, Caltrops</span><br/>
@@ -105,9 +155,27 @@ export default function Rulebook() {
                                     <span className="text-gray-400 text-xs">Examples: Bedrock Pillars, Forcefields</span><br/>
                                     Completely impassable. Blocks line-of-sight for targeting.
                                 </li>
+                            </ul>
+
+                            <h3 className="text-[#ff6600] font-bold text-lg mb-2 pt-6 border-t border-gray-700">Elemental Grid Reactions</h3>
+                            <p className="leading-relaxed mb-4">The Engine natively tracks the elemental composition of the Grid. If an active terrain hex is struck by an opposing Elemental spell, it triggers an instant reaction.</p>
+                            
+                            <ul className="space-y-4 list-none">
                                 <li className="bg-black border-l-4 border-slate-400 p-3">
-                                    <strong className="text-slate-300">Steam (Elemental Reaction Override)</strong><br/>
-                                    If an active Cryo hex is hit by a Thermal spell, it reacts. The Engine generates a Steam Explosion (+5 Damage to occupants) and converts the terrain into Steam. Steam blocks Line-of-Sight and deals 5 Kinetic damage at the end of the round.
+                                    <strong className="text-slate-300">Steam (Cryo Hex + Thermal Spell)</strong><br/>
+                                    The Engine generates a Steam Explosion (+5 Damage to occupants) and converts the terrain into Steam. Steam blocks Line-of-Sight and deals 5 damage at the end of the round.
+                                </li>
+                                <li className="bg-black border-l-4 border-orange-500 p-3">
+                                    <strong className="text-orange-500">Combustion (Toxic Hex + Thermal Spell)</strong><br/>
+                                    The Engine triggers a massive explosion (+5 Damage to occupants) and burns away the toxic pool, reverting the terrain to neutral.
+                                </li>
+                                <li className="bg-black border-l-4 border-blue-400 p-3">
+                                    <strong className="text-blue-400">Conduction (Cryo/Water Hex + Electro Spell)</strong><br/>
+                                    The Engine chains lightning through the hazard (+5 Damage to occupants) and converts the terrain into Electrified Minor Terrain.
+                                </li>
+                                <li className="bg-black border-l-4 border-purple-500 p-3">
+                                    <strong className="text-purple-400">Matter Annihilation (Void Hex + Radiant Spell)</strong><br/>
+                                    Radiant and Void instantly destroy each other upon contact. The reaction deals +5 Damage to occupants and reverts the terrain to neutral.
                                 </li>
                             </ul>
                         </div>

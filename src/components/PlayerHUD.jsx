@@ -66,9 +66,11 @@ const CLASS_AFFINITIES = {
     'Rookie': { states: ['Haste', 'Bleed'] }
 };
 
+const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+
 const getCoreElement = (input) => {
     if (!input) return 'Kinetic';
-    const clean = input.toLowerCase().trim();
+    const clean = String(input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
         if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
     }
@@ -77,21 +79,21 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const match = input.match(/\[(.*?)\]/);
-    const clean = (match ? match[1] : input).toLowerCase().trim();
+    const match = String(input).match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : String(input)).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return input; 
+    return String(input); 
 };
 
 const getCoreMobility = (input) => {
     if (!input) return '';
-    const clean = input.toLowerCase().trim();
+    const clean = String(input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(MOBILITY_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return input;
+    return String(input);
 };
 
 const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElementCore, spellEffectCore, uValue) => {
@@ -100,9 +102,8 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
     const isEleSyn = playerAffinity === spellElementCore;
     const isStateSyn = cls.states.includes(spellEffectCore);
 
-    // NEW: RPS Inverse Penalty Check (Spell element vs Agent's Innate Element)
-    const pElem = playerAffinity ? playerAffinity.toLowerCase() : 'kinetic';
-    const sElem = spellElementCore ? spellElementCore.toLowerCase() : 'kinetic';
+    const pElem = playerAffinity ? String(playerAffinity).toLowerCase() : 'kinetic';
+    const sElem = spellElementCore ? String(spellElementCore).toLowerCase() : 'kinetic';
 
     const isOpposed = 
         (sElem === 'toxic' && pElem === 'thermal') ||
@@ -140,10 +141,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
     const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
-    const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
     
     const currentRes = player.resPool !== undefined ? safeInt(player.resPool) : 3;
-
     const isMyTurn = encounter?.activeTurn === 'player' || encounter?.round === 0;
 
     const front = safeInt(player.dpFront); const supp = safeInt(player.dpSupport); const back = safeInt(player.dpBack);
@@ -248,9 +247,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: true, cost: 0, name: activeWeapon.name, d: calcBaseDmg, a: 0, range: finalRange, elementRaw: rawWpn, elementCore: coreWpn } })); 
     };
     
+    // FIXED: Guaranteed strict integer cost parsing and fallback string values to prevent NaN state crashes
     const primeCard = (c, isImprovised = false, originalCost = 0) => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate targeting array.");
-        const requiredRes = isImprovised ? 1 : c.cost;
+        const requiredRes = isImprovised ? 1 : safeInt(c.cost);
         if (currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
@@ -258,17 +258,18 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         let finalAoe = isBlind ? 0 : (c.a || 0);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
 
-        const coreMobility = getCoreMobility(c.mobilityName);
+        const mobilityRaw = c.mobilityName || c.mobility || '';
+        const coreMobility = getCoreMobility(mobilityRaw);
         const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
 
         safePush(s => ({ ...s, activeAction: { 
             type: isBlink ? 'blink' : undefined,
             source: player.name || 'Player', sourceId: localId, isEnemy: false, isBasic: false, 
-            isImprovised: isImprovised, originalCost: originalCost, cost: requiredRes, 
+            isImprovised: isImprovised, originalCost: safeInt(originalCost), cost: requiredRes, 
             name: c.name || (isImprovised ? 'Improvised Action' : 'Custom Action'), 
-            d: c.d, a: finalAoe, u: c.u, m: safeInt(c.m), coreMobility: coreMobility,
-            range: finalRange, effectName: c.effectName, effectCore: c.effectCore, 
-            elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || 'Kinetic', 
+            d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: coreMobility,
+            range: finalRange, effectName: c.effectName, effectCore: c.effectCore || getCoreState(c.effectName), 
+            elementRaw: c.elementRaw || 'Kinetic', elementCore: c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'), 
             terrain: c.terrain, desc: c.desc 
         } })); 
     };
@@ -553,9 +554,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         const dispRaw = c.elementRaw || c.element || 'Kinetic';
                         const dispCore = c.elementCore || c.element || 'Kinetic';
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                        const isNoFuel = currentRes < c.cost;
+                        
+                        const cardCost = parseInt(c.cost) || 0;
+                        const isNoFuel = currentRes < cardCost;
 
-                        const coreMob = getCoreMobility(c.mobilityName);
+                        const coreMob = getCoreMobility(c.mobilityName || c.mobility);
                         const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
 
                         return (
@@ -563,11 +566,11 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                 <div className="flex-1 pr-6 pb-2">
                                     <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
-                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{c.cost} Res</div>
+                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
                                     {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)]} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
-                                    {c.m > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {c.m} [{coreMob.toUpperCase()}]</div>}
+                                    {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {c.m} [{coreMob.toUpperCase()}]</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
