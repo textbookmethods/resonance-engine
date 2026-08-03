@@ -5,8 +5,8 @@ import { armory } from '../data/armory';
 
 const safeArray = (arr) => {
     if (!arr) return [];
-    if (Array.isArray(arr)) return arr.filter(Boolean);
-    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    if (Array.isArray(arr)) return arr.filter(item => item !== null && item !== undefined);
+    if (typeof arr === 'object') return Object.values(arr).filter(item => item !== null && item !== undefined);
     return [];
 };
 

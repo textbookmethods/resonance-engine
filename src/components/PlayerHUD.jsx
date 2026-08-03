@@ -71,8 +71,8 @@ const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
 const safeArray = (arr) => {
     if (!arr) return [];
-    if (Array.isArray(arr)) return arr.filter(Boolean);
-    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    if (Array.isArray(arr)) return arr.filter(item => item !== null && item !== undefined);
+    if (typeof arr === 'object') return Object.values(arr).filter(item => item !== null && item !== undefined);
     return [];
 };
 
@@ -169,7 +169,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     else if (supp >= 5 && back >= 5) activeClass = "Saboteur"; 
 
     const derivedMaxHp = 20 + (front * 3) + (supp * 2) + (back * 1);
-    const activeWeapon = safeArmory.find(w => w.id === (player.weaponId || 'w01')) || safeArmory[0];
+    const activeWeapon = safeArmory.find(w => String(w.id) === String(player.weaponId || 'w01')) || safeArmory[0];
     const isSynergy = front >= (activeWeapon.reqF || 0) && supp >= (activeWeapon.reqS || 0) && back >= (activeWeapon.reqB || 0);
 
     let bonusDmg = 0; let bonusFront = 0; let bonusSupp = 0; let bonusBack = 0;
@@ -188,7 +188,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
-    const calcCost = Math.ceil(affinityData.alpha * ((builder.d || 0) + (builder.u || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
+    const calcCost = Math.ceil(affinityData.alpha * ((safeInt(builder.d) || 0) + (safeInt(builder.u) || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
 
     const myToken = safeArray(tokens).find(t => t.type === 'player' && String(t.refId) === String(localId));
     
@@ -218,14 +218,14 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const actionName = builder.name || 'Custom Action';
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
         if (cards.some(c => String(c.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already equipped in your HUD. Please give this ability a unique name.`);
-        updatePlayer('customCards', [...cards, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
+        updatePlayer('customCards', [...cards, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `card-${Date.now()}` }]);
     };
     
     const saveToSpellbook = () => {
         const archived = safeArray(player.savedSkills);
         const actionName = builder.name || 'Custom Action';
         if (archived.some(s => String(s.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already in your Spellbook. Please give this ability a unique name.`);
-        updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: Date.now() }]);
+        updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `spell-${Date.now()}` }]);
         alert("Ability archived to Spellbook!");
     };
 
@@ -239,7 +239,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const primeMove = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
         if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
-        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: localId, isEnemy: false } })); 
+        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: String(localId), isEnemy: false } })); 
     };
     
     const primeWeapon = () => { 
@@ -256,7 +256,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { 
             type: null,
             source: player.name || 'Player', 
-            sourceId: localId || null, 
+            sourceId: String(localId), 
             isEnemy: false, 
             isBasic: true, 
             isImprovised: false,
@@ -290,7 +290,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { 
             type: isBlink ? 'blink' : null,
             source: player.name || 'Player', 
-            sourceId: localId || null, 
+            sourceId: String(localId), 
             isEnemy: false, 
             isBasic: false, 
             isImprovised: isImprovised || false, 
@@ -631,7 +631,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     </button>
                                 </div>
                                 <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); archiveEquippedCard(c); }} title="Archive to Spellbook">⤓</button>
-                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => card.id !== c.id)); }}>✕</button>
+                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }}>✕</button>
                             </div>
                         );
                     })}

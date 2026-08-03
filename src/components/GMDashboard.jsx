@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React from 'react';
+import React, { useState } from 'react';
 import { bestiary } from '../data/bestiary';
 
 const ELEMENT_DICTIONARY = {
@@ -53,14 +53,14 @@ const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
 const safeArray = (arr) => {
     if (!arr) return [];
-    if (Array.isArray(arr)) return arr.filter(Boolean);
-    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    if (Array.isArray(arr)) return arr.filter(item => item !== null && item !== undefined);
+    if (typeof arr === 'object') return Object.values(arr).filter(item => item !== null && item !== undefined);
     return [];
 };
 
 const getCoreElement = (input) => {
     if (!input) return 'Kinetic';
-    const clean = String(input).toLowerCase().trim();
+    const clean = input.toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
         if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
     }
@@ -69,22 +69,40 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const match = String(input).match(/\[(.*?)\]/);
-    const clean = (match ? match[1] : String(input)).toLowerCase().trim();
+    const match = input.match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return String(input); 
+    return input; 
 };
 
 export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
+    const [selectedEnemyId, setSelectedEnemyId] = useState('');
+
     const updateEnc = (updates) => pushUpdate(s => ({ ...s, encounter: { ...s.encounter, ...updates } }));
 
     const addEnemy = (bestiaryId) => {
-        const template = bestiary.find(b => b.id === bestiaryId);
-        if (!template) return;
-        const newEnemy = { ...template, uid: Date.now(), currentHp: template.hp || 0, currentBarriers: template.barriers ? [...template.barriers] : [], siphonActive: false, staggered: false, statuses: [] };
-        updateEnc({ enemies: [...safeArray(encounter?.enemies), newEnemy] });
+        pushUpdate(s => {
+            const template = safeArray(bestiary).find(b => String(b.id) === String(bestiaryId));
+            if (!template) return s;
+            
+            const newEnemy = deepClone(template);
+            newEnemy.uid = `enemy-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+            newEnemy.currentHp = template.hp || 0;
+            newEnemy.currentBarriers = template.barriers ? [...template.barriers] : [];
+            newEnemy.siphonActive = false;
+            newEnemy.staggered = false;
+            newEnemy.statuses = [];
+            
+            return {
+                ...s,
+                encounter: {
+                    ...(s.encounter || {}),
+                    enemies: [...safeArray(s.encounter?.enemies), newEnemy]
+                }
+            };
+        });
     };
 
     const primeEnemyAbility = (enemy, cleanName, desc, eCost) => {
@@ -130,7 +148,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         pushUpdate(s => ({ ...s, activeAction: { 
             type: null,
             source: enemy.name || 'Hostile', 
-            sourceId: enemy.uid || null, 
+            sourceId: String(enemy.uid), 
             isEnemy: true, 
             isBasic: false,
             isImprovised: false,
@@ -175,7 +193,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (dotDmg > 0) {
                     e.currentHp = Math.max(0, e.currentHp - dotDmg);
                     log.push(`Hostile [${e.name}] took ${dotDmg} damage from environmental effects (${activeDoTs.join(', ')}).`);
-                    if (e.currentHp <= 0) deadEnemyUids.add(e.uid);
+                    if (e.currentHp <= 0) deadEnemyUids.add(String(e.uid));
                 }
                 
                 e.statuses = safeArray(e.statuses).filter(st => getCoreState(st) !== 'Knockdown');
@@ -241,8 +259,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             let activeTokensList = newTokens;
 
             if (deadEnemyUids.size > 0) {
-                activeEnemies = activeEnemies.filter(e => !deadEnemyUids.has(String(e.uid)) && !deadEnemyUids.has(Number(e.uid)));
-                activeTokensList = activeTokensList.filter(t => !(t.type === 'enemy' && (deadEnemyUids.has(String(t.refId)) || deadEnemyUids.has(Number(t.refId)))));
+                activeEnemies = activeEnemies.filter(e => !deadEnemyUids.has(String(e.uid)));
+                activeTokensList = activeTokensList.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(String(t.refId))));
                 log.push(`>> ${deadEnemyUids.size} entities purged due to terminal damage.`);
             }
 
@@ -293,7 +311,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
     const isOverload = (encounter?.round || 0) >= 4;
     const enemiesList = safeArray(encounter?.enemies);
-    const enemyTokens = safeArray(tokens).filter(tok => tok && tok.type === 'enemy').sort((a,b) => a.id - b.id);
+    const enemyTokens = safeArray(tokens).filter(tok => tok && tok.type === 'enemy').sort((a,b) => String(a.id).localeCompare(String(b.id)));
+    const validBestiary = safeArray(bestiary).sort((a, b) => a.tier - b.tier); 
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 font-mono text-sm">
@@ -351,9 +370,20 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             <div className="lg:col-span-3 bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-[75vh]">
                 <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
                     <h2 className="text-[#ff6600] font-bold text-xl">Active Hostiles</h2>
-                    <select className="bg-black text-white border border-gray-600 p-2 outline-none cursor-pointer" onChange={(e) => { if(e.target.value) addEnemy(parseInt(e.target.value)); e.target.selectedIndex = 0; }}>
-                        <option value="">+ Deploy Entity...</option>
-                        {bestiary.map(b => <option key={b.id} value={b.id}>T{b.tier} - {b.name}</option>)}
+                    <select 
+                        className="bg-black text-white border border-gray-600 p-2 outline-none cursor-pointer max-w-sm w-full" 
+                        value={selectedEnemyId} 
+                        onChange={(e) => { 
+                            if(e.target.value) {
+                                addEnemy(e.target.value); 
+                                setSelectedEnemyId(''); 
+                            }
+                        }}
+                    >
+                        <option value="" disabled>+ Deploy Entity...</option>
+                        {validBestiary.map(b => (
+                            <option key={b.id} value={b.id}>Tier {b.tier} | {b.name} [{b.affinity}]</option>
+                        ))}
                     </select>
                 </div>
                 
@@ -362,6 +392,15 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     
                     {enemiesList.map((enemy, idx) => {
                         const myToken = enemyTokens.find(t => String(t.refId) === String(enemy.uid));
+
+                        // FIXED: Extracted scoped state variables completely outside the nested map loop
+                        const eCoreStates = safeArray(enemy.statuses).map(st => getCoreState(st));
+                        const isBlind = eCoreStates.includes('Blind');
+                        const isStunned = eCoreStates.includes('Stunned');
+                        const isImmobilized = eCoreStates.includes('Immobilized');
+                        
+                        const disableAttacks = isStunned;
+                        const disableMovement = isStunned || isImmobilized;
 
                         return (
                             <div key={enemy.uid} className={`border p-3 flex flex-col xl:flex-row gap-4 ${enemy.staggered ? 'border-yellow-500 bg-yellow-900 bg-opacity-20' : 'border-gray-700 bg-black'}`}>
@@ -404,6 +443,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
                                             const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
                                             const shapeMatch = desc.match(/(line|cluster)/i);
+                                            
+                                            // isBlind is now safely scoped and inherited here!
                                             let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
                                             if (!isBlind && shapeMatch) {
                                                 if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
@@ -422,9 +463,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                             let eRange = "1";
                                             const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
                                             if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
-                                            
-                                            const eCoreStates = safeArray(enemy.statuses).map(st => getCoreState(st));
-                                            const disableAttacks = eCoreStates.includes('Stunned');
 
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
@@ -434,20 +472,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                         {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
-                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => {
-                                                        if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
-                                                        
-                                                        const currentHostileRes = encounter?.enemyPoolTotal || 0;
-                                                        if (currentHostileRes < eCost) {
-                                                            return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${eCost} RES\nCurrent Pool: ${currentHostileRes} RES`);
-                                                        }
-
-                                                        let finalRange = isBlind ? '1' : eRange;
-                                                        let finalAoe = isBlind ? 0 : parsedAoe;
-                                                        if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-
-                                                        pushUpdate(s => ({ ...s, activeAction: { source: enemy.name, sourceId: enemy.uid, isEnemy: true, name: cleanName, cost: eCost, d: parsedDmg, a: finalAoe, range: finalRange, effectName: pEff, effectCore: getCoreState(pEff), elementRaw: parsedElement, elementCore: getCoreElement(parsedElement), terrain: pTerrain } }))
-                                                    }}>
+                                                    <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc, eCost)}>
                                                         {disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}
                                                     </button>
                                                 </div>

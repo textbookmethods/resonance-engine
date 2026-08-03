@@ -39,8 +39,8 @@ const STATE_DESCRIPTIONS = {
 
 const safeArray = (arr) => {
     if (!arr) return [];
-    if (Array.isArray(arr)) return arr.filter(Boolean);
-    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    if (Array.isArray(arr)) return arr.filter(item => item !== null && item !== undefined);
+    if (typeof arr === 'object') return Object.values(arr).filter(item => item !== null && item !== undefined);
     return [];
 };
 
@@ -68,7 +68,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
 
     const deleteSkill = (id) => {
-        updatePlayer('savedSkills', savedSkills.filter(s => s.id !== id));
+        updatePlayer('savedSkills', savedSkills.filter(s => String(s.id) !== String(id)));
     };
 
     const equipToHUD = (skill) => {
@@ -80,7 +80,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
             return alert(`"${skill.name}" is already equipped in your Combat HUD.`);
         }
 
-        updatePlayer('customCards', [...currentHUD, { ...skill, id: Date.now() }]);
+        updatePlayer('customCards', [...currentHUD, { ...skill, id: `card-${Date.now()}` }]);
         alert(`"${skill.name}" equipped to Combat HUD!`);
     };
 

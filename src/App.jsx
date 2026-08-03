@@ -26,11 +26,10 @@ if (isFirebaseConfigured && !firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 
-// UNIVERSAL ARRAY REPAIR: Prevents Firebase Object/Array corruption crashes
-const safeArray = (arr) => {
+export const safeArray = (arr) => {
     if (!arr) return [];
-    if (Array.isArray(arr)) return arr.filter(Boolean);
-    if (typeof arr === 'object') return Object.values(arr).filter(Boolean);
+    if (Array.isArray(arr)) return arr.filter(item => item !== null && item !== undefined);
+    if (typeof arr === 'object') return Object.values(arr).filter(item => item !== null && item !== undefined);
     return [];
 };
 
@@ -56,8 +55,8 @@ export default function App() {
 
     const [localId] = useState(() => {
         let id = localStorage.getItem('res_player_id');
-        if (!id) { id = Math.random().toString(36).substr(2, 9); localStorage.setItem('res_player_id', id); }
-        return id;
+        if (!id) { id = String(Date.now()) + '-' + Math.random().toString(36).substr(2, 9); localStorage.setItem('res_player_id', id); }
+        return String(id);
     });
 
     useEffect(() => {
@@ -77,7 +76,6 @@ export default function App() {
 
             if (!data.players) { data.players = {}; needsUpdate = true; }
 
-            // FIXED: Secure Agent Creation integrated into the listener to prevent race conditions
             if (role === 'player' && !data.players[localId]) {
                 data.players[localId] = {
                     name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
@@ -89,7 +87,6 @@ export default function App() {
                 needsUpdate = true;
             }
 
-            // Universal Data Sweeper
             Object.keys(data.players).forEach(pid => {
                 if (data.players[pid]) {
                     data.players[pid].customCards = safeArray(data.players[pid].customCards);
