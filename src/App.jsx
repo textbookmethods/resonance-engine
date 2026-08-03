@@ -38,8 +38,10 @@ const DEFAULT_STATE = {
 export default function App() {
     const [role, setRole] = useState(null); 
     const [activeTab, setActiveTab] = useState('player');
-    const [sessionIdInput, setSessionIdInput] = useState('PLAYTEST-1');
-    const [sessionId, setSessionId] = useState('PLAYTEST-1');
+    
+    // UPDATED: Session IDs default to blank to prevent accidental public sandbox logins
+    const [sessionIdInput, setSessionIdInput] = useState('');
+    const [sessionId, setSessionId] = useState('');
     
     const [gameState, setGameState] = useState(DEFAULT_STATE);
     const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only (Waiting for Firebase Keys)');
@@ -72,7 +74,6 @@ export default function App() {
                     });
                 }
                 
-                // FIX: Sweeps corrupt/sparse array gaps caused by Firebase deletion ghosts
                 if (data.encounter?.enemies) {
                     data.encounter.enemies = data.encounter.enemies.filter(Boolean);
                     data.encounter.enemies.forEach(e => { if (e) e.statuses = e.statuses || []; });
