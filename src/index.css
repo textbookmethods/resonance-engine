@@ -1,3 +1,110 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* ==========================================================================
+   GLOBAL RESETS & THEME FOUNDATION
+   ========================================================================== */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #05080a;
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Tactical Selection Highlighting */
+::selection {
+  background-color: #00f0ff;
+  color: #000000;
+}
+
+/* Remove default arrows from number inputs for a cleaner HUD */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Custom Tactical Dropdown Arrow for Select Menus */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%236b7280' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px top 50%;
+  background-size: 16px;
+}
+
+/* ==========================================================================
+   TACTICAL SCROLLBARS
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b0f14;
+  border-left: 1px solid #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border: 1px solid #1f2937;
+  border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #ff6600;
+}
+
+::-webkit-scrollbar-corner {
+  background: #0b0f14;
+}
+
+/* ==========================================================================
+   CUSTOM UTILITIES & ANIMATIONS
+   ========================================================================== */
+@layer utilities {
+  
+  /* Hexagon Clip Path used in the Reference Guide & Grid Maps */
+  .clip-hex {
+    clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  }
+  
+  /* Hide scrollbar on specific elements (like the App.jsx Top Nav) */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Smooth fade-in used when switching tabs and opening sidebars */
+  .animate-fade-in {
+    animation: fadeIn 0.25s ease-out forwards;
+  }
+}
+
+/* Keyframes for the fade-in utility */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

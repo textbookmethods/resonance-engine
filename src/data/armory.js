@@ -1,52 +1,199 @@
+/**
+ * RESONANCE ENGINE V2.0 - OFFICIAL ARMORY
+ * 
+ * STRICT TYPING ENFORCED:
+ * - baseDmg, reqF, reqS, reqB, bonusFront, bonusSupp, bonusBack, bonusDmg MUST be Integers.
+ * - range MUST be a String to accommodate hyphens (e.g., "1-3").
+ * - id MUST be a String to prevent Firebase NaN/Array-Coercion glitches.
+ */
+
 export const armory = [
-    { id: 'w01', name: 'Standard Issue Kinetic Sidearm', range: '1-3', baseDmg: 3, element: 'Kinetic', reqF: 0, reqS: 0, reqB: 0 },
-    { id: 'w02', name: 'Recruit\'s Vibro-Knife', range: '1', baseDmg: 4, element: 'Kinetic', reqF: 0, reqS: 0, reqB: 0 },
-    { id: 'w03', name: 'Riot Control Baton', range: '1', baseDmg: 3, element: 'Electro', reqF: 0, reqS: 0, reqB: 0 },
-    { id: 'w04', name: 'Survival Hatchet', range: '1', baseDmg: 3, element: 'Thermal', reqF: 0, reqS: 0, reqB: 0 },
-    { id: 'w05', name: 'Jury-Rigged Sludge Pump', range: '1-2', baseDmg: 3, element: 'Toxic', reqF: 0, reqS: 0, reqB: 0 },
-    { id: 'w06', name: 'Vanguard Breaker Blade', range: '1', baseDmg: 5, element: 'Kinetic', reqF: 5, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusDesc: '+2 Dmg & +2 Parry' },
-    { id: 'w07', name: 'Thermal Scatter-Gun', range: '1-2', baseDmg: 4, element: 'Thermal', reqF: 5, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 1, bonusDesc: '+2 Dmg & +1 Parry' },
-    { id: 'w08', name: 'Rad-Cleaver', range: '1', baseDmg: 5, element: 'Toxic', reqF: 6, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusDesc: '+2 Dmg & +2 Parry' },
-    { id: 'w09', name: 'Kinetic Pilebunker', range: '1', baseDmg: 6, element: 'Kinetic', reqF: 7, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusDesc: '+2 Dmg & +2 Parry' },
-    { id: 'w10', name: 'Electro-Charged Gauntlets', range: '1', baseDmg: 4, element: 'Electro', reqF: 7, reqS: 0, reqB: 0, bonusDmg: 1, bonusFront: 3, bonusDesc: '+1 Dmg & +3 Parry' },
-    { id: 'w11', name: 'Cryo-Forged Warhammer', range: '1', baseDmg: 6, element: 'Cryo', reqF: 8, reqS: 0, reqB: 0, bonusDmg: 3, bonusFront: 2, bonusDesc: '+3 Dmg & +2 Parry' },
-    { id: 'w12', name: 'Plasma Torch Lance', range: '1-2', baseDmg: 5, element: 'Thermal', reqF: 8, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusDesc: '+2 Dmg & +2 Parry' },
-    { id: 'w13', name: 'Radiant Crusader Sword', range: '1', baseDmg: 5, element: 'Radiant', reqF: 9, reqS: 0, reqB: 0, bonusDmg: 2, bonusFront: 3, bonusDesc: '+2 Dmg & +3 Parry' },
-    { id: 'w14', name: 'Void-Tethered Halberd', range: '1-2', baseDmg: 7, element: 'Void', reqF: 10, reqS: 0, reqB: 0, bonusDmg: 3, bonusFront: 2, bonusDesc: '+3 Dmg & +2 Parry' },
-    { id: 'w15', name: 'Apex Predator Scythe', range: '1', baseDmg: 8, element: 'Kinetic', reqF: 10, reqS: 0, reqB: 0, bonusDmg: 4, bonusFront: 2, bonusDesc: '+4 Dmg & +2 Parry' },
-    { id: 'w16', name: 'Conduit Suppression Gauntlet', range: '1-2', baseDmg: 4, element: 'Kinetic', reqF: 0, reqS: 5, reqB: 0, bonusDmg: 1, bonusSupp: 2, bonusDesc: '+1 Dmg & +2 Intercept' },
-    { id: 'w17', name: 'Cryo Precision Emitter', range: '3-6', baseDmg: 4, element: 'Cryo', reqF: 0, reqS: 5, reqB: 0, bonusDmg: 2, bonusSupp: 1, bonusDesc: '+2 Dmg & +1 Intercept' },
-    { id: 'w18', name: 'Toxic Spore Censer', range: '2-4', baseDmg: 4, element: 'Toxic', reqF: 0, reqS: 6, reqB: 0, bonusDmg: 2, bonusSupp: 2, bonusDesc: '+2 Dmg & +2 Intercept' },
-    { id: 'w19', name: 'Thermal Healing Coil', range: '1-3', baseDmg: 3, element: 'Thermal', reqF: 0, reqS: 6, reqB: 0, bonusDmg: 1, bonusSupp: 3, bonusDesc: '+1 Dmg & +3 Intercept' },
-    { id: 'w20', name: 'Arc-Lightning Generator', range: '2-5', baseDmg: 5, element: 'Electro', reqF: 0, reqS: 7, reqB: 0, bonusDmg: 2, bonusSupp: 2, bonusDesc: '+2 Dmg & +2 Intercept' },
-    { id: 'w21', name: 'Kinetic Repulsion Field', range: '1-2', baseDmg: 5, element: 'Kinetic', reqF: 0, reqS: 8, reqB: 0, bonusDmg: 2, bonusSupp: 3, bonusDesc: '+2 Dmg & +3 Intercept' },
-    { id: 'w22', name: 'Void Resonance Projector', range: '3-5', baseDmg: 5, element: 'Void', reqF: 0, reqS: 8, reqB: 0, bonusDmg: 2, bonusSupp: 2, bonusDesc: '+2 Dmg & +2 Intercept' },
-    { id: 'w23', name: 'Stasis-Weave Orb', range: '2-5', baseDmg: 5, element: 'Cryo', reqF: 0, reqS: 9, reqB: 0, bonusDmg: 2, bonusSupp: 3, bonusDesc: '+2 Dmg & +3 Intercept' },
-    { id: 'w24', name: 'Divine Aegis Catalyst', range: '1-3', baseDmg: 4, element: 'Radiant', reqF: 0, reqS: 10, reqB: 0, bonusDmg: 1, bonusSupp: 4, bonusDesc: '+1 Dmg & +4 Intercept' },
-    { id: 'w25', name: 'Overseer\'s Command Baton', range: '1-4', baseDmg: 6, element: 'Radiant', reqF: 0, reqS: 10, reqB: 0, bonusDmg: 3, bonusSupp: 3, bonusDesc: '+3 Dmg & +3 Intercept' },
-    { id: 'w26', name: 'Sniper Rail Rifle', range: '4-8', baseDmg: 6, element: 'Kinetic', reqF: 0, reqS: 0, reqB: 5, bonusDmg: 2, bonusBack: 2, bonusDesc: '+2 Dmg & +2 Evade' },
-    { id: 'w27', name: 'Cryo-Stasis Rifle', range: '4-8', baseDmg: 5, element: 'Cryo', reqF: 0, reqS: 0, reqB: 5, bonusDmg: 1, bonusBack: 2, bonusDesc: '+1 Dmg & +2 Evade' },
-    { id: 'w28', name: 'Whisper-Quiet Crossbow', range: '3-7', baseDmg: 4, element: 'Kinetic', reqF: 0, reqS: 0, reqB: 6, bonusDmg: 1, bonusBack: 3, bonusDesc: '+1 Dmg & +3 Evade' },
-    { id: 'w29', name: 'Toxic Dart Rifle', range: '5-9', baseDmg: 5, element: 'Toxic', reqF: 0, reqS: 0, reqB: 6, bonusDmg: 2, bonusBack: 2, bonusDesc: '+2 Dmg & +2 Evade' },
-    { id: 'w30', name: 'Electro-Mag Coilgun', range: '4-7', baseDmg: 6, element: 'Electro', reqF: 0, reqS: 0, reqB: 7, bonusDmg: 2, bonusBack: 2, bonusDesc: '+2 Dmg & +2 Evade' },
-    { id: 'w31', name: 'Thermal Anti-Materiel Rifle', range: '5-9', baseDmg: 7, element: 'Thermal', reqF: 0, reqS: 0, reqB: 8, bonusDmg: 3, bonusBack: 1, bonusDesc: '+3 Dmg & +1 Evade' },
-    { id: 'w32', name: 'Void-Piercer Bow', range: '6-10', baseDmg: 7, element: 'Void', reqF: 0, reqS: 0, reqB: 8, bonusDmg: 3, bonusBack: 2, bonusDesc: '+3 Dmg & +2 Evade' },
-    { id: 'w33', name: 'Acid-Rain Mortar', range: '4-6', baseDmg: 6, element: 'Toxic', reqF: 0, reqS: 0, reqB: 9, bonusDmg: 2, bonusBack: 3, bonusDesc: '+2 Dmg & +3 Evade' },
-    { id: 'w34', name: 'Radiant Sunlance', range: '5-10', baseDmg: 8, element: 'Radiant', reqF: 0, reqS: 0, reqB: 10, bonusDmg: 3, bonusBack: 3, bonusDesc: '+3 Dmg & +3 Evade' },
-    { id: 'w35', name: 'Apex Void-Cannon', range: '6-12', baseDmg: 9, element: 'Void', reqF: 0, reqS: 0, reqB: 10, bonusDmg: 4, bonusBack: 1, bonusDesc: '+4 Dmg & +1 Evade' },
-    { id: 'w36', name: 'Dawn-Bringer Mace', range: '1', baseDmg: 5, element: 'Radiant', reqF: 5, reqS: 5, reqB: 0, bonusDmg: 2, bonusFront: 1, bonusSupp: 1, bonusDesc: '+2 Dmg, +1 Parry, +1 Intercept' },
-    { id: 'w37', name: 'Toxic-Cleanser Cudgel', range: '1', baseDmg: 5, element: 'Toxic', reqF: 5, reqS: 5, reqB: 0, bonusDmg: 1, bonusFront: 2, bonusSupp: 1, bonusDesc: '+1 Dmg, +2 Parry, +1 Intercept' },
-    { id: 'w38', name: 'Frost-Ward Spear', range: '1-2', baseDmg: 4, element: 'Cryo', reqF: 6, reqS: 6, reqB: 0, bonusDmg: 1, bonusFront: 2, bonusSupp: 2, bonusDesc: '+1 Dmg, +2 Parry, +2 Intercept' },
-    { id: 'w39', name: 'Magma-Core Flail', range: '1-2', baseDmg: 6, element: 'Thermal', reqF: 7, reqS: 7, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusSupp: 1, bonusDesc: '+2 Dmg, +2 Parry, +1 Intercept' },
-    { id: 'w40', name: 'Electro-Shock Baton', range: '1-2', baseDmg: 5, element: 'Electro', reqF: 8, reqS: 8, reqB: 0, bonusDmg: 2, bonusFront: 2, bonusSupp: 2, bonusDesc: '+2 Dmg, +2 Parry, +2 Intercept' },
-    { id: 'w41', name: 'Twin Kinetic Kamas', range: '1-2', baseDmg: 5, element: 'Kinetic', reqF: 5, reqS: 0, reqB: 5, bonusDmg: 2, bonusFront: 1, bonusBack: 1, bonusDesc: '+2 Dmg, +1 Parry, +1 Evade' },
-    { id: 'w42', name: 'Thermal Bladed Pistols', range: '1-4', baseDmg: 4, element: 'Thermal', reqF: 5, reqS: 0, reqB: 5, bonusDmg: 1, bonusFront: 2, bonusBack: 1, bonusDesc: '+1 Dmg, +2 Parry, +1 Evade' },
-    { id: 'w43', name: 'Volt-Dash Daggers', range: '1', baseDmg: 4, element: 'Electro', reqF: 6, reqS: 0, reqB: 6, bonusDmg: 1, bonusFront: 2, bonusBack: 2, bonusDesc: '+1 Dmg, +2 Parry, +2 Evade' },
-    { id: 'w44', name: 'Void-Step Chakrams', range: '1-3', baseDmg: 5, element: 'Void', reqF: 7, reqS: 0, reqB: 7, bonusDmg: 2, bonusFront: 1, bonusBack: 2, bonusDesc: '+2 Dmg, +1 Parry, +2 Evade' },
-    { id: 'w45', name: 'Cryo-Glazed Glaive', range: '1-2', baseDmg: 6, element: 'Cryo', reqF: 8, reqS: 0, reqB: 8, bonusDmg: 2, bonusFront: 2, bonusBack: 2, bonusDesc: '+2 Dmg, +2 Parry, +2 Evade' },
-    { id: 'w46', name: 'Toxic Needler Drone', range: '3-6', baseDmg: 4, element: 'Toxic', reqF: 0, reqS: 5, reqB: 5, bonusDmg: 1, bonusSupp: 1, bonusBack: 2, bonusDesc: '+1 Dmg, +1 Intercept, +2 Evade' },
-    { id: 'w47', name: 'Cryo-Bind Cuffs', range: '1-4', baseDmg: 3, element: 'Cryo', reqF: 0, reqS: 5, reqB: 5, bonusDmg: 1, bonusSupp: 3, bonusBack: 1, bonusDesc: '+1 Dmg, +3 Intercept, +1 Evade' },
-    { id: 'w48', name: 'Void Resonance Mine', range: '2-5', baseDmg: 5, element: 'Void', reqF: 0, reqS: 6, reqB: 6, bonusDmg: 2, bonusSupp: 2, bonusBack: 1, bonusDesc: '+2 Dmg, +2 Intercept, +1 Evade' },
-    { id: 'w49', name: 'Electro-Trap Launcher', range: '3-7', baseDmg: 4, element: 'Electro', reqF: 0, reqS: 7, reqB: 7, bonusDmg: 1, bonusSupp: 2, bonusBack: 2, bonusDesc: '+1 Dmg, +2 Intercept, +2 Evade' },
-    { id: 'w50', name: 'Radiant Suppressor Beam', range: '4-8', baseDmg: 6, element: 'Radiant', reqF: 0, reqS: 8, reqB: 8, bonusDmg: 2, bonusSupp: 2, bonusBack: 2, bonusDesc: '+2 Dmg, +2 Intercept, +2 Evade' }
+    // ---------------------------------------------------------
+    // TIER 0: STANDARD ISSUE (No Requirements, No Bonuses)
+    // ---------------------------------------------------------
+    {
+        id: 'w01',
+        name: 'Standard Issue Sidearm',
+        element: 'Kinetic',
+        range: '1-3',
+        baseDmg: 3,
+        reqF: 0, reqS: 0, reqB: 0,
+        bonusFront: 0, bonusSupp: 0, bonusBack: 0, bonusDmg: 0,
+        bonusDesc: 'Reliable, but lacks synergy interfaces.'
+    },
+
+    // ---------------------------------------------------------
+    // TIER 1: PURE DISCIPLINES (10 DP Requirements)
+    // ---------------------------------------------------------
+
+    // VANGUARD (Heavy Front DP)
+    {
+        id: 'w02',
+        name: 'Heavy Grav-Hammer',
+        element: 'Kinetic',
+        range: '1',
+        baseDmg: 5,
+        reqF: 10, reqS: 0, reqB: 0,
+        bonusFront: 3, bonusSupp: 0, bonusBack: 0, bonusDmg: 2,
+        bonusDesc: '+3 Front Parry, +2 Damage'
+    },
+    {
+        id: 'w03',
+        name: 'Thermic Breaching Lance',
+        element: 'Thermal',
+        range: '1-2',
+        baseDmg: 4,
+        reqF: 10, reqS: 0, reqB: 0,
+        bonusFront: 2, bonusSupp: 0, bonusBack: 0, bonusDmg: 3,
+        bonusDesc: '+2 Front Parry, +3 Damage'
+    },
+
+    // CONDUIT (Heavy Support DP)
+    {
+        id: 'w04',
+        name: 'Arc Projector',
+        element: 'Electro',
+        range: '1-4',
+        baseDmg: 4,
+        reqF: 0, reqS: 10, reqB: 0,
+        bonusFront: 0, bonusSupp: 4, bonusBack: 0, bonusDmg: 1,
+        bonusDesc: '+4 Support Intercept, +1 Damage'
+    },
+    {
+        id: 'w05',
+        name: 'Radiant Beam Emitter',
+        element: 'Radiant',
+        range: '2-5',
+        baseDmg: 3,
+        reqF: 0, reqS: 10, reqB: 0,
+        bonusFront: 0, bonusSupp: 3, bonusBack: 0, bonusDmg: 2,
+        bonusDesc: '+3 Support Intercept, +2 Damage'
+    },
+
+    // SNIPER (Heavy Back DP)
+    {
+        id: 'w06',
+        name: 'Long-Cycle Gauss Rifle',
+        element: 'Kinetic',
+        range: '3-8',
+        baseDmg: 5,
+        reqF: 0, reqS: 0, reqB: 10,
+        bonusFront: 0, bonusSupp: 0, bonusBack: 3, bonusDmg: 2,
+        bonusDesc: '+3 Backline Evasion, +2 Damage'
+    },
+    {
+        id: 'w07',
+        name: 'Void Piercer',
+        element: 'Void',
+        range: '4-10',
+        baseDmg: 4,
+        reqF: 0, reqS: 0, reqB: 10,
+        bonusFront: 0, bonusSupp: 0, bonusBack: 2, bonusDmg: 3,
+        bonusDesc: '+2 Backline Evasion, +3 Damage'
+    },
+
+    // ---------------------------------------------------------
+    // TIER 2: HYBRID DISCIPLINES (5 / 5 DP Requirements)
+    // ---------------------------------------------------------
+
+    // PALADIN (Front + Support)
+    {
+        id: 'w08',
+        name: 'Aegis Phalanx & Gladius',
+        element: 'Kinetic',
+        range: '1',
+        baseDmg: 4,
+        reqF: 5, reqS: 5, reqB: 0,
+        bonusFront: 2, bonusSupp: 2, bonusBack: 0, bonusDmg: 1,
+        bonusDesc: '+2 Parry, +2 Intercept, +1 Damage'
+    },
+    {
+        id: 'w09',
+        name: 'Magma Cleaver',
+        element: 'Thermal',
+        range: '1-2',
+        baseDmg: 5,
+        reqF: 6, reqS: 4, reqB: 0,
+        bonusFront: 2, bonusSupp: 1, bonusBack: 0, bonusDmg: 2,
+        bonusDesc: '+2 Parry, +1 Intercept, +2 Damage'
+    },
+
+    // SKIRMISHER (Front + Back)
+    {
+        id: 'w10',
+        name: 'Dual Phase-Blades',
+        element: 'Void',
+        range: '1',
+        baseDmg: 4,
+        reqF: 5, reqS: 0, reqB: 5,
+        bonusFront: 2, bonusSupp: 0, bonusBack: 2, bonusDmg: 1,
+        bonusDesc: '+2 Parry, +2 Evasion, +1 Damage'
+    },
+    {
+        id: 'w11',
+        name: 'Cryo-Pump Shotgun',
+        element: 'Cryo',
+        range: '1-3',
+        baseDmg: 5,
+        reqF: 6, reqS: 0, reqB: 4,
+        bonusFront: 1, bonusSupp: 0, bonusBack: 2, bonusDmg: 2,
+        bonusDesc: '+1 Parry, +2 Evasion, +2 Damage'
+    },
+
+    // SABOTEUR (Support + Back)
+    {
+        id: 'w12',
+        name: 'Toxic Needler',
+        element: 'Toxic',
+        range: '2-5',
+        baseDmg: 3,
+        reqF: 0, reqS: 5, reqB: 5,
+        bonusFront: 0, bonusSupp: 2, bonusBack: 2, bonusDmg: 1,
+        bonusDesc: '+2 Intercept, +2 Evasion, +1 Damage'
+    },
+    {
+        id: 'w13',
+        name: 'Sonic Pulser',
+        element: 'Kinetic',
+        range: '1-4',
+        baseDmg: 4,
+        reqF: 0, reqS: 6, reqB: 4,
+        bonusFront: 0, bonusSupp: 2, bonusBack: 1, bonusDmg: 2,
+        bonusDesc: '+2 Intercept, +1 Evasion, +2 Damage'
+    },
+
+    // ---------------------------------------------------------
+    // TIER 3: SPECIALIZED / EXOTIC PROTOTYPES (Uneven DP Reqs)
+    // ---------------------------------------------------------
+
+    {
+        id: 'w14',
+        name: 'Bio-Rifle Proto-V',
+        element: 'Toxic',
+        range: '2-6',
+        baseDmg: 4,
+        reqF: 2, reqS: 4, reqB: 8,
+        bonusFront: 0, bonusSupp: 1, bonusBack: 2, bonusDmg: 2,
+        bonusDesc: '+1 Intercept, +2 Evasion, +2 Damage'
+    },
+    {
+        id: 'w15',
+        name: 'Plasma Caster',
+        element: 'Thermal',
+        range: '1-3',
+        baseDmg: 5,
+        reqF: 8, reqS: 4, reqB: 2,
+        bonusFront: 2, bonusSupp: 1, bonusBack: 0, bonusDmg: 2,
+        bonusDesc: '+2 Parry, +1 Intercept, +2 Damage'
+    },
+    {
+        id: 'w16',
+        name: 'Resonance Disruptor',
+        element: 'Void',
+        range: '1-5',
+        baseDmg: 4,
+        reqF: 2, reqS: 8, reqB: 4,
+        bonusFront: 0, bonusSupp: 3, bonusBack: 1, bonusDmg: 1,
+        bonusDesc: '+3 Intercept, +1 Evasion, +1 Damage'
+    }
 ];

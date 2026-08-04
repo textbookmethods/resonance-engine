@@ -90,7 +90,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             const newEnemy = deepClone(template);
             newEnemy.uid = `enemy-${Date.now()}-${Math.floor(Math.random()*1000)}`;
             newEnemy.currentHp = template.hp || 0;
-            newEnemy.currentBarriers = template.barriers ? [...template.barriers] : [];
+            newEnemy.currentBarriers = template.barriers ? [...safeArray(template.barriers)] : [];
             newEnemy.siphonActive = false;
             newEnemy.staggered = false;
             newEnemy.statuses = [];
@@ -105,7 +105,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         });
     };
 
-    // FIXED: Fully extracted the targeting math into this robust prime function to prevent inline scope crashes
     const primeEnemyAbility = (enemy, cleanName, desc, eCost) => {
         const eStates = safeArray(enemy.statuses).map(s => getCoreState(s));
         if (eStates.includes('Stunned')) return alert("System Locked: Entity is STUNNED.");
@@ -139,7 +138,12 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
         let eRange = "1";
         const rangeMatch = String(desc).match(/range\s+(\d+)(?:-(\d+))?/i);
-        if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
+        
+        if (rangeMatch) {
+            eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
+        } else if (parsedAoe === 'line3' || parsedAoe === 'cluster3' || parsedAoe > 0) {
+            eRange = "0-10"; 
+        }
         
         if (isBlind) {
             eRange = '1';
@@ -147,25 +151,27 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         }
 
         pushUpdate(s => ({ ...s, activeAction: { 
-            type: null,
-            source: enemy.name || 'Hostile', 
+            type: 'target',
+            source: String(enemy.name || 'Hostile'), 
             sourceId: String(enemy.uid), 
             isEnemy: true, 
             isBasic: false,
             isImprovised: false,
-            originalCost: eCost,
-            cost: eCost, 
-            name: cleanName || 'Hostile Action', 
-            d: parsedDmg, 
-            a: parsedAoe, 
-            u: 0, m: 0, coreMobility: null,
-            range: eRange, 
-            effectName: parsedEff || null, 
-            effectCore: coreEff || null, 
-            elementRaw: rawMatch || 'Kinetic', 
-            elementCore: coreMatch || 'Kinetic', 
-            terrain: pTerrain || null,
-            desc: null
+            originalCost: safeInt(eCost),
+            cost: safeInt(eCost), 
+            name: String(cleanName || 'Hostile Action'), 
+            d: safeInt(parsedDmg), 
+            a: parsedAoe || 0, 
+            u: 0, 
+            m: 0, 
+            coreMobility: '',
+            range: String(eRange), 
+            effectName: String(parsedEff || ''), 
+            effectCore: String(coreEff || ''), 
+            elementRaw: String(rawMatch || 'Kinetic'), 
+            elementCore: String(coreMatch || 'Kinetic'), 
+            terrain: String(pTerrain || ''),
+            desc: ''
         } }));
     };
 
@@ -202,7 +208,9 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
             Object.keys(newPlayers).forEach(pid => {
                 let p = newPlayers[pid];
-                let coreStates = safeArray(p.statuses).map(st => getCoreState(st));
+                p.statuses = safeArray(p.statuses);
+                
+                let coreStates = p.statuses.map(st => getCoreState(st));
                 let dotDmg = 0;
                 let activeDoTs = coreStates.filter(st => ['Bleed', 'Burn', 'Poisoned'].includes(st));
                 
@@ -214,11 +222,11 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     if (s.grid[t.pos]?.terrain === 'steam') { dotDmg += 5; activeDoTs.push('Steam Burn'); }
                 }
 
-                if (p.statuses && p.statuses.includes('Crushed [2/3]')) {
+                if (p.statuses.includes('Crushed [2/3]')) {
                     p.currentHp = 0;
                     log.push(`AGENT CRUSHED! [${p.name}]'s Entombment timer expired.`);
-                } else if (p.statuses && p.statuses.includes('Crushed [1/3]')) {
-                    p.statuses = safeArray(p.statuses).filter(st => st !== 'Crushed [1/3]');
+                } else if (p.statuses.includes('Crushed [1/3]')) {
+                    p.statuses = p.statuses.filter(st => st !== 'Crushed [1/3]');
                     p.statuses.push('Crushed [2/3]');
                     log.push(`AGENT ENTOMBED! [${p.name}]'s structural integrity failing. [2/3]`);
                 }
@@ -233,7 +241,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     log.push(`AGENT ALERT: [${p.name || 'Agent'}]'s Resonance Overload dissipated back to 10.`);
                 }
 
-                p.statuses = safeArray(p.statuses).filter(st => getCoreState(st) !== 'Knockdown');
+                p.statuses = p.statuses.filter(st => getCoreState(st) !== 'Knockdown');
                 p.usedParry = false; p.usedIntercept = false; p.usedEvade = false; p.usedBasicAttack = false;
             });
 
@@ -393,9 +401,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     
                     {enemiesList.map((enemy, idx) => {
                         const myToken = enemyTokens.find(t => String(t.refId) === String(enemy.uid));
-
-                        // FIXED: Extracted scoped state variables completely outside the nested map loop
                         const eCoreStates = safeArray(enemy.statuses).map(st => getCoreState(st));
+                        const isBlind = eCoreStates.includes('Blind');
                         const isStunned = eCoreStates.includes('Stunned');
                         const isImmobilized = eCoreStates.includes('Immobilized');
                         
@@ -422,7 +429,10 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                     pushUpdate(s => {
                                                         const newE = deepClone(safeArray(s.encounter?.enemies));
                                                         const eIdx = newE.findIndex(en => String(en.uid) === String(enemy.uid));
-                                                        if (eIdx !== -1) newE[eIdx].statuses.splice(sIdx, 1);
+                                                        if (eIdx !== -1) {
+                                                            newE[eIdx].statuses = safeArray(newE[eIdx].statuses);
+                                                            newE[eIdx].statuses.splice(sIdx, 1);
+                                                        }
                                                         return { ...s, encounter: { ...s.encounter, enemies: newE } };
                                                     });
                                                 }}>✕</button>
@@ -465,6 +475,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                                     const newE = deepClone(safeArray(s.encounter?.enemies));
                                                     const eIdx = newE.findIndex(en => String(en.uid) === String(enemy.uid));
                                                     if (eIdx !== -1) {
+                                                        newE[eIdx].currentBarriers = safeArray(newE[eIdx].currentBarriers);
                                                         newE[eIdx].currentBarriers[bIdx] = val;
                                                         if (val <= 0 && bar > 0) newE[eIdx].staggered = true;
                                                     }

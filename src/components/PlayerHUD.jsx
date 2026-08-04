@@ -239,7 +239,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const primeMove = () => { 
         if (!isMyTurn) return alert("System Locked: Hostile turn in progress. Cannot initiate movement array.");
         if (disableMovement) return alert("System Locked: Agent is STUNNED or IMMOBILIZED.");
-        safePush(s => ({ ...s, activeAction: { type: 'move', source: player.name || 'Player', sourceId: String(localId), isEnemy: false } })); 
+        safePush(s => ({ ...s, activeAction: { type: 'move', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false } })); 
     };
     
     const primeWeapon = () => { 
@@ -253,23 +253,29 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const rawWpn = activeWeapon.element || 'Kinetic';
         const coreWpn = getCoreElement(rawWpn);
         
+        // FIXED: Force all payload parameters to Strict String/Number limits to stop undefined Firebase crashes
         safePush(s => ({ ...s, activeAction: { 
-            type: null,
-            source: player.name || 'Player', 
+            type: 'target',
+            source: String(player.name || 'Player'), 
             sourceId: String(localId), 
             isEnemy: false, 
             isBasic: true, 
             isImprovised: false,
             originalCost: 0,
             cost: 0, 
-            name: activeWeapon.name || 'Weapon Attack', 
-            d: calcBaseDmg, 
+            name: String(activeWeapon.name || 'Weapon Attack'), 
+            d: safeInt(calcBaseDmg), 
             a: 0, 
-            u: 0, m: 0, coreMobility: null,
-            range: finalRange, 
-            effectName: null, effectCore: null, 
-            elementRaw: rawWpn, elementCore: coreWpn, 
-            terrain: null, desc: null 
+            u: 0, 
+            m: 0, 
+            coreMobility: '',
+            range: String(finalRange), 
+            effectName: '', 
+            effectCore: '', 
+            elementRaw: String(rawWpn), 
+            elementCore: String(coreWpn), 
+            terrain: '', 
+            desc: '' 
         } })); 
     };
     
@@ -287,28 +293,29 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const coreMobility = getCoreMobility(mobilityRaw);
         const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
 
+        // FIXED: Force all payload parameters to Strict String/Number limits to stop undefined Firebase crashes
         safePush(s => ({ ...s, activeAction: { 
-            type: isBlink ? 'blink' : null,
-            source: player.name || 'Player', 
+            type: isBlink ? 'blink' : 'target',
+            source: String(player.name || 'Player'), 
             sourceId: String(localId), 
             isEnemy: false, 
             isBasic: false, 
             isImprovised: isImprovised || false, 
             originalCost: safeInt(originalCost), 
-            cost: requiredRes, 
-            name: c.name || (isImprovised ? 'Improvised Action' : 'Custom Action'), 
+            cost: safeInt(requiredRes), 
+            name: String(c.name || (isImprovised ? 'Improvised Action' : 'Custom Action')), 
             d: safeInt(c.d), 
-            a: finalAoe, 
+            a: finalAoe || 0, 
             u: safeInt(c.u), 
             m: safeInt(c.m), 
-            coreMobility: coreMobility || null,
-            range: finalRange || '1', 
-            effectName: c.effectName || null, 
-            effectCore: c.effectCore || getCoreState(c.effectName) || null, 
-            elementRaw: c.elementRaw || 'Kinetic', 
-            elementCore: c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'), 
-            terrain: c.terrain || null, 
-            desc: c.desc || null 
+            coreMobility: String(coreMobility || ''),
+            range: String(finalRange || '1'), 
+            effectName: String(c.effectName || ''), 
+            effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), 
+            elementRaw: String(c.elementRaw || 'Kinetic'), 
+            elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), 
+            terrain: String(c.terrain || ''), 
+            desc: String(c.desc || '') 
         } })); 
     };
 
@@ -513,10 +520,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 
                 <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest text-center z-10">Teamwork Extends Cap:</div>
                 <div className="grid grid-cols-2 gap-2 w-full mb-4 z-10">
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 1)}>+1 Assist</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 2)}>+2 Tag-Team</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 2)}>+2 Exploit</button>
-                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', currentRes + 1)}>+1 Banter</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Assist</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Tag-Team</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 2))}>+2 Exploit</button>
+                    <button className="bg-gray-800 hover:bg-gray-700 border border-gray-600 p-2 text-white font-bold" onClick={()=>updatePlayer('resPool', Math.min(10, currentRes + 1))}>+1 Banter</button>
                 </div>
             </div>
 
