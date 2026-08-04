@@ -60,7 +60,7 @@ const safeArray = (arr) => {
 
 const getCoreElement = (input) => {
     if (!input) return 'Kinetic';
-    const clean = input.toLowerCase().trim();
+    const clean = String(input).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) {
         if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1);
     }
@@ -69,12 +69,12 @@ const getCoreElement = (input) => {
 
 const getCoreState = (input) => {
     if (!input) return '';
-    const match = input.match(/\[(.*?)\]/);
-    const clean = (match ? match[1] : input).toLowerCase().trim();
+    const match = String(input).match(/\[(.*?)\]/);
+    const clean = (match ? match[1] : String(input)).toLowerCase().trim();
     for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) {
         if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core;
     }
-    return input; 
+    return String(input); 
 };
 
 export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
@@ -105,6 +105,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         });
     };
 
+    // FIXED: Fully extracted the targeting math into this robust prime function to prevent inline scope crashes
     const primeEnemyAbility = (enemy, cleanName, desc, eCost) => {
         const eStates = safeArray(enemy.statuses).map(s => getCoreState(s));
         if (eStates.includes('Stunned')) return alert("System Locked: Entity is STUNNED.");
@@ -116,28 +117,28 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
         const isBlind = eStates.includes('Blind');
 
-        const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
+        const dmgMatch = String(desc).match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
         const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
         const rawMatch = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
         const coreMatch = getCoreElement(rawMatch);
 
-        const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
-        const shapeMatch = desc.match(/(line|cluster)/i);
+        const aoeMatch = String(desc).match(/(\d+)-hex\s+radius/i) || String(desc).match(/radius\s+of\s+(\d+)/i);
+        const shapeMatch = String(desc).match(/(line|cluster)/i);
         let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
         if (!isBlind && shapeMatch) {
             if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
             if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
         }
 
-        const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
+        const effMatch = String(desc).match(/applies\s+\[(.*?)\]/i);
         const parsedEff = effMatch ? effMatch[1] : null;
         const coreEff = getCoreState(parsedEff);
         
-        const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
+        const terrMatch = String(desc).match(/terrain:\s*(minor|major|severe|clear)/i);
         const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
 
         let eRange = "1";
-        const rangeMatch = desc.match(/range\s+(\d+)(?:-(\d+))?/i);
+        const rangeMatch = String(desc).match(/range\s+(\d+)(?:-(\d+))?/i);
         if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
         
         if (isBlind) {
@@ -158,7 +159,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             d: parsedDmg, 
             a: parsedAoe, 
             u: 0, m: 0, coreMobility: null,
-            range: eRange || '1', 
+            range: eRange, 
             effectName: parsedEff || null, 
             effectCore: coreEff || null, 
             elementRaw: rawMatch || 'Kinetic', 
@@ -395,7 +396,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
                         // FIXED: Extracted scoped state variables completely outside the nested map loop
                         const eCoreStates = safeArray(enemy.statuses).map(st => getCoreState(st));
-                        const isBlind = eCoreStates.includes('Blind');
                         const isStunned = eCoreStates.includes('Stunned');
                         const isImmobilized = eCoreStates.includes('Immobilized');
                         
@@ -432,44 +432,18 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
                                     <div className="mt-2 space-y-2">
                                         {safeArray(enemy.abilities).map((ability, aIdx) => {
-                                            const parts = (ability || '').split(':');
+                                            const parts = String(ability).split(':');
                                             const rawName = parts[0];
                                             const cleanName = rawName.replace(/\[\d+\s*Res\]/i, '').replace(/\(\d+\s*Res\)/i, '').trim();
                                             const desc = parts.length > 1 ? parts.slice(1).join(':') : '';
                                             
-                                            const dmgMatch = desc.match(/deals\s+(\d+)\s+(?:([a-zA-Z]+)\s+)?damage/i);
-                                            const parsedDmg = dmgMatch ? parseInt(dmgMatch[1]) : 0;
-                                            const parsedElement = (dmgMatch && dmgMatch[2]) ? dmgMatch[2] : 'Kinetic';
-
-                                            const aoeMatch = desc.match(/(\d+)-hex\s+radius/i) || desc.match(/radius\s+of\s+(\d+)/i);
-                                            const shapeMatch = desc.match(/(line|cluster)/i);
-                                            
-                                            // isBlind is now safely scoped and inherited here!
-                                            let parsedAoe = isBlind ? 0 : (aoeMatch ? parseInt(aoeMatch[1]) : 0);
-                                            if (!isBlind && shapeMatch) {
-                                                if (shapeMatch[1].toLowerCase() === 'line') parsedAoe = 'line3';
-                                                if (shapeMatch[1].toLowerCase() === 'cluster') parsedAoe = 'cluster3';
-                                            }
-
-                                            const costMatch = ability.match(/\((\d+)\s*Res\)/i) || ability.match(/\[(\d+)\s*Res\]/i);
+                                            const costMatch = String(ability).match(/\((\d+)\s*Res\)/i) || String(ability).match(/\[(\d+)\s*Res\]/i);
                                             const eCost = costMatch ? parseInt(costMatch[1]) : 0;
-
-                                            const effMatch = desc.match(/applies\s+\[(.*?)\]/i);
-                                            const pEff = effMatch ? effMatch[1] : null;
-
-                                            const terrMatch = desc.match(/terrain:\s*(minor|major|severe|clear)/i);
-                                            const pTerrain = terrMatch ? terrMatch[1].toLowerCase() : null;
-
-                                            let eRange = "1";
-                                            const rangeMatch = String(ability).match(/range\s+(\d+)(?:-(\d+))?/i);
-                                            if (rangeMatch) eRange = rangeMatch[2] ? `${rangeMatch[1]}-${rangeMatch[2]}` : rangeMatch[1];
 
                                             return (
                                                 <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                                     <div>
                                                         <span className="text-[#00f0ff] font-bold text-xs">{cleanName}</span>
-                                                        {pEff && <span title={STATE_DESCRIPTIONS[getCoreState(pEff)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{pEff}]</span>}
-                                                        {pTerrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{pTerrain.toUpperCase()}]</span>}
                                                     </div>
                                                     
                                                     <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => primeEnemyAbility(enemy, cleanName, desc, eCost)}>
