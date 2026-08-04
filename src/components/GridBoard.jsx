@@ -9,6 +9,17 @@ const CLASS_COLORS = {
     Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff'      
 };
 
+// FIXED: Injected the missing Element Dictionary to prevent the fatal ReferenceError
+const ELEMENT_DICTIONARY = {
+    'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'],
+    'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'],
+    'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'],
+    'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'],
+    'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'],
+    'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'],
+    'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood']
+};
+
 const STATE_DICTIONARY = {
     'Execute': ['execute', 'erase', 'delete', 'kill', 'assassinate', 'obliterate', 'fatal', 'doom', 'annihilate', 'vanquish', 'smite', 'destroy', 'wipe'],
     'Bleed': ['bleed', 'hemorrhage', 'lacerate', 'rend', 'cut'],
@@ -417,9 +428,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                     }
                 } else {
                     log += `\n>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`;
-                    if (attIdx !== -1) {
-                        actualTargetHex = newTokens[attIdx].pos;
-                    }
+                    if (attIdx !== -1) actualTargetHex = newTokens[attIdx].pos;
                 }
             }
             
