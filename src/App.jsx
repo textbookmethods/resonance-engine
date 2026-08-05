@@ -35,7 +35,7 @@ export const safeArray = (arr) => {
 
 const DEFAULT_STATE = {
     players: {}, 
-    encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player' },
+    encounter: { round: 0, enemies: [], playerPoolTotal: 10, enemyPoolTotal: 10, activeTurn: 'player', initiativeQueue: [], activeTokenId: null },
     grid: Array(150).fill({ type: 'empty', terrain: null, terrainElement: null }),
     tokens: [],
     activeAction: null,
@@ -98,6 +98,7 @@ export default function App() {
             
             if (data.encounter) {
                 data.encounter.enemies = safeArray(data.encounter.enemies);
+                data.encounter.initiativeQueue = safeArray(data.encounter.initiativeQueue);
                 data.encounter.enemies.forEach(e => { 
                     if (e) {
                         e.statuses = safeArray(e.statuses);

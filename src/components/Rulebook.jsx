@@ -9,7 +9,9 @@ export default function Rulebook() {
         { id: 'agents', title: '02. Agent Initialization' },
         { id: 'combat', title: '03. Tactical Combat' },
         { id: 'physics', title: '04. Grid Physics & Flanking' },
-        { id: 'gm', title: '05. Game Master Directives' }
+        { id: 'gm', title: '05. Game Master Directives' },
+        { id: 'states', title: '06. Status Conditions' },
+        { id: 'terrain', title: '07. Terrain Synthesis' }
     ];
 
     return (
@@ -241,6 +243,128 @@ export default function Rulebook() {
                     </div>
                 )}
 
+                {activeChapter === 'states' && (
+                    <div className="animate-fade-in space-y-6 max-w-4xl">
+                        <h1 className="text-3xl font-bold text-purple-400 uppercase border-b border-purple-900 pb-2 mb-6">06. Status Conditions</h1>
+                        <p className="text-gray-400 text-sm mb-6">
+                            Status conditions represent persistent mechanical overrides, buffs, and DoT (Damage over Time) effects applied during combat. Active conditions appear as colored tags next to entities on the Grid.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-black border border-purple-500 p-4">
+                                <span className="bg-purple-900 text-white text-xs px-2 py-1 border border-purple-500 font-bold uppercase tracking-wider mb-2 inline-block">Execute</span>
+                                <p className="text-xs text-gray-300">Terminal erasure. Instantly reduces target HP to 0. Bypasses all barriers, parries, evasions, and invulnerability entirely.</p>
+                            </div>
+                            <div className="bg-black border border-red-500 p-4">
+                                <span className="bg-red-900 text-white text-xs px-2 py-1 border border-red-500 font-bold uppercase tracking-wider mb-2 inline-block">Bleed</span>
+                                <p className="text-xs text-gray-300">Target suffers exactly 3 HP Absolute Physical damage at the end of the round. (Stacks with other distinct DoTs).</p>
+                            </div>
+                            <div className="bg-black border border-orange-500 p-4">
+                                <span className="bg-orange-900 text-white text-xs px-2 py-1 border border-orange-500 font-bold uppercase tracking-wider mb-2 inline-block">Burn</span>
+                                <p className="text-xs text-gray-300">Target suffers exactly 3 HP Absolute Thermal damage at the end of the round. (Stacks with other distinct DoTs).</p>
+                            </div>
+                            <div className="bg-black border border-green-500 p-4">
+                                <span className="bg-green-900 text-white text-xs px-2 py-1 border border-green-500 font-bold uppercase tracking-wider mb-2 inline-block">Poisoned</span>
+                                <p className="text-xs text-gray-300">Target suffers exactly 3 HP Absolute Toxic damage at the end of the round. Uniquely volatile: Poison can infinitely stack upon itself.</p>
+                            </div>
+                            <div className="bg-black border border-gray-500 p-4">
+                                <span className="bg-gray-800 text-white text-xs px-2 py-1 border border-gray-500 font-bold uppercase tracking-wider mb-2 inline-block">Immobilized</span>
+                                <p className="text-xs text-gray-300">Movement points instantly reduced to 0. Entity cannot move manually or be repositioned via Blink/Dash skills. Can still attack normally.</p>
+                            </div>
+                            <div className="bg-black border border-yellow-500 p-4">
+                                <span className="bg-yellow-700 text-white text-xs px-2 py-1 border border-yellow-500 font-bold uppercase tracking-wider mb-2 inline-block">Stunned</span>
+                                <p className="text-xs text-gray-300">Catastrophic lockdown. Movement is 0. Entity cannot execute Basic Attacks or Custom Skills. All Defensive Matrices are jammed (set to 0).</p>
+                            </div>
+                            <div className="bg-black border border-blue-400 p-4">
+                                <span className="bg-blue-900 text-white text-xs px-2 py-1 border border-blue-400 font-bold uppercase tracking-wider mb-2 inline-block">Shielded</span>
+                                <p className="text-xs text-gray-300">Ablative armor. Absorbs exactly 5 incoming damage from the very next attack targeting the entity, then automatically shatters and clears.</p>
+                            </div>
+                            <div className="bg-black border border-pink-500 p-4">
+                                <span className="bg-pink-900 text-white text-xs px-2 py-1 border border-pink-500 font-bold uppercase tracking-wider mb-2 inline-block">Vulnerable</span>
+                                <p className="text-xs text-gray-300">Structural compromise. Entity takes a massive 1.5x Multiplier to incoming damage from the very next attack instance, after which the state is consumed.</p>
+                            </div>
+                            <div className="bg-black border border-orange-800 p-4">
+                                <span className="bg-orange-950 text-white text-xs px-2 py-1 border border-orange-800 font-bold uppercase tracking-wider mb-2 inline-block">Knockdown</span>
+                                <p className="text-xs text-gray-300">Kinetic disruption. Movement points are halved for the current turn. Entity automatically recovers and clears the state at Round Advance.</p>
+                            </div>
+                            <div className="bg-black border border-gray-700 p-4">
+                                <span className="bg-gray-900 text-gray-300 text-xs px-2 py-1 border border-gray-600 font-bold uppercase tracking-wider mb-2 inline-block">Blind</span>
+                                <p className="text-xs text-gray-300">Optics malfunction. All targeting arrays are forcefully restricted to Range 1 (adjacent hexes only) and Area of Effect radius is zeroed out.</p>
+                            </div>
+                            <div className="bg-black border border-[#00f0ff] p-4">
+                                <span className="bg-[#004444] text-[#00f0ff] text-xs px-2 py-1 border border-[#00f0ff] font-bold uppercase tracking-wider mb-2 inline-block">Haste</span>
+                                <p className="text-xs text-gray-300">Neural acceleration. Movement points are temporarily increased by +2 for as long as the state remains active on the entity.</p>
+                            </div>
+                            <div className="bg-black border border-slate-600 p-4">
+                                <span className="bg-slate-800 text-gray-300 text-xs px-2 py-1 border border-slate-500 font-bold uppercase tracking-wider mb-2 inline-block">Slowed</span>
+                                <p className="text-xs text-gray-300">Neural drag. Movement points are temporarily reduced by -2 for as long as the state remains active on the entity.</p>
+                            </div>
+                            <div className="bg-black border border-blue-600 p-4">
+                                <span className="bg-blue-900 text-blue-200 text-xs px-2 py-1 border border-blue-600 font-bold uppercase tracking-wider mb-2 inline-block">Shocked</span>
+                                <p className="text-xs text-gray-300">Circuit malfunction. Entity can still move and attack normally, but all defensive arrays (Parry, Intercept, Evade) are jammed and locked at 0 mitigation.</p>
+                            </div>
+                            <div className="bg-black border border-teal-500 p-4">
+                                <span className="bg-teal-900 text-teal-200 text-xs px-2 py-1 border border-teal-500 font-bold uppercase tracking-wider mb-2 inline-block">Evasive</span>
+                                <p className="text-xs text-gray-300">Quantum ghosting. Forces the next incoming attack to bypass Front Parry/Intercept entirely and roll strictly against Backline Evasion. Consumed upon triggering.</p>
+                            </div>
+                            <div className="bg-black border border-yellow-300 p-4">
+                                <span className="bg-yellow-900 text-yellow-200 text-xs px-2 py-1 border border-yellow-300 font-bold uppercase tracking-wider mb-2 inline-block">Invulnerable</span>
+                                <p className="text-xs text-gray-300">Stasis field. Completely negates 100% of the damage and mechanical effects of the next incoming attack, then immediately shatters.</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeChapter === 'terrain' && (
+                    <div className="animate-fade-in space-y-6 max-w-4xl">
+                        <h1 className="text-3xl font-bold text-yellow-500 uppercase border-b border-yellow-900 pb-2 mb-6">07. Terrain Synthesis</h1>
+                        <p className="text-gray-400 text-sm mb-6">
+                            The Grid Board supports dynamic terrain generation through custom skills or direct GM overrides. Once placed, terrain persists until cleared or overwritten by an Elemental Reaction.
+                        </p>
+
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black border border-gray-700 p-4">
+                                <div className="w-12 h-12 shrink-0 bg-[rgba(234,179,8,0.4)] border-2 border-yellow-500 clip-hex flex items-center justify-center text-yellow-500 font-bold text-xs">MIN</div>
+                                <div>
+                                    <div className="font-bold text-white uppercase text-base mb-1">Minor Terrain (Cost: u=1)</div>
+                                    <p className="text-xs text-gray-400 leading-relaxed">Imposes physical drag on traversing entities. Movement through this hex costs exactly <strong>2 Movement Points</strong> instead of the standard 1 point. Often generated by Ice, Vines, or Magnetic fields.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black border border-gray-700 p-4">
+                                <div className="w-12 h-12 shrink-0 bg-[rgba(168,85,247,0.4)] border-2 border-purple-500 clip-hex flex items-center justify-center text-purple-500 font-bold text-xs">MAJ</div>
+                                <div>
+                                    <div className="font-bold text-white uppercase text-base mb-1">Major Terrain (Cost: u=3)</div>
+                                    <p className="text-xs text-gray-400 leading-relaxed">Hazardous environment. Movement cost is normal (1 point), but entities ending their turn inside this hex suffer <strong>5 Absolute Damage</strong> automatically at Round Advance. Often generated by Lava, Acid, or Plasma pools.</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black border border-gray-700 p-4">
+                                <div className="w-12 h-12 shrink-0 bg-[rgba(59,130,246,0.4)] border-2 border-blue-500 clip-hex flex items-center justify-center text-blue-500 font-bold text-xs">SEV</div>
+                                <div>
+                                    <div className="font-bold text-white uppercase text-base mb-1">Severe Terrain (Cost: u=5)</div>
+                                    <p className="text-xs text-gray-400 leading-relaxed">Impassable bedrock. Completely blocks standard Movement and Line-of-Sight. Entities forcibly displaced into this hex via Pull/Push abilities suffer lethal Entombment [Crushed state]. Often generated by Glacier Walls or Earth Pillars.</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black border border-gray-700 p-4">
+                                <div className="w-12 h-12 shrink-0 bg-[rgba(148,163,184,0.7)] border-2 border-slate-300 clip-hex flex items-center justify-center text-white font-bold text-[10px]">STM</div>
+                                <div>
+                                    <div className="font-bold text-white uppercase text-base mb-1">Volatile Steam (Reaction Only)</div>
+                                    <p className="text-xs text-gray-400 leading-relaxed">Generated instantly when a <span className="text-red-400 font-bold">Thermal</span> attack hits a hex already coated in <span className="text-blue-400 font-bold">Cryo</span> terrain. Blocks Line-of-Sight entirely. Entities ending their turn inside suffer <strong>5 Kinetic Damage</strong> (Boiling) at Round Advance.</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black border border-gray-700 p-4">
+                                <div className="w-12 h-12 shrink-0 bg-transparent border-2 border-red-500 clip-hex flex items-center justify-center text-red-500 font-bold text-2xl">✕</div>
+                                <div>
+                                    <div className="font-bold text-red-500 uppercase text-base mb-1">Clear Terrain (Cost: u=2)</div>
+                                    <p className="text-xs text-gray-400 leading-relaxed">A specialized terrain synthesis tag used to strip existing modifications from a hex. Utilizing this tag instantly overwrites Minor, Major, Severe, or Steam terrain, reverting the hex back to a blank slate. (Can also be achieved via certain Elemental Reactions like Combustion or Annihilation).</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
