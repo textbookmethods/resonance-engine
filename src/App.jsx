@@ -76,6 +76,7 @@ export default function App() {
 
             if (!data.players) { data.players = {}; needsUpdate = true; }
 
+            // Create blank agent safely
             if (role === 'player' && !data.players[localId]) {
                 data.players[localId] = {
                     name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
@@ -108,9 +109,12 @@ export default function App() {
                     } 
                 });
             }
+            
             if (data.tokens) data.tokens = safeArray(data.tokens);
 
             if (needsUpdate) {
+                // If we injected a blank player, manually sync local state immediately to prevent render crash
+                setGameState(data);
                 roomRef.set(data);
             } else {
                 setGameState(data);

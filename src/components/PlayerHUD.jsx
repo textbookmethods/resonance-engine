@@ -11,7 +11,7 @@ const STATE_DESCRIPTIONS = { 'Execute': 'Instantly reduces HP to 0.', 'Bleed': '
 
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
-const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null); return []; };
+const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null && i !== undefined); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null && i !== undefined); return []; };
 
 const getCoreState = (input) => { if (!input) return ''; const match = String(input).match(/\[(.*?)\]/); const clean = (match ? match[1] : String(input)).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; } return String(input); };
 const getCoreElement = (input) => { if (!input) return 'Kinetic'; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) { if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1); } return 'Kinetic'; };
@@ -32,14 +32,19 @@ const getAoeCost = (a) => { if (a === 'line3' || a === 'cluster3') return 1; con
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
     const [builder, setBuilder] = useState({ name: '', elementRaw: '', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
-    const player = players[localId] || {};
+    // Defensive Fallback - Guarantees the HUD does not crash while Firebase completes sync
+    const rawPlayer = players[localId];
+    const player = rawPlayer || {
+        name: 'Agent', weaponId: 'w01', xp: 0, currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, 
+        resPool: 3, customCards: [], savedSkills: [], statuses: [], affinityRaw: '', affinity: 'Kinetic', affinityLocked: false
+    };
+
     const safePush = (updater) => { if (typeof pushUpdate === 'function') pushUpdate(updater); };
     const updatePlayer = (key, val) => safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), [key]: val } } }));
     
     const currentRes = player.resPool !== undefined ? safeInt(player.resPool) : 3;
     const myToken = safeArray(tokens).find(t => t.type === 'player' && String(t.refId) === String(localId));
 
-    // Automated Initiative Check
     let isMyTurn = false;
     const initQueueActive = safeArray(encounter?.initiativeQueue).length > 0;
     if (initQueueActive) {
@@ -128,6 +133,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { type: isBlink ? 'blink' : 'target', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false, isBasic: false, isImprovised: isImprovised || false, originalCost: safeInt(originalCost), cost: safeInt(requiredRes), name: String(c.name || (isImprovised ? 'Improvised Action' : 'Custom Action')), d: safeInt(c.d), a: finalAoe || 0, u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMobility || ''), range: String(finalRange || '1'), effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), terrain: String(c.terrain || ''), desc: String(c.desc || '') } })); 
     };
 
+    const primeImprovised = () => { primeCard(builder, true, calcCost); };
     const reqString = (w) => { if (!w.reqF && !w.reqS && !w.reqB) return 'No Req'; let r = []; if (w.reqF) r.push(`${w.reqF}F`); if (w.reqS) r.push(`${w.reqS}S`); if (w.reqB) r.push(`${w.reqB}B`); return `Req: ${r.join('/')}`; };
 
     const customCards = safeArray(player.customCards);
