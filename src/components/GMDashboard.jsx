@@ -37,7 +37,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     const [spawnMode, setSpawnMode] = useState('immediate');
     const [spawnRound, setSpawnRound] = useState(2);
     const [grantXpAmount, setGrantXpAmount] = useState(10);
-    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
+    const [builder, setBuilder] = useState({ name: '', payload: 'damage', elementRaw: 'Kinetic', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
     const activeEnemies = safeArray(encounter.enemies);
     const activeTokens = safeArray(tokens);
@@ -425,16 +425,25 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                             <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Skill Name:</span>
                             <input type="text" className="w-full bg-black border border-[#00f0ff] p-2 text-white outline-none font-bold text-xs" placeholder="GM Override" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} />
                         </div>
+
+                        <div className="flex flex-col gap-1 mt-2">
+                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Type:</span>
+                            <select className="w-full bg-black border border-[#ff6600] p-2 text-white text-[10px] font-bold outline-none cursor-pointer shadow-[0_0_10px_rgba(255,102,0,0.2)]" value={builder.payload || 'damage'} onChange={e=>setBuilder({...builder, payload: e.target.value})}>
+                                <option value="damage">[OFFENSIVE] - Inflict Damage</option>
+                                <option value="heal">[RESTORATIVE] - Heal Hit Points</option>
+                                <option value="battery">[ENERGIZE] - Transfer Resonance</option>
+                            </select>
+                        </div>
                         
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 mt-2">
                             <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Element Affinity:</span>
                             <select className="w-full bg-black border border-gray-600 p-2 text-white text-[10px] outline-none focus:border-[#ff6600] cursor-pointer" value={builder.elementRaw || 'Kinetic'} onChange={handleElementChangeGM}>
                                 {Object.keys(ELEMENT_DESCRIPTIONS).map(el => <option key={el} value={el}>{el.toUpperCase()} - {ELEMENT_DESCRIPTIONS[el]}</option>)}
                             </select>
                         </div>
 
-                        <div className="flex justify-between items-center">
-                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Damage (d):</span>
+                        <div className="flex justify-between items-center mt-2">
+                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Value (v):</span>
                             <input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white font-bold" value={builder.d} onChange={e=>setBuilder({...builder, d: safeInt(e.target.value)})} />
                         </div>
 
@@ -479,7 +488,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     
                     <button className="w-full font-bold p-3 mt-4 uppercase transition-colors bg-red-600 text-white hover:bg-white hover:text-red-600 text-xs" onClick={() => {
                         const forcedU = builder.effectName ? STATE_TIERS[builder.effectName] : safeInt(builder.u);
-                        pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: "Game Master", sourceId: "gm", isEnemy: true, name: builder.name || 'GM Override', d: safeInt(builder.d), a: 0, range: "0-100", effectName: String(builder.effectName || ''), effectCore: String(getCoreState(builder.effectName) || ''), elementRaw: String(builder.elementRaw || 'Kinetic'), elementCore: String(getCoreElement(builder.elementRaw)), terrain: String(builder.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: 0, m: 0, coreMobility: '', u: forcedU, desc: 'GM direct intervention.' } }));
+                        pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: "Game Master", sourceId: "gm", isEnemy: true, name: builder.name || 'GM Override', payload: builder.payload || 'damage', d: safeInt(builder.d), a: 0, range: "0-100", effectName: String(builder.effectName || ''), effectCore: String(getCoreState(builder.effectName) || ''), elementRaw: String(builder.elementRaw || 'Kinetic'), elementCore: String(getCoreElement(builder.elementRaw)), terrain: String(builder.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: 0, m: 0, coreMobility: '', u: forcedU, desc: 'GM direct intervention.' } }));
                     }}>Prime GM Strike</button>
                 </div>
             </div>

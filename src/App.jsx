@@ -133,7 +133,7 @@ export default function App() {
             if (next.encounter && next.encounter.round > 0) {
                 let currentEnemies = safeArray(next.encounter.enemies);
                 
-                // Centralized Phase Shift: On-Clear Backup (Catches GM Manual Deletions)
+                // Centralized Phase Shift: On-Clear Backup
                 const activeEnemiesLeft = currentEnemies.filter(e => e.isActive).length;
                 if (activeEnemiesLeft === 0 && currentEnemies.length > 0) {
                     let newlyActivated = 0;
@@ -147,7 +147,6 @@ export default function App() {
                     
                     if (newlyActivated > 0) {
                         next.encounter.enemies = currentEnemies;
-                        // Only overwrite log if it wasn't already dynamically set by the combat engine
                         if (!next.globalLog || (Date.now() - next.globalLog.timestamp > 1000)) {
                             next.globalLog = {
                                 message: `>> PHASE SHIFT: ${newlyActivated} delayed Hostile(s) entered the battlefield!`,
@@ -157,7 +156,7 @@ export default function App() {
                     }
                 }
 
-                // Auto-Resolve Encounter
+                // Auto-Resolve Encounter if all enemies are completely eliminated
                 if (currentEnemies.length === 0) {
                     next.encounter.round = 0;
                     next.encounter.initiativeQueue = [];

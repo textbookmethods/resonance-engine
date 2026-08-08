@@ -11,8 +11,6 @@ const MOBILITY_DICTIONARY = { 'Blink': ['blink', 'teleport', 'jump'], 'Push': ['
 const CLASS_AFFINITIES = { 'Vanguard': { states: ['Knockdown', 'Bleed', 'Shielded', 'Burn', 'Execute'] }, 'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] }, 'Conduit': { states: ['Stunned', 'Shocked', 'Shielded', 'Haste', 'Immobilized'] }, 'Paladin': { states: ['Shielded', 'Burn', 'Knockdown', 'Invulnerable'] }, 'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable', 'Poisoned'] }, 'Skirmisher': { states: ['Haste', 'Evasive', 'Bleed', 'Slowed'] }, 'Rookie': { states: ['Haste', 'Bleed'] } };
 
 const ELEMENT_DESCRIPTIONS = { 'Kinetic': 'Physical force, bludgeoning, slashing, earth, wind.', 'Thermal': 'Heat, fire, plasma, magma.', 'Cryo': 'Cold, ice, water, frost.', 'Electro': 'Lightning, electricity, magnetic.', 'Toxic': 'Poison, acid, radiation, decay.', 'Radiant': 'Light, holy, healing, order.', 'Void': 'Dark, gravity, space, psychic.' };
-const TERRAIN_DESCRIPTIONS = { 'minor': 'Movement cost doubled (u=1).', 'clear': 'Clears existing terrain (u=2).', 'major': 'Deals 5 damage at round end (u=3).', 'severe': 'Impassable & blocks LoS (u=5).' };
-const MOBILITY_DESCRIPTIONS = { 'Blink': 'Teleport instantly to a valid hex.', 'Push': 'Forcefully repel a target away.', 'Pull': 'Forcefully drag a target closer.' };
 const STATE_DESCRIPTIONS = { 'Hijacked': 'Forces target to immediately cast an ability under your control.', 'Execute': 'Instantly reduces HP to 0.', 'Bleed': 'Takes 3 HP damage at round end.', 'Burn': 'Takes 3 Thermal damage at round end.', 'Poisoned': 'Takes 3 Toxic damage at round end.', 'Immobilized': 'Movement points reduced to 0.', 'Stunned': 'Movement 0. Cannot attack. Defenses jammed.', 'Shielded': 'Absorbs 5 damage.', 'Vulnerable': 'Takes 1.5x damage.', 'Knockdown': 'Movement halved.', 'Blind': 'Range 1, AoE 0.', 'Haste': '+2 Move.', 'Slowed': '-2 Move.', 'Shocked': 'Defenses jammed.', 'Evasive': 'Forces Evasion roll.', 'Invulnerable': 'Negates attack.' };
 
 const ELEMENT_STATE_MAP = {
@@ -53,7 +51,7 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
 const getAoeCost = (a) => { if (a === 'line3' || a === 'cluster3') return 1; const n = parseInt(a) || 0; return n * n; };
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
+    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', payload: 'damage', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
     const rawPlayer = players[localId];
     const player = rawPlayer || { name: 'Agent', weaponId: 'w01', xp: 0, currentHp: 20, dpFront: 0, dpSupport: 0, dpBack: 0, resPool: 3, customCards: [], savedSkills: [], statuses: [], affinityRaw: 'Kinetic', affinity: 'Kinetic', affinityLocked: false };
@@ -113,19 +111,38 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const cards = safeArray(player.customCards); const actionName = builder.name || 'Custom Action';
         if (cards.length >= 4) return alert("HUD is full (Max 4). Remove an active skill first to make room.");
         if (cards.some(c => String(c.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already equipped in your HUD. Please give this ability a unique name.`);
-        updatePlayer('customCards', [...cards, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `card-${Date.now()}` }]);
+        updatePlayer('customCards', [...cards, { ...builder, name: actionName, payload: builder.payload || 'damage', elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `card-${Date.now()}` }]);
     };
     
     const saveToSpellbook = () => {
         const archived = safeArray(player.savedSkills); const actionName = builder.name || 'Custom Action';
         if (archived.some(s => String(s.name).toLowerCase() === actionName.toLowerCase())) return alert(`"${actionName}" is already in your Spellbook. Please give this ability a unique name.`);
-        updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `spell-${Date.now()}` }]);
+        updatePlayer('savedSkills', [...archived, { ...builder, name: actionName, payload: builder.payload || 'damage', elementRaw: builder.elementRaw || 'Kinetic', elementCore: builderCoreElement, effectCore: builderCoreState, alpha: affinityData.alpha, cost: calcCost, id: `spell-${Date.now()}` }]);
         alert("Ability archived to Spellbook!");
     };
 
     const archiveEquippedCard = (card) => {
         const archived = safeArray(player.savedSkills); if (archived.some(s => String(s.name).toLowerCase() === String(card.name).toLowerCase())) return alert(`"${card.name}" is already archived in your Spellbook.`);
         updatePlayer('savedSkills', [...archived, card]); alert(`"${card.name}" archived to Spellbook!`);
+    };
+
+    const editCardFromHUD = (card) => {
+        setBuilder({
+            name: card.name || '',
+            elementRaw: card.elementRaw || 'Kinetic',
+            payload: card.payload || 'damage',
+            d: safeInt(card.d),
+            u: safeInt(card.u),
+            a: card.a || 0,
+            effectName: card.effectName || '',
+            desc: card.desc || '',
+            terrain: card.terrain || '',
+            m: safeInt(card.m),
+            mobilityName: card.mobilityName || ''
+        });
+        // Remove from HUD so they can re-equip after editing
+        updatePlayer('customCards', safeArray(player.customCards).filter(c => String(c.id) !== String(card.id)));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleElementChange = (e) => {
@@ -136,7 +153,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
             const newState = { ...prev, elementRaw: newElem };
             if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
                 newState.effectName = '';
-                newState.u = 0; // Reset cost if state is invalidated by element change
+                newState.u = 0;
             }
             return newState;
         });
@@ -154,7 +171,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { 
             type: 'target', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false, 
             isBasic: true, isImprovised: false, originalCost: 0, cost: 0, name: String(activeWeapon.name || 'Weapon Attack'), 
-            d: safeInt(calcBaseDmg), a: 0, u: 0, m: 0, coreMobility: '', range: String(finalRange), effectName: '', 
+            payload: 'damage', d: safeInt(calcBaseDmg), a: 0, u: 0, m: 0, coreMobility: '', range: String(finalRange), effectName: '', 
             effectCore: '', elementRaw: String(rawWpn), elementCore: String(coreWpn), terrain: '', desc: '' 
         } })); 
     };
@@ -169,7 +186,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         safePush(s => ({ ...s, activeAction: { 
             type: isBlink ? 'blink' : 'target', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false, 
             isBasic: false, isImprovised: isImprovised || false, originalCost: safeInt(originalCost), cost: safeInt(requiredRes), 
-            name: String(c.name || (isImprovised ? 'Improvised Action' : 'Custom Action')), d: safeInt(c.d), a: finalAoe || 0, 
+            name: String(c.name || (isImprovised ? 'Improvised Action' : 'Custom Action')), 
+            payload: String(c.payload || 'damage'), d: safeInt(c.d), a: finalAoe || 0, 
             u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMobility || ''), range: String(finalRange || '1'), 
             effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), 
             elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), 
@@ -285,7 +303,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 <div className={`text-8xl mb-6 z-10 transition-colors ${isOverload ? 'text-red-400 drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] animate-pulse' : 'text-white drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]'}`}>{currentRes}<span className="text-3xl text-gray-500">/10</span></div>
                 
                 <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest text-center z-10">System Status:</div>
-                <div className="bg-black border border-gray-700 p-2 text-xs text-center text-gray-500 font-bold w-full">
+                <div className="bg-black border border-gray-700 p-2 text-xs text-center text-[#22c55e] font-bold w-full shadow-inner shadow-[#22c55e]/20">
                     AUTOMATED SYNERGY TRACKING ACTIVE
                 </div>
             </div>
@@ -298,16 +316,25 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Skill Name:</span>
                         <input type="text" className="w-full bg-black border border-[#00f0ff] p-2 text-white outline-none font-bold text-xs" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} />
                     </div>
+
+                    <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Type:</span>
+                        <select className="w-full bg-black border border-[#ff6600] p-2 text-white text-[10px] font-bold outline-none cursor-pointer shadow-[0_0_10px_rgba(255,102,0,0.2)]" value={builder.payload || 'damage'} onChange={e=>setBuilder({...builder, payload: e.target.value})}>
+                            <option value="damage">[OFFENSIVE] - Inflict Damage</option>
+                            <option value="heal">[RESTORATIVE] - Heal Hit Points</option>
+                            <option value="battery">[ENERGIZE] - Transfer Resonance</option>
+                        </select>
+                    </div>
                     
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Element Affinity:</span>
                         <select className="w-full bg-black border border-gray-600 p-2 text-white text-[10px] outline-none focus:border-[#ff6600] cursor-pointer" value={builder.elementRaw || 'Kinetic'} onChange={handleElementChange}>
                             {Object.keys(ELEMENT_DESCRIPTIONS).map(el => <option key={el} value={el}>{el.toUpperCase()} - {ELEMENT_DESCRIPTIONS[el]}</option>)}
                         </select>
                     </div>
 
-                    <div className="flex justify-between items-center">
-                        <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Damage (d):</span>
+                    <div className="flex justify-between items-center mt-2">
+                        <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Value (v):</span>
                         <input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white font-bold" value={builder.d} onChange={e=>setBuilder({...builder, d: safeInt(e.target.value)})} />
                     </div>
                     
@@ -404,9 +431,13 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         const cardCost = parseInt(c.cost) || 0; const isNoFuel = currentRes < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
                         return (
                             <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
-                                <div className="flex-1 pr-6 pb-2">
-                                    <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div><div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div><div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
-                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
+                                <div className="flex-1 pr-12 pb-2">
+                                    <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
+                                    <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
+                                    <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
+                                    {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Restorative</div>}
+                                    {c.payload === 'battery' && <div className="text-[#00f0ff] text-[10px] font-bold mt-1">Energize</div>}
+                                    {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-12 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                     {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                     
@@ -414,8 +445,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
                                     </button>
                                 </div>
-                                <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); archiveEquippedCard(c); }} title="Archive to Spellbook">⤓</button>
-                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }}>✕</button>
+                                <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-[#00f0ff] hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); editCardFromHUD(c); }} title="Edit Skill in Matrix">✎</button>
+                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }} title="Delete Card">✕</button>
                             </div>
                         );
                     })}

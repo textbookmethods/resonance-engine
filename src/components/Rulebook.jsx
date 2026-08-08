@@ -11,7 +11,8 @@ export default function Rulebook() {
         { id: 'physics', title: '04. Grid Physics & Flanking' },
         { id: 'gm', title: '05. Game Master Directives' },
         { id: 'states', title: '06. Status Conditions' },
-        { id: 'terrain', title: '07. Terrain Synthesis' }
+        { id: 'terrain', title: '07. Terrain Synthesis' },
+        { id: 'payloads', title: '08. Payloads & Synergies' }
     ];
 
     return (
@@ -69,7 +70,7 @@ export default function Rulebook() {
                                 <div className="bg-black border border-red-500 p-3">
                                     <div className="text-red-500 font-bold text-lg mb-1">[ 1 - 2 ]</div>
                                     <div className="text-white font-bold uppercase mb-1">Backlash</div>
-                                    <p className="text-gray-400">Catastrophic failure. The trajectory is inverted. The attack executes, but targets the Agent's own hex.</p>
+                                    <p className="text-gray-400">Catastrophic failure. The trajectory is inverted. The action executes, but targets the Agent's own hex.</p>
                                 </div>
                                 <div className="bg-black border border-yellow-500 p-3">
                                     <div className="text-yellow-500 font-bold text-lg mb-1">[ 3 - 4 ]</div>
@@ -141,7 +142,7 @@ export default function Rulebook() {
                         <div className="bg-black border border-gray-700 p-5 mb-6">
                             <h2 className="text-[#00f0ff] font-bold text-lg mb-2 uppercase">The Defensive Matrices</h2>
                             <p className="mb-4 text-sm text-gray-300">
-                                When targeted by an attack, the Grid Engine automatically calculates mitigation based on the trajectory of the strike and the Agent's available reactions. Each reaction can only be used <span className="font-bold text-white">once per round</span>.
+                                When targeted by an offensive payload, the Grid Engine automatically calculates mitigation based on the trajectory of the strike and the Agent's available reactions. Each reaction can only be used <span className="font-bold text-white">once per round</span>.
                             </p>
                             
                             <div className="space-y-3 text-xs">
@@ -257,13 +258,14 @@ export default function Rulebook() {
                                 <div className="flex gap-2"><span className="text-[#00f0ff] font-bold">5.</span> <span>Agent defensive matrices (Parry, Intercept, Evade) are reset to Available.</span></div>
                                 <div className="flex gap-2"><span className="text-[#00f0ff] font-bold">6.</span> <span>Movement Points for all entities are refilled based on their Speed stat +/- Haste/Slowed modifiers.</span></div>
                                 <div className="flex gap-2"><span className="text-red-500 font-bold">7.</span> <span>Entities that drop to 0 HP during the sweep are permanently purged from the grid.</span></div>
+                                <div className="flex gap-2"><span className="text-red-500 font-bold">8.</span> <span>If all active Hostiles are dead, Encounter Auto-Resolver restores Agents to max HP and purges their states.</span></div>
                             </div>
                         </div>
                     </div>
                 )}
 
                 {activeChapter === 'states' && (
-                    <div className="animate-fade-in space-y-6 max-w-4xl">
+                    <div className="animate-fade-in space-y-8 max-w-5xl">
                         <h1 className="text-3xl font-bold text-purple-400 uppercase border-b border-purple-900 pb-2 mb-6">06. Status Conditions</h1>
                         <p className="text-gray-400 text-sm mb-6">
                             Status conditions represent persistent mechanical overrides, buffs, and DoT (Damage over Time) effects applied during combat. Active conditions appear as colored tags next to entities on the Grid.
@@ -388,6 +390,69 @@ export default function Rulebook() {
                         </div>
                     </div>
                 )}
+
+                {activeChapter === 'payloads' && (
+                    <div className="animate-fade-in space-y-6 max-w-4xl">
+                        <h1 className="text-3xl font-bold text-yellow-300 uppercase border-b border-gray-700 pb-2 mb-6">08. Payloads & Synergies</h1>
+                        <p className="text-sm text-gray-400 leading-relaxed max-w-3xl mb-6">
+                            When building a Custom Skill, Agents select a <strong>Payload Type</strong>. The engine automatically processes the mathematical resolution based on this type, enabling dedicated Support and Healing builds.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                            <div className="bg-black border border-red-500 p-5">
+                                <h3 className="text-red-500 font-bold uppercase tracking-widest mb-2 text-lg">Offensive</h3>
+                                <p className="text-xs text-gray-400 mb-2">Payload value (v) operates as incoming Damage.</p>
+                                <ul className="text-[10px] text-gray-500 list-disc pl-4 space-y-1">
+                                    <li>Modified by Affinity (1.5x / 0.5x).</li>
+                                    <li>Modified by Flanking (1.5x).</li>
+                                    <li>Intercepted by Defensive Matrices (Parry/Evade).</li>
+                                    <li>Intercepted by Hostile Barriers.</li>
+                                </ul>
+                            </div>
+                            <div className="bg-black border border-[#22c55e] p-5">
+                                <h3 className="text-[#22c55e] font-bold uppercase tracking-widest mb-2 text-lg">Restorative</h3>
+                                <p className="text-xs text-gray-400 mb-2">Payload value (v) operates as direct HP recovery.</p>
+                                <ul className="text-[10px] text-gray-500 list-disc pl-4 space-y-1">
+                                    <li>Modified by Affinity (Healing a Void target with Radiant magic halves the recovery).</li>
+                                    <li>Bypasses all defensive matrices entirely.</li>
+                                    <li>Automatically triggers Teamwork: <strong>Assist</strong>.</li>
+                                </ul>
+                            </div>
+                            <div className="bg-black border border-[#00f0ff] p-5">
+                                <h3 className="text-[#00f0ff] font-bold uppercase tracking-widest mb-2 text-lg">Energize</h3>
+                                <p className="text-xs text-gray-400 mb-2">Payload value (v) operates as a direct Resonance injection.</p>
+                                <ul className="text-[10px] text-gray-500 list-disc pl-4 space-y-1">
+                                    <li>Completely ignores Affinity calculations.</li>
+                                    <li>Completely bypasses all defenses.</li>
+                                    <li>Immediately adds to the target's Res pool (up to cap).</li>
+                                    <li>Automatically triggers Teamwork: <strong>Assist</strong>.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-900 border border-gray-700 p-6 shadow-md">
+                            <h2 className="text-white font-bold text-xl uppercase tracking-widest mb-4">Automated Teamwork Synergies</h2>
+                            <p className="text-gray-400 text-xs mb-4 leading-relaxed">
+                                The Resonance Engine continuously monitors battlefield geometry and payload math. When an Agent executes a tactical maneuver that inherently benefits the squad, the Engine automatically awards bonus Resonance upon action resolution.
+                            </p>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Exploit (+2 Res)</span>
+                                    <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for striking a Hostile's Elemental Weakness (1.5x) or hitting a target actively suffering from the [Vulnerable] state.</span>
+                                </div>
+                                <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Tag-Team (+2 Res)</span>
+                                    <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for successfully executing an attack vector that originates outside the target's 180-degree front facing arc (Flanking).</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Assist (+1 Res)</span>
+                                    <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for successfully applying a Restorative/Energize payload to an ally, OR applying a positive state ([Shielded], [Haste], etc.) to an ally.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </div>
         </div>
     );

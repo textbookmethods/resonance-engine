@@ -248,7 +248,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 
                 pushUpdate(s => {
                     if (safeArray(s.tokens).some(t => String(t.refId) === String(data.refId))) {
-                        alert(`System Locked: This entity is already deployed.`);
+                        alert(`System Locked: This entity is already deployed. To deploy multiples, stage a new instance from the Bestiary first.`);
                         return s;
                     }
 
@@ -311,7 +311,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 if (targetCell.terrain === 'severe') { alert("Destination hex contains Severe Terrain. Blink aborted."); return s; }
 
                 t.pos = index; let log = `\n>> AGENT RELOCATED: Executed [${action.coreMobility || 'Blink'}] displacement vector for ${action.m || 1} hexes.`;
-                let newEnemyPoolTotal = s.encounter?.enemyPoolTotal || 0; let newPlayers = deepClone(s.players || {});
+                let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal); let newPlayers = deepClone(s.players || {});
 
                 if (action.isEnemy && !action.isHijacked) { newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - (action.cost || 0)); log += `\n>> [-${action.cost || 0} Res] Hostile Action executed.`; } 
                 else if (action.sourceId && !action.isHijacked) {
@@ -363,10 +363,12 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             
             if (originPosIdx !== null && !checkLineOfSight(originPosIdx, targetHex, newGrid)) { alert("Target hex is obstructed by Line of Sight."); return s; }
 
+            const payloadType = action.payload || 'damage';
             const rawDmg = safeInt(action.d); const dispCore = action.elementCore || action.element || 'Kinetic';
             const showType = (action.elementRaw && String(action.elementRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${action.elementRaw} [Core: ${dispCore}]` : dispCore;
 
             let newPlayers = deepClone(s.players || {}); let newEnemies = deepClone(safeArray(s.encounter?.enemies));
+            let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal);
             let hitCount = 0; let actualTargetHex = targetHex; let log = `--- COMBAT LOG: ${action.name || 'Action'} [${showType}] ---\n`;
 
             if (action.isImprovised) {
@@ -378,7 +380,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 } else { log += `\n>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`; if (attIdx !== -1) actualTargetHex = originPosIdx; }
             }
             
-            log += `Base Damage: ${rawDmg}\n`;
+            log += `Payload Value: ${rawDmg}\n`;
             const aoeHexes = getAoEHexes(actualTargetHex, originPosIdx, action.a, aoeRotation, newGrid);
             const isExecute = action.effectCore === 'Execute'; let deadEnemyUids = new Set(); const consumeStates = ['Invulnerable', 'Shielded', 'Vulnerable', 'Evasive'];
             let hijackedEnemyId = null;
@@ -409,39 +411,50 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             let barriers = [...safeArray(enemy.currentBarriers)]; let coreStates = safeArray(enemy.statuses).map(st => getCoreState(st)); let incomingDmg = rawDmg;
 
                             const rpsMult = getAffinityMultiplier(dispCore, enemy.affinity);
-                            if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg`; }
-                            if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
-                            if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
-                            
-                            // SYNERGY DETECTION
-                            if (rpsMult === 1.5 || coreStates.includes('Vulnerable')) triggeredExploit = true;
-                            if (isFlanking) triggeredTagTeam = true;
 
-                            if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; } if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
-                            if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
-                            
-                            if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
-                            if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
-                            if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
-                            if (coreStates.includes('Evasive') && !isExecute) log += `\n>> [Evasive] triggered.`;
+                            if (payloadType === 'heal') {
+                                let incomingHeal = Math.ceil(rawDmg * rpsMult);
+                                if (rpsMult === 1.5) log += `\n>> AFFINITY ADVANTAGE: 1.5x Healing`;
+                                if (rpsMult === 0.5) log += `\n>> AFFINITY DISADVANTAGE: 0.5x Healing`;
+                                newHp += incomingHeal;
+                                log += `\nHostile [${enemy.name}]: Restored ${incomingHeal} HP. HP is now ${newHp}.`;
+                            } else if (payloadType === 'battery') {
+                                newEnemyPoolTotal = Math.min(100, newEnemyPoolTotal + rawDmg);
+                                log += `\nHostile [${enemy.name}]: Transferred ${rawDmg} Resonance to the Global Hostile Pool.`;
+                            } else {
+                                if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg`; }
+                                if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
+                                if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
+                                
+                                if (rpsMult === 1.5 || coreStates.includes('Vulnerable')) triggeredExploit = true;
+                                if (isFlanking) triggeredTagTeam = true;
 
-                            if (isExecute) { barriers.fill(0); newHp = 0; staggered = true; log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`; } 
-                            else {
-                                let dmgRemaining = incomingDmg;
-                                for (let i = 0; i < barriers.length; i++) {
-                                    if (barriers[i] > 0 && dmgRemaining > 0) {
-                                        if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
-                                        else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
+                                if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; } if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
+                                if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
+                                
+                                if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                                if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                                if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
+                                if (coreStates.includes('Evasive') && !isExecute) log += `\n>> [Evasive] triggered.`;
+
+                                if (isExecute) { barriers.fill(0); newHp = 0; staggered = true; log += `\n>> HOSTILE EXECUTED! [Instant Erasure]`; } 
+                                else {
+                                    let dmgRemaining = incomingDmg;
+                                    for (let i = 0; i < barriers.length; i++) {
+                                        if (barriers[i] > 0 && dmgRemaining > 0) {
+                                            if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } 
+                                            else { dmgRemaining -= barriers[i]; barriers[i] = 0; }
+                                        }
                                     }
+                                    newHp = Math.max(0, newHp - dmgRemaining);
+                                    const hadBarriers = safeArray(enemy.currentBarriers).some(b => b > 0); const allShattered = barriers.every(b => b === 0);
+                                    if (hadBarriers && allShattered) staggered = true; 
+                                    log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.`; if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
                                 }
-                                newHp = Math.max(0, newHp - dmgRemaining);
-                                const hadBarriers = safeArray(enemy.currentBarriers).some(b => b > 0); const allShattered = barriers.every(b => b === 0);
-                                if (hadBarriers && allShattered) staggered = true; 
-                                log += `\nHostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.`; if (staggered && !enemy.staggered) log += `\n>> TARGET STAGGERED!`;
                             }
 
                             let updatedStatuses = safeArray(enemy.statuses).filter(st => !consumeStates.includes(getCoreState(st)));
-                            if (action.effectName && !isExecute) {
+                            if (action.effectName && (!isExecute || payloadType !== 'damage')) {
                                 let newlyAppliedCore = action.effectCore || getCoreState(action.effectName); updatedStatuses.push(action.effectName); log += `\n>> State [${action.effectName}] applied to ${enemy.name}!`;
                                 if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2; else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
                                 else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0; else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
@@ -461,9 +474,48 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             let coreStates = safeArray(p.statuses).map(st => getCoreState(st)); let forcedEvasion = coreStates.includes('Evasive'); let incomingDmg = rawDmg;
 
                             const rpsMult = getAffinityMultiplier(dispCore, p.affinity || 'Kinetic');
-                            if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg`; }
-                            if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
-                            if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
+                            const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+
+                            if (payloadType === 'heal') {
+                                let incomingHeal = Math.ceil(rawDmg * rpsMult);
+                                if (rpsMult === 1.5) log += `\n>> AFFINITY ADVANTAGE: 1.5x Healing`;
+                                if (rpsMult === 0.5) log += `\n>> AFFINITY DISADVANTAGE: 0.5x Healing`;
+                                p.currentHp = Math.min(derivedMaxHp, safeInt(p.currentHp ?? derivedMaxHp) + incomingHeal);
+                                log += `\nAgent [${p.name || 'P1'}]: Restored ${incomingHeal} HP. HP is now ${p.currentHp}.`;
+                                if (action.sourceId && String(t.refId) !== String(action.sourceId)) triggeredAssist = true;
+                            } else if (payloadType === 'battery') {
+                                let pRes = !isNaN(parseInt(p.resPool)) ? parseInt(p.resPool) : 3;
+                                p.resPool = Math.min(10, pRes + rawDmg);
+                                log += `\nAgent [${p.name || 'P1'}]: Energized for +${rawDmg} Resonance.`;
+                                if (action.sourceId && String(t.refId) !== String(action.sourceId)) triggeredAssist = true;
+                            } else {
+                                if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> AFFINITY ADVANTAGE: 1.5x Dmg`; }
+                                if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
+                                if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
+                                
+                                if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; } if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
+                                if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
+
+                                if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                                if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
+                                if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
+
+                                if (isExecute) { p.currentHp = 0; log += `\n>> AGENT EXECUTED! [Critical System Failure]`; } 
+                                else {
+                                    let mitigation = 0; let mitType = "None"; let trueFlank = isFlanking || (action.a !== undefined && action.a !== 0 && action.a !== '0');
+                                    if (forcedEvasion) {
+                                        trueFlank = true; mitType = "Forced Evasion [State]";
+                                        if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; } else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
+                                    } else if (trueFlank) {
+                                        if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
+                                    } else {
+                                        if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
+                                    }
+                                    const finalDmg = Math.max(0, incomingDmg - mitigation); 
+                                    p.currentHp = Math.max(0, safeInt(p.currentHp ?? derivedMaxHp) - finalDmg);
+                                    log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
+                                }
+                            }
                             
                             // SYNERGY DETECTION - Assist
                             if (action.sourceId && String(t.refId) !== String(action.sourceId) && action.effectName) {
@@ -471,31 +523,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 if (['Shielded', 'Haste', 'Evasive', 'Invulnerable'].includes(core)) triggeredAssist = true;
                             }
 
-                            if (isOnSteamReact) { incomingDmg += 5; log += `\n>> STEAM BLAST: (+5 Dmg)`; } if (isOnCombustReact) { incomingDmg += 5; log += `\n>> COMBUSTION: (+5 Dmg)`; }
-                            if (isOnConductReact) { incomingDmg += 5; log += `\n>> CONDUCTION: (+5 Dmg)`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `\n>> ANNIHILATION: (+5 Dmg)`; }
-
-                            if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
-                            if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `\n>> [Shielded] mitigated 5 damage.`; }
-                            if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `\n>> [Invulnerable] completely negated the attack.`; }
-
-                            if (isExecute) { p.currentHp = 0; log += `\n>> AGENT EXECUTED! [Critical System Failure]`; } 
-                            else {
-                                let mitigation = 0; let mitType = "None"; let trueFlank = isFlanking || (action.a !== undefined && action.a !== 0 && action.a !== '0');
-                                if (forcedEvasion) {
-                                    trueFlank = true; mitType = "Forced Evasion [State]";
-                                    if (p.usedEvade) { mitigation = 0; mitType += " [EXHAUSTED]"; } else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); p.usedEvade = true; }
-                                } else if (trueFlank) {
-                                    if (p.usedEvade) { mitigation = 0; mitType = "Flanked [EVASION EXHAUSTED]"; } else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitType = "Backline Evasion"; p.usedEvade = true; }
-                                } else {
-                                    if (p.usedParry) { mitigation = 0; mitType = "Direct Hit [PARRY EXHAUSTED]"; } else { mitigation = fDP + (wpn.baseDmg||0) + wpnBonus; mitType = "Front Parry"; p.usedParry = true; }
-                                }
-                                const finalDmg = Math.max(0, incomingDmg - mitigation); const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
-                                p.currentHp = Math.max(0, safeInt(p.currentHp ?? derivedMaxHp) - finalDmg);
-                                log += `\nAgent [${p.name || 'P1'}]: ${mitType} blocked ${mitigation} dmg. Took ${finalDmg} HP dmg. HP is now ${p.currentHp}.`;
-                            }
-
                             p.statuses = safeArray(p.statuses).filter(st => !consumeStates.includes(getCoreState(st)));
-                            if (action.effectName && !isExecute) {
+                            if (action.effectName && (!isExecute || payloadType !== 'damage')) {
                                 let newlyAppliedCore = action.effectCore || getCoreState(action.effectName); p.statuses.push(action.effectName); log += `\n>> State [${action.effectName}] applied to ${p.name}!`;
                                 if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2; else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2);
                                 else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0; else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2);
@@ -529,7 +558,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
             });
 
             if (hitCount === 0) log += `\nNo valid targets in payload array.`;
-            let newEnemyPoolTotal = s.encounter?.enemyPoolTotal || 0;
             
             if (action.isEnemy && !action.isHijacked) { newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - safeInt(action.cost)); log += `\n>> [-${safeInt(action.cost)} Res] Hostile Action executed.`; } 
             else if (action.sourceId && !action.isHijacked) {
@@ -667,7 +695,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (selectedToken === id) setSelectedToken(null); 
     };
 
-    // FIX 2: Hijack Abort clears state.
     const clearActiveAction = () => { 
         if (!authorizeActionExecution()) return; 
         setAoeRotation(0); 
@@ -770,6 +797,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (originPosIdx !== null && activeAction.a === 0 && !checkLineOfSight(originPosIdx, hoveredHex, activeGrid)) return null;
 
         const aoeHexes = getAoEHexes(hoveredHex, originPosIdx, activeAction.a, aoeRotation, activeGrid);
+        
+        const payloadType = activeAction.payload || 'damage';
         const rawDmg = safeInt(activeAction.d);
         const dispCore = activeAction.elementCore || activeAction.elementRaw || 'Kinetic';
         const isExecute = activeAction.effectCore === 'Execute';
@@ -808,43 +837,50 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
 
             let incomingDmg = rawDmg;
             const rpsMult = getAffinityMultiplier(dispCore, entAffinity);
-            if (rpsMult === 1.5) incomingDmg = Math.ceil(incomingDmg * 1.5);
-            if (rpsMult === 0.5) incomingDmg = Math.ceil(incomingDmg * 0.5);
-            if (isFlanking) incomingDmg = Math.ceil(incomingDmg * 1.5);
             
+            let mitigation = 0; let mitName = ""; let finalDmg = rawDmg;
             let reactionBonus = 0;
-            if (isOnSteamReact || isOnCombustReact || isOnConductReact || isOnAnnihilateReact) { incomingDmg += 5; reactionBonus = 5; }
-            if (entStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
-            if (entStates.includes('Shielded')) incomingDmg = Math.max(0, incomingDmg - 5);
-            if (entStates.includes('Invulnerable')) incomingDmg = 0;
 
-            let mitigation = 0; let mitName = ""; let finalDmg = incomingDmg;
-
-            if (isExecute) { finalDmg = 'FATAL'; } 
-            else if (!isEnemy && pObj) {
-                const fDP = parseInt(pObj.dpFront) || 0; const sDP = parseInt(pObj.dpSupport) || 0; const bDP = parseInt(pObj.dpBack) || 0;
-                const wpn = safeArmory.find(w => String(w.id) === String(pObj.weaponId || 'w01')) || safeArmory[0];
-                let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0); 
-                let trueFlank = isFlanking || (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0');
+            if (payloadType === 'damage') {
+                if (rpsMult === 1.5) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                if (rpsMult === 0.5) incomingDmg = Math.ceil(incomingDmg * 0.5);
+                if (isFlanking) incomingDmg = Math.ceil(incomingDmg * 1.5);
                 
-                if (entStates.includes('Evasive')) {
-                    if (pObj.usedEvade) { mitigation = 0; mitName = "Evade [EXHAUSTED]"; }
-                    else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitName = "Forced Evasion"; }
-                } else if (trueFlank) {
-                    if (pObj.usedEvade) { mitigation = 0; mitName = "Flanked [EXHAUSTED]"; }
-                    else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitName = "Backline Evasion"; }
-                } else {
-                    if (pObj.usedParry) { mitigation = 0; mitName = "Parry [EXHAUSTED]"; }
-                    else { mitigation = fDP + (wpn.baseDmg||0) + (isSynergy ? (wpn.bonusFront||0) : 0); mitName = "Front Parry"; }
+                if (isOnSteamReact || isOnCombustReact || isOnConductReact || isOnAnnihilateReact) { incomingDmg += 5; reactionBonus = 5; }
+                if (entStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5);
+                if (entStates.includes('Shielded')) incomingDmg = Math.max(0, incomingDmg - 5);
+                if (entStates.includes('Invulnerable')) incomingDmg = 0;
+
+                if (isExecute) { finalDmg = 'FATAL'; } 
+                else if (!isEnemy && pObj) {
+                    const fDP = parseInt(pObj.dpFront) || 0; const sDP = parseInt(pObj.dpSupport) || 0; const bDP = parseInt(pObj.dpBack) || 0;
+                    const wpn = safeArmory.find(w => String(w.id) === String(pObj.weaponId || 'w01')) || safeArmory[0];
+                    let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0); 
+                    let trueFlank = isFlanking || (activeAction.a !== undefined && activeAction.a !== 0 && activeAction.a !== '0');
+                    
+                    if (entStates.includes('Evasive')) {
+                        if (pObj.usedEvade) { mitigation = 0; mitName = "Evade [EXHAUSTED]"; }
+                        else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitName = "Forced Evasion"; }
+                    } else if (trueFlank) {
+                        if (pObj.usedEvade) { mitigation = 0; mitName = "Flanked [EXHAUSTED]"; }
+                        else { mitigation = bDP + 3 + (isSynergy ? (wpn.bonusBack||0) : 0); mitName = "Backline Evasion"; }
+                    } else {
+                        if (pObj.usedParry) { mitigation = 0; mitName = "Parry [EXHAUSTED]"; }
+                        else { mitigation = fDP + (wpn.baseDmg||0) + (isSynergy ? (wpn.bonusFront||0) : 0); mitName = "Front Parry"; }
+                    }
+                    finalDmg = Math.max(0, incomingDmg - mitigation);
+                } else if (isEnemy) {
+                    const e = safeArray(encounter?.enemies).find(en => String(en.uid) === String(t.refId));
+                    if (e) {
+                        let barriers = safeArray(e.currentBarriers).reduce((a,b) => a+b, 0);
+                        if (barriers > 0) { mitigation = barriers; mitName = "Barriers"; }
+                        finalDmg = Math.max(0, incomingDmg - barriers);
+                    }
                 }
-                finalDmg = Math.max(0, incomingDmg - mitigation);
-            } else if (isEnemy) {
-                const e = safeArray(encounter?.enemies).find(en => String(en.uid) === String(t.refId));
-                if (e) {
-                    let barriers = safeArray(e.currentBarriers).reduce((a,b) => a+b, 0);
-                    if (barriers > 0) { mitigation = barriers; mitName = "Barriers"; }
-                    finalDmg = Math.max(0, incomingDmg - barriers);
-                }
+            } else if (payloadType === 'heal') {
+                finalDmg = Math.ceil(rawDmg * rpsMult);
+            } else if (payloadType === 'battery') {
+                finalDmg = rawDmg;
             }
 
             const { x, y } = getHexCoords(t.pos);
@@ -860,17 +896,34 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         <div className="text-orange-400 font-bold text-center py-2 animate-pulse">⚠ IMPROVISED (1d6) ⚠<br/>Math Unknown</div>
                     ) : (
                         <>
-                            <div className="flex justify-between"><span>Base Dmg:</span><span>{rawDmg}</span></div>
-                            {rpsMult !== 1.0 && <div className="flex justify-between text-yellow-400"><span>Affinity:</span><span>x{rpsMult}</span></div>}
-                            {isFlanking && <div className="flex justify-between text-red-400"><span>Flanking:</span><span>x1.5</span></div>}
-                            {reactionBonus > 0 && <div className="flex justify-between text-orange-400"><span>Reaction:</span><span>+{reactionBonus}</span></div>}
-                            {entStates.includes('Vulnerable') && <div className="flex justify-between text-pink-400"><span>Vulnerable:</span><span>x1.5</span></div>}
-                            {entStates.includes('Shielded') && <div className="flex justify-between text-blue-400"><span>Shielded:</span><span>-5</span></div>}
-                            {entStates.includes('Invulnerable') && <div className="flex justify-between text-yellow-300"><span>Invulnerable:</span><span>BLOCKED</span></div>}
-                            {mitName && <div className="flex justify-between text-gray-400"><span>{mitName}:</span><span>-{mitigation}</span></div>}
+                            <div className="flex justify-between">
+                                <span>Base {payloadType === 'heal' ? 'Heal' : payloadType === 'battery' ? 'Energize' : 'Dmg'}:</span>
+                                <span>{rawDmg}</span>
+                            </div>
+                            
+                            {payloadType === 'damage' && (
+                                <>
+                                    {rpsMult !== 1.0 && <div className="flex justify-between text-yellow-400"><span>Affinity:</span><span>x{rpsMult}</span></div>}
+                                    {isFlanking && <div className="flex justify-between text-red-400"><span>Flanking:</span><span>x1.5</span></div>}
+                                    {reactionBonus > 0 && <div className="flex justify-between text-orange-400"><span>Reaction:</span><span>+{reactionBonus}</span></div>}
+                                    {entStates.includes('Vulnerable') && <div className="flex justify-between text-pink-400"><span>Vulnerable:</span><span>x1.5</span></div>}
+                                    {entStates.includes('Shielded') && <div className="flex justify-between text-blue-400"><span>Shielded:</span><span>-5</span></div>}
+                                    {entStates.includes('Invulnerable') && <div className="flex justify-between text-yellow-300"><span>Invulnerable:</span><span>BLOCKED</span></div>}
+                                    {mitName && <div className="flex justify-between text-gray-400"><span>{mitName}:</span><span>-{mitigation}</span></div>}
+                                </>
+                            )}
+                            
+                            {payloadType === 'heal' && (
+                                <>
+                                    {rpsMult !== 1.0 && <div className="flex justify-between text-yellow-400"><span>Affinity:</span><span>x{rpsMult}</span></div>}
+                                </>
+                            )}
                             
                             <div className="border-t border-gray-700 mt-1 pt-1 flex justify-between font-bold text-white text-xs">
-                                <span>EXPECTED:</span><span className={finalDmg === 'FATAL' || finalDmg > 0 ? 'text-red-500' : 'text-gray-500'}>{finalDmg} DMG</span>
+                                <span>{payloadType === 'damage' ? 'EXPECTED:' : payloadType === 'heal' ? 'RECOVERY:' : 'TRANSFER:'}</span>
+                                <span className={payloadType === 'damage' ? (finalDmg === 'FATAL' || finalDmg > 0 ? 'text-red-500' : 'text-gray-500') : payloadType === 'heal' ? 'text-[#22c55e]' : 'text-[#00f0ff]'}>
+                                    {finalDmg} {payloadType === 'damage' ? 'DMG' : payloadType === 'heal' ? 'HP' : 'RES'}
+                                </span>
                             </div>
                             
                             {activeAction.effectName && <div className="text-purple-400 mt-1">Applies: [{activeAction.effectName}]</div>}
@@ -1044,7 +1097,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                 <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks || !isMyTurn || !isSynergy) && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks || !isMyTurn || !isSynergy) && !isGM ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks || !isMyTurn || !isSynergy) && !isGM} onClick={() => {
                                     if (!isGM && !isMyTurn) return alert("System Locked: Hostile turn in progress."); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED."); if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn."); if (!isGM && !isSynergy) return alert("System Locked: DP Requirements not met for equipped weapon.");
                                     let finalRange = isBlind ? '1' : (activeWeapon.range || '1'); if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
-                                    pushUpdate(s => ({ ...s, activeAction: { type: 'target', isBasic: true, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', effectName: '', terrain: '', desc: '', a: 0, u: 0, source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(activeWeapon.name || 'Weapon Attack'), d: safeInt(calcBaseDmg), range: String(finalRange), elementRaw: String(activeWeapon.element || 'Kinetic'), elementCore: String(getCoreElement(activeWeapon.element || 'Kinetic')), effectCore: '', cost: 0 } }))
+                                    pushUpdate(s => ({ ...s, activeAction: { type: 'target', isBasic: true, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', effectName: '', terrain: '', desc: '', a: 0, u: 0, source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), range: String(finalRange), elementRaw: String(activeWeapon.element || 'Kinetic'), elementCore: String(getCoreElement(activeWeapon.element || 'Kinetic')), effectCore: '', cost: 0 } }))
                                 }}>{(!isSynergy && !isGM) ? 'DP REQ FAILED' : (disableAttacks && !isGM) ? 'LOCKED' : (p.usedBasicAttack && !isGM ? 'EXHAUSTED' : 'BASIC ATTACK')}</button>
                             </div>
                         )}
@@ -1053,11 +1106,15 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                         {safeArray(p.customCards).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
                         {safeArray(p.customCards).map(c => {
                             const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                            const cardCost = parseInt(c.cost) || 0; const isNoFuel = (p.resPool || 3) < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
+                            const cardCost = parseInt(c.cost) || 0; const isNoFuel = currentRes < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
                             return (
                                 <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
                                     <div className="flex-1 pr-6 pb-2">
-                                        <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div><div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div><div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
+                                        <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
+                                        <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
+                                        <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
+                                        {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Payload: RESTORATIVE (Heal)</div>}
+                                        {c.payload === 'battery' && <div className="text-[#00f0ff] text-[10px] font-bold mt-1">Payload: ENERGIZE (+Res)</div>}
                                         {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                         {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                         {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
@@ -1147,7 +1204,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                             if (disableAttacks) return alert("System Locked: Entity is STUNNED.");
                                             const currentHostileRes = encounter?.enemyPoolTotal || 0; if (currentHostileRes < eCost) return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${eCost} RES\nCurrent Pool: ${currentHostileRes} RES`);
                                             let finalRange = isBlind ? '1' : eRange; let finalAoe = isBlind ? 0 : parsedAoe; if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-                                            pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(cleanName), cost: safeInt(eCost), d: safeInt(parsedDmg), a: finalAoe || 0, range: String(finalRange), effectName: String(pEff || ''), effectCore: String(getCoreState(pEff) || ''), elementRaw: String(parsedElement || 'Kinetic'), elementCore: String(getCoreElement(parsedElement) || 'Kinetic'), terrain: String(pTerrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(eCost), m: 0, coreMobility: '', u: 0, desc: '' } }));
+                                            pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(cleanName), payload: 'damage', cost: safeInt(eCost), d: safeInt(parsedDmg), a: finalAoe || 0, range: String(finalRange), effectName: String(pEff || ''), effectCore: String(getCoreState(pEff) || ''), elementRaw: String(parsedElement || 'Kinetic'), elementCore: String(getCoreElement(parsedElement) || 'Kinetic'), terrain: String(pTerrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(eCost), m: 0, coreMobility: '', u: 0, desc: '' } }));
                                         }}>{disableAttacks ? 'LOCKED' : `TARGET (${eCost} RES)`}</button>
                                     )}
                                 </div>
@@ -1159,18 +1216,6 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }
 
         if (!isGM) { return ( <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full"> <div className="text-gray-500 text-xs text-center mt-10 p-4 border border-dashed border-gray-700">Select a token on the grid to view its bio-scan.</div> </div> ); }
-
-        const handleElementChangeGM = (e) => {
-            const newElem = e.target.value; const coreElem = getCoreElement(newElem); const validStates = ELEMENT_STATE_MAP[coreElem] || [];
-            setBuilder(prev => {
-                const newState = { ...prev, elementRaw: newElem };
-                if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
-                    newState.effectName = '';
-                    newState.u = 0;
-                }
-                return newState;
-            });
-        };
 
         return (
             <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
@@ -1244,7 +1289,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                     
                                     return (
                                         <button key={aIdx} className="bg-black text-white px-3 py-2 text-[10px] font-bold border border-purple-500 hover:bg-purple-500 hover:text-white transition-colors uppercase" onClick={() => {
-                                            pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: `Hijacked ${activeAction.enemy.name}`, sourceId: String(activeAction.enemy.uid), isEnemy: true, isHijacked: true, hijackControllerId: activeAction.hijackControllerId, name: cleanName, cost: 0, d: safeInt(parsedDmg), a: parsedAoe || 0, range: String(eRange), effectName: String(pEff || ''), effectCore: String(getCoreState(pEff) || ''), elementRaw: String(parsedElement || 'Kinetic'), elementCore: String(getCoreElement(parsedElement) || 'Kinetic'), terrain: String(pTerrain || ''), isBasic: false, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', u: 0, desc: '' } }));
+                                            pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: `Hijacked ${activeAction.enemy.name}`, sourceId: String(activeAction.enemy.uid), isEnemy: true, isHijacked: true, hijackControllerId: activeAction.hijackControllerId, name: cleanName, cost: 0, payload: 'damage', d: safeInt(parsedDmg), a: parsedAoe || 0, range: String(eRange), effectName: String(pEff || ''), effectCore: String(getCoreState(pEff) || ''), elementRaw: String(parsedElement || 'Kinetic'), elementCore: String(getCoreElement(parsedElement) || 'Kinetic'), terrain: String(pTerrain || ''), isBasic: false, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', u: 0, desc: '' } }));
                                         }}>
                                             {cleanName}
                                         </button>
@@ -1264,7 +1309,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             {activeAction.type !== 'move' && activeAction.type !== 'blink' && (
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400 items-center">
                                     {activeAction.isImprovised && <span className="text-[#ff6600] animate-pulse uppercase">⚠ IMPROVISED (1d6) ⚠</span>}
-                                    {activeAction.d !== undefined && <span>DMG: {activeAction.d}</span>}
+                                    {activeAction.payload === 'heal' && <span className="text-[#22c55e]">PAYLOAD: RESTORATIVE</span>}
+                                    {activeAction.payload === 'battery' && <span className="text-[#00f0ff]">PAYLOAD: ENERGIZE</span>}
+                                    {activeAction.d !== undefined && <span>VAL: {activeAction.d}</span>}
                                     {activeAction.elementCore && <span className="text-[#ff6600]">TYPE: {(activeAction.elementRaw && String(activeAction.elementRaw).toLowerCase() !== String(activeAction.elementCore).toLowerCase()) ? `${activeAction.elementRaw} [Core: ${activeAction.elementCore}]` : activeAction.elementCore}</span>}
                                     {activeAction.a !== undefined && <span>AoE: {activeAction.a === 'line3' ? '3-HEX LINE' : activeAction.a === 'cluster3' ? '3-HEX CLUSTER' : `${activeAction.a} RADIUS`}</span>}
                                     {activeAction.effectName && <span className="text-purple-400">STATE: [{(String(activeAction.effectName).toLowerCase() !== String(activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : activeAction.effectName}]</span>}
