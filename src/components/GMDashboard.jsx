@@ -2,15 +2,41 @@
 import React, { useState } from 'react';
 import { bestiary } from '../data/bestiary';
 
-const STATE_DICTIONARY = { 'Execute': ['execute', 'erase', 'delete'], 'Bleed': ['bleed', 'hemorrhage', 'lacerate'], 'Burn': ['burn', 'ignite', 'scorch'], 'Poisoned': ['poison', 'venom', 'decay'], 'Immobilized': ['immobilize', 'root', 'snare'], 'Stunned': ['stun', 'paralyze', 'petrify'], 'Shielded': ['shield', 'protect', 'barrier'], 'Vulnerable': ['vulnerable', 'expose', 'sunder'], 'Knockdown': ['knockdown', 'trip', 'shove'], 'Blind': ['blind', 'obscure', 'smoke'], 'Haste': ['haste', 'speed', 'quick'], 'Slowed': ['slow', 'sluggish', 'chill'], 'Shocked': ['shock', 'glitch', 'jolt'], 'Evasive': ['evade', 'dodge', 'blur'], 'Invulnerable': ['invulnerable', 'stasis', 'immune'] };
+const ELEMENT_DICTIONARY = { 'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'], 'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'], 'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'], 'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'], 'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'], 'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'], 'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood'] };
+const STATE_DICTIONARY = { 'Hijacked': ['hijack', 'mind control', 'dominate', 'possess', 'control'], 'Execute': ['execute', 'erase', 'delete'], 'Bleed': ['bleed', 'hemorrhage', 'lacerate'], 'Burn': ['burn', 'ignite', 'scorch'], 'Poisoned': ['poison', 'venom', 'decay'], 'Immobilized': ['immobilize', 'root', 'snare'], 'Stunned': ['stun', 'paralyze', 'petrify'], 'Shielded': ['shield', 'protect', 'barrier'], 'Vulnerable': ['vulnerable', 'expose', 'sunder'], 'Knockdown': ['knockdown', 'trip', 'shove'], 'Blind': ['blind', 'obscure', 'smoke'], 'Haste': ['haste', 'speed', 'quick'], 'Slowed': ['slow', 'sluggish', 'chill'], 'Shocked': ['shock', 'glitch', 'jolt'], 'Evasive': ['evade', 'dodge', 'blur'], 'Invulnerable': ['invulnerable', 'stasis', 'immune'] };
+
+const ELEMENT_DESCRIPTIONS = { 'Kinetic': 'Physical force, bludgeoning, slashing, earth, wind.', 'Thermal': 'Heat, fire, plasma, magma.', 'Cryo': 'Cold, ice, water, frost.', 'Electro': 'Lightning, electricity, magnetic.', 'Toxic': 'Poison, acid, radiation, decay.', 'Radiant': 'Light, holy, healing, order.', 'Void': 'Dark, gravity, space, psychic.' };
+const STATE_DESCRIPTIONS = { 'Hijacked': 'Forces target to immediately cast an ability under your control.', 'Execute': 'Instantly reduces HP to 0.', 'Bleed': 'Takes 3 HP damage at round end.', 'Burn': 'Takes 3 Thermal damage at round end.', 'Poisoned': 'Takes 3 Toxic damage at round end.', 'Immobilized': 'Movement points reduced to 0.', 'Stunned': 'Movement 0. Cannot attack. Defenses jammed.', 'Shielded': 'Absorbs 5 damage.', 'Vulnerable': 'Takes 1.5x damage.', 'Knockdown': 'Movement halved.', 'Blind': 'Range 1, AoE 0.', 'Haste': '+2 Move.', 'Slowed': '-2 Move.', 'Shocked': 'Defenses jammed.', 'Evasive': 'Forces Evasion roll.', 'Invulnerable': 'Negates attack.' };
+
+const ELEMENT_STATE_MAP = {
+    'Kinetic': ['Bleed', 'Immobilized', 'Stunned', 'Shielded', 'Vulnerable', 'Knockdown', 'Evasive'],
+    'Thermal': ['Burn', 'Blind', 'Vulnerable', 'Execute'],
+    'Cryo': ['Slowed', 'Immobilized', 'Stunned', 'Shielded'],
+    'Electro': ['Shocked', 'Stunned', 'Haste', 'Blind', 'Hijacked'],
+    'Toxic': ['Poisoned', 'Blind', 'Vulnerable'],
+    'Radiant': ['Blind', 'Haste', 'Shielded', 'Invulnerable'],
+    'Void': ['Execute', 'Evasive', 'Blind', 'Slowed', 'Immobilized', 'Hijacked']
+};
+
+const STATE_TIERS = {
+    'Bleed': 1, 'Burn': 1, 'Poisoned': 1, 'Haste': 1, 'Slowed': 1,
+    'Knockdown': 3, 'Blind': 3, 'Shielded': 3, 'Vulnerable': 3, 'Shocked': 3, 'Evasive': 3,
+    'Immobilized': 5, 'Stunned': 5, 'Invulnerable': 5,
+    'Execute': 10, 'Hijacked': 10
+};
+
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
-const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null); return []; };
+const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null && i !== undefined); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null && i !== undefined); return []; };
 const getCoreState = (input) => { if (!input) return ''; const match = String(input).match(/\[(.*?)\]/); const clean = (match ? match[1] : String(input)).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; } return String(input); };
+const getCoreElement = (input) => { if (!input) return 'Kinetic'; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) { if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1); } return 'Kinetic'; };
 
 export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
     const [draftEnemyId, setDraftEnemyId] = useState('');
+    const [spawnMode, setSpawnMode] = useState('immediate');
+    const [spawnRound, setSpawnRound] = useState(2);
     const [grantXpAmount, setGrantXpAmount] = useState(10);
+    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '' });
 
     const activeEnemies = safeArray(encounter.enemies);
     const activeTokens = safeArray(tokens);
@@ -27,10 +53,21 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             
             let generatedRes = 0; let deadEnemyUids = new Set(); let deadPlayers = new Set();
 
+            // PHASE SHIFT: Check for Time-Delayed Spawns
+            let roundActivations = 0;
+            eList = eList.map(e => {
+                if (!e.isActive && e.spawnMode === 'round' && nextRound >= e.spawnRound) {
+                    roundActivations++;
+                    return { ...e, isActive: true };
+                }
+                return e;
+            });
+            if (roundActivations > 0) log += `\n>> PHASE SHIFT: ${roundActivations} delayed Hostiles have entered the battlefield!`;
+
             tList.forEach(t => {
                 if (t.type === 'enemy') {
                     const en = eList.find(e => String(e.uid) === String(t.refId));
-                    if (en) generatedRes += safeInt(en.tier || 1);
+                    if (en && en.isActive) generatedRes += safeInt(en.tier || 1);
                 }
             });
             
@@ -41,7 +78,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 const cell = grid[t.pos] || {};
                 let isPlayer = t.type === 'player';
                 let ent = isPlayer ? pObj[t.refId] : eList.find(e => String(e.uid) === String(t.refId));
-                if (!ent) return;
+                if (!ent || (!isPlayer && !ent.isActive)) return;
                 
                 let hp = safeInt(ent.currentHp);
                 let statuses = safeArray(ent.statuses);
@@ -81,15 +118,31 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (isPlayer) { ent.usedParry = false; ent.usedIntercept = false; ent.usedEvade = false; ent.usedBasicAttack = false; }
             });
 
+            // PHASE SHIFT: Check for On-Clear Spawns after DoT and Hazard Sweeps
+            const activeEnemiesLeft = eList.filter(e => e.isActive && e.currentHp > 0 && !deadEnemyUids.has(String(e.uid))).length;
+            if (activeEnemiesLeft === 0) {
+                let newlyClearActivated = 0;
+                eList = eList.map(e => {
+                    if (!e.isActive && e.spawnMode === 'clear' && !deadEnemyUids.has(String(e.uid))) {
+                        newlyClearActivated++;
+                        return { ...e, isActive: true };
+                    }
+                    return e;
+                });
+                if (newlyClearActivated > 0) log += `\n>> PHASE SHIFT: ${newlyClearActivated} delayed Hostile(s) entered the battlefield!`;
+            }
+
             if (deadEnemyUids.size > 0) {
                 eList = eList.filter(e => !deadEnemyUids.has(String(e.uid)));
                 tList = tList.filter(t => !(t.type === 'enemy' && deadEnemyUids.has(String(t.refId))));
                 log += `\n>> CASUALTIES: ${deadEnemyUids.size} Hostile(s) purged from the grid.`;
             }
 
+            let newQueue = safeArray(s.encounter?.initiativeQueue).filter(id => tList.some(t => t.id === id));
+
             return {
                 ...s, players: pObj, tokens: tList, activeAction: null,
-                encounter: { ...s.encounter, round: nextRound, enemies: eList, enemyPoolTotal: nextPool, initiativeQueue: [], activeTokenId: null },
+                encounter: { ...s.encounter, round: nextRound, enemies: eList, enemyPoolTotal: nextPool, initiativeQueue: newQueue, activeTokenId: newQueue[0] || null },
                 globalLog: { message: log, timestamp: Date.now() }
             };
         });
@@ -97,7 +150,14 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
     const rollInitiative = () => {
         pushUpdate(s => {
-            const tList = safeArray(s.tokens);
+            const tList = safeArray(s.tokens).filter(t => {
+                if (t.type === 'enemy') {
+                    const en = safeArray(s.encounter?.enemies).find(e => String(e.uid) === String(t.refId));
+                    return en && en.isActive;
+                }
+                return true;
+            });
+
             if(tList.length === 0) return s;
             const sorted = [...tList].sort((a, b) => {
                 const speedA = a.speed || 3; const speedB = b.speed || 3;
@@ -144,8 +204,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
         const template = bestiary.find(e => e.id === draftEnemyId);
         if (!template) return;
         pushUpdate(s => {
-            const newEnemy = { ...deepClone(template), uid: `e-${Date.now()}-${Math.floor(Math.random() * 1000)}`, currentHp: template.hp, currentBarriers: [...(template.barriers || [])], statuses: [] };
-            return { ...s, encounter: { ...s.encounter, enemies: [...safeArray(s.encounter?.enemies), newEnemy] }, globalLog: { message: `>> GM deployed [${template.name}] to the staging area.`, timestamp: Date.now() } };
+            const newEnemy = { 
+                ...deepClone(template), 
+                uid: `e-${Date.now()}-${Math.floor(Math.random() * 1000)}`, 
+                currentHp: template.hp, 
+                currentBarriers: [...(template.barriers || [])], 
+                statuses: [],
+                spawnMode,
+                spawnRound: spawnMode === 'round' ? safeInt(spawnRound) : 0,
+                isActive: spawnMode === 'immediate'
+            };
+            return { ...s, encounter: { ...s.encounter, enemies: [...safeArray(s.encounter?.enemies), newEnemy] }, globalLog: { message: `>> GM deployed [${template.name}] to the staging area (${spawnMode.toUpperCase()}).`, timestamp: Date.now() } };
         });
     };
 
@@ -156,6 +225,20 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             const pClone = deepClone(s.players || {});
             Object.keys(pClone).forEach(id => { pClone[id].xp = (safeInt(pClone[id].xp) || 0) + amt; });
             return { ...s, players: pClone, globalLog: { message: `>> EXPERIENCE GRANTED: All Agents received +${amt} XP.`, timestamp: Date.now() } };
+        });
+    };
+
+    const handleElementChangeGM = (e) => {
+        const newElem = e.target.value; 
+        const coreElem = getCoreElement(newElem); 
+        const validStates = ELEMENT_STATE_MAP[coreElem] || [];
+        setBuilder(prev => {
+            const newState = { ...prev, elementRaw: newElem };
+            if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
+                newState.effectName = '';
+                newState.u = 0;
+            }
+            return newState;
         });
     };
 
@@ -216,30 +299,52 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             </div>
 
             <div className="lg:col-span-6 bg-[#0a0f14] border border-slate-700 p-4 flex flex-col overflow-y-auto shadow-inner">
-                <div className="flex flex-col md:flex-row gap-2 mb-4 pb-4 border-b border-gray-700">
+                <div className="flex flex-col md:flex-row gap-2 mb-4 pb-4 border-b border-gray-700 items-start md:items-center">
                     <select className="flex-1 bg-black border border-gray-600 text-white p-2 outline-none font-bold text-xs" value={draftEnemyId} onChange={e => setDraftEnemyId(e.target.value)}>
                         <option value="">-- Access Bestiary Archives --</option>
                         {bestiary.map(e => <option key={e.id} value={e.id}>[Tier {e.tier}] {e.name} - {e.affinity}</option>)}
                     </select>
-                    <button className="bg-white text-black font-bold px-4 py-2 uppercase tracking-widest hover:bg-[#ff6600] hover:text-white transition-colors text-xs" onClick={addEnemyFromBestiary}>Deploy to Staging</button>
+                    
+                    <select className="w-full md:w-32 bg-black border border-gray-600 text-white p-2 outline-none font-bold text-xs" value={spawnMode} onChange={e => setSpawnMode(e.target.value)}>
+                        <option value="immediate">Immediate</option>
+                        <option value="clear">On Clear</option>
+                        <option value="round">On Round X</option>
+                    </select>
+
+                    {spawnMode === 'round' && (
+                        <input type="number" className="w-full md:w-16 bg-black border border-gray-600 text-white p-2 outline-none font-bold text-xs text-center" value={spawnRound} onChange={e => setSpawnRound(e.target.value)} />
+                    )}
+
+                    <button className="w-full md:w-auto bg-white text-black font-bold px-4 py-2 uppercase tracking-widest hover:bg-[#ff6600] hover:text-white transition-colors text-xs whitespace-nowrap" onClick={addEnemyFromBestiary}>Deploy to Staging</button>
                 </div>
 
                 <div className="space-y-3">
                     {activeEnemies.length === 0 ? <div className="text-gray-500 text-center py-10 uppercase tracking-widest border border-dashed border-gray-800">No active hostiles in array.</div> : null}
                     {activeEnemies.map((e, idx) => (
-                        <div key={e.uid} className="bg-black border border-gray-700 p-3 relative flex flex-col">
+                        <div key={e.uid} className={`bg-black border ${e.isActive ? 'border-gray-700' : 'border-dashed border-gray-600 opacity-60'} p-3 relative flex flex-col transition-all`}>
                             <div className="flex justify-between items-start mb-2 pr-6">
                                 <div>
                                     <div className="text-[#ff6600] font-bold text-lg">{e.name}</div>
-                                    <div className="text-[10px] text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <div className="text-[10px] text-gray-400 uppercase tracking-widest flex flex-wrap items-center gap-2">
                                         <span>Tier: <span className="text-white font-bold">{e.tier || 1}</span></span>
                                         <span>Type: <span className="text-white font-bold">{e.affinity || 'Kinetic'}</span></span>
+                                        <span className={e.isActive ? 'text-[#22c55e]' : 'text-gray-500 font-bold'}>
+                                            [{e.isActive ? 'ACTIVE' : `DELAYED: ${e.spawnMode === 'round' ? 'Round ' + e.spawnRound : 'On Clear'}`}]
+                                        </span>
                                     </div>
+                                    {!e.isActive && (
+                                        <button className="text-[9px] bg-gray-800 text-white px-2 py-0.5 mt-1 hover:bg-[#22c55e] hover:text-black transition-colors uppercase border border-gray-600 w-fit" onClick={() => pushUpdate(s => {
+                                            const newE = deepClone(safeArray(s.encounter?.enemies));
+                                            const eIndex = newE.findIndex(en => en.uid === e.uid);
+                                            if (eIndex !== -1) newE[eIndex].isActive = true;
+                                            return { ...s, encounter: { ...s.encounter, enemies: newE } };
+                                        })}>Force Activate</button>
+                                    )}
                                 </div>
                                 <button className="absolute top-2 right-2 text-gray-600 hover:text-red-500 text-lg transition-colors" onClick={() => pushUpdate(s => ({ ...s, encounter: { ...s.encounter, enemies: safeArray(s.encounter?.enemies).filter(en => en.uid !== e.uid) }}))}>✕</button>
                             </div>
 
-                            <div className="flex gap-4 mb-3 items-center">
+                            <div className="flex gap-4 mb-3 items-center mt-2">
                                 <div className="flex items-center gap-2">
                                     <label className="text-gray-500 text-[10px] uppercase font-bold">HP:</label>
                                     <input type="number" className="w-16 bg-gray-900 border border-gray-600 text-white p-1 text-center outline-none font-bold" value={e.currentHp} onChange={(ev) => {
@@ -261,17 +366,17 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
                             <div className="bg-gray-900 p-2 flex flex-wrap gap-1 items-center min-h-[40px] border border-gray-800">
                                 {safeArray(e.statuses).map((st, sIdx) => (
-                                    <span key={sIdx} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1">
+                                    <span key={sIdx} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">
                                         {st} 
                                         <button className="text-red-400 hover:text-white" onClick={() => pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); newE[idx].statuses.splice(sIdx, 1); return { ...s, encounter: { ...s.encounter, enemies: newE } }; })}>✕</button>
                                     </span>
                                 ))}
                                 <div className="flex gap-1 ml-auto">
-                                    <input type="text" id={`eState-${e.uid}`} className="w-24 bg-black border border-gray-600 text-white text-[10px] p-1 outline-none" placeholder="Add state..." />
-                                    <button className="bg-gray-800 text-white px-2 text-[10px] font-bold border border-gray-600 hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => {
-                                        const val = document.getElementById(`eState-${e.uid}`).value;
-                                        if (val) { pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); newE[idx].statuses.push(val); return { ...s, encounter: { ...s.encounter, enemies: newE } }; }); document.getElementById(`eState-${e.uid}`).value = ''; }
-                                    }}>+</button>
+                                    <select id={`eState-${e.uid}`} className="flex-1 bg-black border border-gray-600 text-white text-[10px] p-1 outline-none cursor-pointer">
+                                        <option value="">-- Add State --</option>
+                                        {Object.keys(STATE_DESCRIPTIONS).map(st => <option key={st} value={st} title={STATE_DESCRIPTIONS[st]}>{st}</option>)}
+                                    </select>
+                                    <button className="bg-gray-800 text-white px-2 text-[10px] font-bold border border-gray-600 hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => { const val = document.getElementById(`eState-${e.uid}`).value; if (val) { pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); newE[idx].statuses.push(val); return { ...s, encounter: { ...s.encounter, enemies: newE } }; }); document.getElementById(`eState-${e.uid}`).value = ''; } }}>+</button>
                                 </div>
                             </div>
                         </div>
@@ -305,13 +410,63 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                             <div className="flex flex-wrap gap-1">
                                 {safeArray(p.statuses).length === 0 && <span className="text-[10px] text-gray-600">No states.</span>}
                                 {safeArray(p.statuses).map((st, i) => (
-                                    <span key={i} className="bg-purple-900 text-white text-[9px] px-1 py-0.5 border border-purple-500 font-bold uppercase truncate max-w-full">
+                                    <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status'} className="bg-purple-900 text-white text-[9px] px-1 py-0.5 border border-purple-500 font-bold uppercase truncate max-w-full cursor-help">
                                         {st}
                                     </span>
                                 ))}
                             </div>
                         </div>
                     ))}
+                </div>
+
+                <div className="mt-6 border-t border-gray-700 pt-4">
+                    <div className="text-[#00f0ff] font-bold mb-2 tracking-widest uppercase">GM Improvised Action</div>
+                    <div className="space-y-3">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Skill Name:</span>
+                            <input type="text" className="w-full bg-black border border-[#00f0ff] p-2 text-white outline-none font-bold text-xs" placeholder="GM Override" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} />
+                        </div>
+                        
+                        <div className="flex flex-col gap-1">
+                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Element Affinity:</span>
+                            <select className="w-full bg-black border border-gray-600 p-2 text-white text-[10px] outline-none focus:border-[#ff6600] cursor-pointer" value={builder.elementRaw || 'Kinetic'} onChange={handleElementChangeGM}>
+                                {Object.keys(ELEMENT_DESCRIPTIONS).map(el => <option key={el} value={el}>{el.toUpperCase()} - {ELEMENT_DESCRIPTIONS[el]}</option>)}
+                            </select>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Damage (d):</span>
+                            <input type="number" className="w-16 bg-black border border-gray-600 p-1 text-center text-white font-bold" value={builder.d} onChange={e=>setBuilder({...builder, d: safeInt(e.target.value)})} />
+                        </div>
+
+                        <div className="flex flex-col gap-1 mt-2">
+                            <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">Apply Status Effect:</span>
+                            <select className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer" value={builder.effectName || ''} onChange={e => {
+                                const st = e.target.value;
+                                setBuilder({...builder, effectName: st, u: st ? STATE_TIERS[st] : 0});
+                            }}>
+                                <option value="">-- NO STATUS EFFECT --</option>
+                                {(ELEMENT_STATE_MAP[getCoreElement(builder.elementRaw)] || []).map(st => (
+                                    <option key={st} value={st}>[{st.toUpperCase()}] (+{STATE_TIERS[st]}u) - {STATE_DESCRIPTIONS[st]}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1 mt-2">
+                            <span className="text-yellow-500 text-[10px] uppercase font-bold tracking-wider">Terrain Gen (t):</span>
+                            <select className="w-full bg-black border border-yellow-600 p-2 text-white text-[10px] cursor-pointer" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
+                                <option value="">-- NO TERRAIN MODIFICATION --</option>
+                                <option value="minor">[MINOR] - Movement costs 2 pts (Cost: +1u)</option>
+                                <option value="clear">[CLEAR] - Removes existing terrain (Cost: +2u)</option>
+                                <option value="major">[MAJOR] - Deals 5 dmg at round end (Cost: +3u)</option>
+                                <option value="severe">[SEVERE] - Impassable & blocks LoS (Cost: +5u)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button className="w-full font-bold p-3 mt-4 uppercase transition-colors bg-red-600 text-white hover:bg-white hover:text-red-600 text-xs" onClick={() => {
+                        pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: "Game Master", sourceId: "gm", isEnemy: true, name: builder.name || 'GM Override', d: safeInt(builder.d), a: 0, range: "0-100", effectName: String(builder.effectName || ''), effectCore: String(getCoreState(builder.effectName) || ''), elementRaw: String(builder.elementRaw || 'Kinetic'), elementCore: String(getCoreElement(builder.elementRaw)), terrain: String(builder.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: 0, m: 0, coreMobility: '', u: safeInt(builder.u), desc: 'GM direct intervention.' } }));
+                    }}>Prime GM Strike</button>
                 </div>
             </div>
         </div>

@@ -54,8 +54,9 @@ export default function Rulebook() {
                             </p>
                             <ul className="list-disc pl-5 space-y-2 text-gray-400 text-xs">
                                 <li><strong className="text-white">Generation:</strong> Executing a Basic Attack generates <span className="text-[#22c55e]">+1 Res</span> for the Agent.</li>
+                                <li><strong className="text-white">Synergy Bonus:</strong> Striking Vulnerabilities, Flanking enemies, or Buffing allies dynamically triggers Teamwork execution (Assist, Exploit, Tag-Team) to auto-generate additional Resonance upon successful combat resolution.</li>
                                 <li><strong className="text-white">Expenditure:</strong> Executing Custom Skills, Spells, and Abilities drains Res from the pool equal to their calculated Synthesis Cost.</li>
-                                <li><strong className="text-white">The Cap:</strong> Agents have a hard cap of <span className="text-[#00f0ff]">10 Resonance</span>. Resonance can be extended temporarily via Teamwork actions (+1 Assist, +2 Tag-Team), but any excess beyond 10 instantly dissipates at the end of the round.</li>
+                                <li><strong className="text-white">The Cap:</strong> Agents have a hard cap of <span className="text-[#00f0ff]">10 Resonance</span>. Any excess beyond 10 instantly dissipates.</li>
                             </ul>
                         </div>
 
@@ -224,6 +225,24 @@ export default function Rulebook() {
                             </ul>
                         </div>
 
+                        <div className="bg-black border border-gray-700 p-5 mb-6">
+                            <h2 className="text-purple-400 font-bold text-lg mb-2 uppercase">Phased Deployments</h2>
+                            <p className="mb-4 text-sm text-gray-400">
+                                The GM can stage multi-wave encounters by altering a Hostile's <strong>Spawn Mode</strong> prior to deployment on the Grid.
+                            </p>
+                            <div className="space-y-2 text-xs text-gray-300">
+                                <div className="p-2 border-l-2 border-l-[#00f0ff] bg-gray-900">
+                                    <strong className="text-white uppercase">[Immediate]</strong>: The token drops onto the grid fully powered and active.
+                                </div>
+                                <div className="p-2 border-l-2 border-l-[#ff6600] bg-gray-900">
+                                    <strong className="text-white uppercase">[On Clear]</strong>: The token deploys in a dormant, untargetable "ghost" state. The instant all active Hostiles are purged from the grid, a Phase Shift occurs and these tokens instantly activate.
+                                </div>
+                                <div className="p-2 border-l-2 border-l-purple-500 bg-gray-900">
+                                    <strong className="text-white uppercase">[On Round X]</strong>: The token deploys dormant. The instant the GM advances the encounter to the designated round, the token activates.
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="bg-black border border-gray-700 p-5">
                             <h2 className="text-white font-bold text-lg mb-2 uppercase">Encounter Flow & Round Advance</h2>
                             <p className="mb-4 text-sm text-gray-400">
@@ -254,6 +273,10 @@ export default function Rulebook() {
                             <div className="bg-black border border-purple-500 p-4">
                                 <span className="bg-purple-900 text-white text-xs px-2 py-1 border border-purple-500 font-bold uppercase tracking-wider mb-2 inline-block">Execute</span>
                                 <p className="text-xs text-gray-300">Terminal erasure. Instantly reduces target HP to 0. Bypasses all barriers, parries, evasions, and invulnerability entirely.</p>
+                            </div>
+                            <div className="bg-black border border-purple-400 p-4">
+                                <span className="bg-purple-900 text-white text-xs px-2 py-1 border border-purple-500 font-bold uppercase tracking-wider mb-2 inline-block">Hijacked</span>
+                                <p className="text-xs text-gray-300">Neural override. The controlling Agent immediately selects and executes one of the target's native abilities using the target's physical token as the origin point. The state is instantly consumed after the action resolves.</p>
                             </div>
                             <div className="bg-black border border-red-500 p-4">
                                 <span className="bg-red-900 text-white text-xs px-2 py-1 border border-red-500 font-bold uppercase tracking-wider mb-2 inline-block">Bleed</span>

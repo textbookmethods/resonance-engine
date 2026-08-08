@@ -76,7 +76,6 @@ export default function App() {
 
             if (!data.players) { data.players = {}; needsUpdate = true; }
 
-            // Create blank agent safely
             if (role === 'player' && !data.players[localId]) {
                 data.players[localId] = {
                     name: 'Agent', title: '', weaponId: 'w01', xp: 0, 
@@ -113,7 +112,6 @@ export default function App() {
             if (data.tokens) data.tokens = safeArray(data.tokens);
 
             if (needsUpdate) {
-                // If we injected a blank player, manually sync local state immediately to prevent render crash
                 setGameState(data);
                 roomRef.set(data);
             } else {
@@ -126,9 +124,74 @@ export default function App() {
         return () => roomRef.off('value', listener);
     }, [sessionId, role, localId]);
 
+    // THE ENCOUNTER INTERCEPTOR
     const pushUpdate = (updater) => {
         setGameState(prev => {
-            const next = updater(prev);
+            let next = updater(prev);
+            
+            // Auto-Heal & Phase Shift Protocol
+            if (next.encounter && next.encounter.round > 0) {
+                let currentEnemies = safeArray(next.encounter.enemies);
+                
+                // Centralized Phase Shift: On-Clear Backup (Catches GM Manual Deletions)
+                const activeEnemiesLeft = currentEnemies.filter(e => e.isActive).length;
+                if (activeEnemiesLeft === 0 && currentEnemies.length > 0) {
+                    let newlyActivated = 0;
+                    currentEnemies = currentEnemies.map(e => {
+                        if (!e.isActive && e.spawnMode === 'clear') {
+                            newlyActivated++;
+                            return { ...e, isActive: true };
+                        }
+                        return e;
+                    });
+                    
+                    if (newlyActivated > 0) {
+                        next.encounter.enemies = currentEnemies;
+                        // Only overwrite log if it wasn't already dynamically set by the combat engine
+                        if (!next.globalLog || (Date.now() - next.globalLog.timestamp > 1000)) {
+                            next.globalLog = {
+                                message: `>> PHASE SHIFT: ${newlyActivated} delayed Hostile(s) entered the battlefield!`,
+                                timestamp: Date.now()
+                            };
+                        }
+                    }
+                }
+
+                // Auto-Resolve Encounter
+                if (currentEnemies.length === 0) {
+                    next.encounter.round = 0;
+                    next.encounter.initiativeQueue = [];
+                    next.encounter.activeTokenId = null;
+                    next.encounter.enemyPoolTotal = 10;
+                    if (next.activeAction) next.activeAction = null;
+                    
+                    const pClone = JSON.parse(JSON.stringify(next.players || {}));
+                    Object.keys(pClone).forEach(pid => {
+                        const p = pClone[pid];
+                        const f = parseInt(p.dpFront) || 0;
+                        const s = parseInt(p.dpSupport) || 0;
+                        const b = parseInt(p.dpBack) || 0;
+                        p.currentHp = 20 + (f * 3) + (s * 2) + (b * 1);
+                        p.resPool = 3;
+                        p.usedParry = false;
+                        p.usedIntercept = false;
+                        p.usedEvade = false;
+                        p.usedBasicAttack = false;
+                        p.statuses = [];
+                    });
+                    next.players = pClone;
+                    
+                    const tClone = safeArray(next.tokens).filter(t => t.type === 'player');
+                    tClone.forEach(t => { t.movementRemaining = t.speed || 3; });
+                    next.tokens = tClone;
+                    
+                    next.globalLog = {
+                        message: ">> ENCOUNTER CLEARED: All Hostiles eliminated. Agents auto-healed, states purged, Resonance normalized.",
+                        timestamp: Date.now()
+                    };
+                }
+            }
+
             if (isFirebaseConfigured && sessionId) {
                 firebase.database().ref('sessions/' + sessionId).set(next);
             }
