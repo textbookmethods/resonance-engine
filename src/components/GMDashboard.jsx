@@ -32,6 +32,7 @@ const getCoreState = (input) => { if (!input) return ''; const match = String(in
 const getCoreElement = (input) => { if (!input) return 'Kinetic'; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) { if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1); } return 'Kinetic'; };
 
 export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
+    const [draftBestiaryId, setDraftBestiaryId] = useState(''); 
     const [draftEnemyId, setDraftEnemyId] = useState('');
     const [spawnMode, setSpawnMode] = useState('immediate');
     const [spawnRound, setSpawnRound] = useState(2);
@@ -53,7 +54,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             
             let generatedRes = 0; let deadEnemyUids = new Set(); let deadPlayers = new Set();
 
-            // PHASE SHIFT: Check for Time-Delayed Spawns
             let roundActivations = 0;
             eList = eList.map(e => {
                 if (!e.isActive && e.spawnMode === 'round' && nextRound >= e.spawnRound) {
@@ -118,7 +118,6 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 if (isPlayer) { ent.usedParry = false; ent.usedIntercept = false; ent.usedEvade = false; ent.usedBasicAttack = false; }
             });
 
-            // PHASE SHIFT: Check for On-Clear Spawns after DoT and Hazard Sweeps
             const activeEnemiesLeft = eList.filter(e => e.isActive && e.currentHp > 0 && !deadEnemyUids.has(String(e.uid))).length;
             if (activeEnemiesLeft === 0) {
                 let newlyClearActivated = 0;
@@ -200,8 +199,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
     };
 
     const addEnemyFromBestiary = () => {
-        if (!draftEnemyId) return alert("Select an entity from the Bestiary first.");
-        const template = bestiary.find(e => e.id === draftEnemyId);
+        if (!draftBestiaryId) return alert("Select an entity from the Bestiary first.");
+        const template = bestiary.find(e => e.id === draftBestiaryId);
         if (!template) return;
         pushUpdate(s => {
             const newEnemy = { 
@@ -236,7 +235,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
             const newState = { ...prev, elementRaw: newElem };
             if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
                 newState.effectName = '';
-                newState.u = 0;
+                newState.u = 0; // Reset utility cost
             }
             return newState;
         });
@@ -300,7 +299,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
             <div className="lg:col-span-6 bg-[#0a0f14] border border-slate-700 p-4 flex flex-col overflow-y-auto shadow-inner">
                 <div className="flex flex-col md:flex-row gap-2 mb-4 pb-4 border-b border-gray-700 items-start md:items-center">
-                    <select className="flex-1 bg-black border border-gray-600 text-white p-2 outline-none font-bold text-xs" value={draftEnemyId} onChange={e => setDraftEnemyId(e.target.value)}>
+                    <select className="flex-1 bg-black border border-gray-600 text-white p-2 outline-none font-bold text-xs" value={draftBestiaryId} onChange={e => setDraftBestiaryId(e.target.value)}>
                         <option value="">-- Access Bestiary Archives --</option>
                         {bestiary.map(e => <option key={e.id} value={e.id}>[Tier {e.tier}] {e.name} - {e.affinity}</option>)}
                     </select>
@@ -440,11 +439,25 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                         </div>
 
                         <div className="flex flex-col gap-1 mt-2">
-                            <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">Apply Status Effect:</span>
-                            <select className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer" value={builder.effectName || ''} onChange={e => {
-                                const st = e.target.value;
-                                setBuilder({...builder, effectName: st, u: st ? STATE_TIERS[st] : 0});
-                            }}>
+                            <div className="flex justify-between items-center">
+                                <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">State Utility (u):</span>
+                                <select 
+                                    className={`w-16 bg-black border border-purple-500 p-1 text-white text-[10px] text-center font-bold ${builder.effectName ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} 
+                                    value={String(builder.u)} 
+                                    disabled={!!builder.effectName}
+                                    onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}
+                                >
+                                    <option value="0">0</option><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
+                                </select>
+                            </div>
+                            <select 
+                                className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer mt-1" 
+                                value={builder.effectName || ''} 
+                                onChange={e => {
+                                    const st = e.target.value;
+                                    setBuilder({...builder, effectName: st, u: st ? STATE_TIERS[st] : builder.u});
+                                }}
+                            >
                                 <option value="">-- NO STATUS EFFECT --</option>
                                 {(ELEMENT_STATE_MAP[getCoreElement(builder.elementRaw)] || []).map(st => (
                                     <option key={st} value={st}>[{st.toUpperCase()}] (+{STATE_TIERS[st]}u) - {STATE_DESCRIPTIONS[st]}</option>
@@ -465,7 +478,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                     </div>
                     
                     <button className="w-full font-bold p-3 mt-4 uppercase transition-colors bg-red-600 text-white hover:bg-white hover:text-red-600 text-xs" onClick={() => {
-                        pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: "Game Master", sourceId: "gm", isEnemy: true, name: builder.name || 'GM Override', d: safeInt(builder.d), a: 0, range: "0-100", effectName: String(builder.effectName || ''), effectCore: String(getCoreState(builder.effectName) || ''), elementRaw: String(builder.elementRaw || 'Kinetic'), elementCore: String(getCoreElement(builder.elementRaw)), terrain: String(builder.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: 0, m: 0, coreMobility: '', u: safeInt(builder.u), desc: 'GM direct intervention.' } }));
+                        const forcedU = builder.effectName ? STATE_TIERS[builder.effectName] : safeInt(builder.u);
+                        pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: "Game Master", sourceId: "gm", isEnemy: true, name: builder.name || 'GM Override', d: safeInt(builder.d), a: 0, range: "0-100", effectName: String(builder.effectName || ''), effectCore: String(getCoreState(builder.effectName) || ''), elementRaw: String(builder.elementRaw || 'Kinetic'), elementCore: String(getCoreElement(builder.elementRaw)), terrain: String(builder.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: 0, m: 0, coreMobility: '', u: forcedU, desc: 'GM direct intervention.' } }));
                     }}>Prime GM Strike</button>
                 </div>
             </div>

@@ -85,6 +85,8 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
     const [paintBrush, setPaintBrush] = useState(null);
     const [selectedToken, setSelectedToken] = useState(null);
     const [hoveredHex, setHoveredHex] = useState(null);
+    const [draftPlayerId, setDraftPlayerId] = useState('');
+    const [draftEnemyId, setDraftEnemyId] = useState('');
     const [aoeRotation, setAoeRotation] = useState(0);
     const [reachableCache, setReachableCache] = useState(new Map());
     
@@ -246,7 +248,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                 
                 pushUpdate(s => {
                     if (safeArray(s.tokens).some(t => String(t.refId) === String(data.refId))) {
-                        alert(`System Locked: This entity is already deployed. To deploy multiples, stage a new instance from the Bestiary first.`);
+                        alert(`System Locked: This entity is already deployed.`);
                         return s;
                     }
 
@@ -411,6 +413,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
                             if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
                             
+                            // SYNERGY DETECTION
                             if (rpsMult === 1.5 || coreStates.includes('Vulnerable')) triggeredExploit = true;
                             if (isFlanking) triggeredTagTeam = true;
 
@@ -462,6 +465,7 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                             if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `\n>> AFFINITY DISADVANTAGE: 0.5x Dmg`; }
                             if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `\n>> FLANKING BONUS: 1.5x Dmg`; }
                             
+                            // SYNERGY DETECTION - Assist
                             if (action.sourceId && String(t.refId) !== String(action.sourceId) && action.effectName) {
                                 let core = action.effectCore || getCoreState(action.effectName);
                                 if (['Shielded', 'Haste', 'Evasive', 'Invulnerable'].includes(core)) triggeredAssist = true;
@@ -663,7 +667,22 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         if (selectedToken === id) setSelectedToken(null); 
     };
 
-    const clearActiveAction = () => { if (!authorizeActionExecution()) return; setAoeRotation(0); pushUpdate(s => ({ ...s, activeAction: null })); };
+    // FIX 2: Hijack Abort clears state.
+    const clearActiveAction = () => { 
+        if (!authorizeActionExecution()) return; 
+        setAoeRotation(0); 
+        pushUpdate(s => {
+            if (s.activeAction && s.activeAction.type === 'hijack_select') {
+                const newE = deepClone(safeArray(s.encounter?.enemies));
+                const eIdx = newE.findIndex(e => String(e.uid) === String(s.activeAction.enemy.uid));
+                if (eIdx !== -1) {
+                    newE[eIdx].statuses = safeArray(newE[eIdx].statuses).filter(st => getCoreState(st) !== 'Hijacked');
+                }
+                return { ...s, activeAction: null, encounter: { ...s.encounter, enemies: newE } };
+            }
+            return { ...s, activeAction: null };
+        }); 
+    };
 
     const renderHexBackgrounds = () => {
         let originToken = null; let minR = 1; let maxR = 1;
@@ -1043,11 +1062,9 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
                                         {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                         {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                         
-                                        <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={(isNoFuel || disableAttacks || !isMyTurn) && !isGM} onClick={() => {
-                                            if (!isGM && !isMyTurn) return alert("System Locked: Hostile turn in progress."); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED."); if (!isGM && isNoFuel) return alert(`System Locked: Insufficient Resonance. Required: ${cardCost}.`);
-                                            let finalRange = isBlind ? '1' : (c.range || '1'); let finalAoe = isBlind ? 0 : (c.a || 0); if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-                                            pushUpdate(s => ({ ...s, activeAction: { type: isBlink ? 'blink' : 'target', source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(c.name || 'Custom Action'), d: safeInt(c.d), a: finalAoe || 0, u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMob || ''), range: String(finalRange), effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(dispCore), terrain: String(c.terrain || ''), desc: String(c.desc || ''), isBasic: false, isImprovised: false, originalCost: 0, cost: safeInt(cardCost), cardId: c.id } }))
-                                        }}>{(disableAttacks && !isGM) ? 'LOCKED' : (isNoFuel && !isGM ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
+                                        <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
+                                            {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
+                                        </button>
                                     </div>
                                     <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); archiveEquippedCard(c); }} title="Archive to Spellbook">⤓</button>
                                     <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }}>✕</button>
@@ -1142,6 +1159,18 @@ export default function GridBoard({ players = {}, grid = [], tokens = [], encoun
         }
 
         if (!isGM) { return ( <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full"> <div className="text-gray-500 text-xs text-center mt-10 p-4 border border-dashed border-gray-700">Select a token on the grid to view its bio-scan.</div> </div> ); }
+
+        const handleElementChangeGM = (e) => {
+            const newElem = e.target.value; const coreElem = getCoreElement(newElem); const validStates = ELEMENT_STATE_MAP[coreElem] || [];
+            setBuilder(prev => {
+                const newState = { ...prev, elementRaw: newElem };
+                if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
+                    newState.effectName = '';
+                    newState.u = 0;
+                }
+                return newState;
+            });
+        };
 
         return (
             <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">

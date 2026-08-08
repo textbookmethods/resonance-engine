@@ -98,6 +98,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const isStunned = activeCoreStates.includes('Stunned'); const isShocked = activeCoreStates.includes('Shocked'); const isImmobilized = activeCoreStates.includes('Immobilized'); const isBlind = activeCoreStates.includes('Blind');
     const disableDefenses = isStunned || isShocked; const disableMovement = isStunned || isImmobilized; const disableAttacks = isStunned;
 
+    const isDeploymentPhase = encounter?.round === 0;
+    const lockImprovise = disableAttacks || isDeploymentPhase || !isMyTurn;
+
     const refreshTurn = () => {
         safePush(s => {
             const newP = { ...(s.players?.[localId] || {}), usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false };
@@ -133,7 +136,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
             const newState = { ...prev, elementRaw: newElem };
             if (prev.effectName && !validStates.includes(getCoreState(prev.effectName))) {
                 newState.effectName = '';
-                newState.u = 0;
+                newState.u = 0; // Reset cost if state is invalidated by element change
             }
             return newState;
         });
@@ -180,7 +183,6 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const customCards = safeArray(player.customCards);
     const isOverload = currentRes >= 10;
     
-    // Categorize weapons for dynamic drop-down rendering
     const usableWeapons = safeArmory.filter(w => front >= (w.reqF || 0) && supp >= (w.reqS || 0) && back >= (w.reqB || 0));
     const unusableWeapons = safeArmory.filter(w => !(front >= (w.reqF || 0) && supp >= (w.reqS || 0) && back >= (w.reqB || 0)));
 
@@ -321,11 +323,25 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     </div>
 
                     <div className="flex flex-col gap-1 mt-2">
-                        <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">Apply Status Effect:</span>
-                        <select className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer" value={builder.effectName || ''} onChange={e => {
-                            const st = e.target.value;
-                            setBuilder({...builder, effectName: st, u: st ? STATE_TIERS[st] : 0});
-                        }}>
+                        <div className="flex justify-between items-center">
+                            <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">State Utility (u):</span>
+                            <select 
+                                className={`w-16 bg-black border border-purple-500 p-1 text-white text-[10px] text-center font-bold ${builder.effectName ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} 
+                                value={String(builder.u)} 
+                                disabled={!!builder.effectName}
+                                onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}
+                            >
+                                <option value="0">0</option><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
+                            </select>
+                        </div>
+                        <select 
+                            className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer mt-1" 
+                            value={builder.effectName || ''} 
+                            onChange={e => {
+                                const st = e.target.value;
+                                setBuilder({...builder, effectName: st, u: st ? STATE_TIERS[st] : builder.u});
+                            }}
+                        >
                             <option value="">-- NO STATUS EFFECT --</option>
                             {(ELEMENT_STATE_MAP[builderCoreElement] || []).map(st => (
                                 <option key={st} value={st}>[{st.toUpperCase()}] (+{STATE_TIERS[st]}u) - {STATE_DESCRIPTIONS[st]}</option>
@@ -374,7 +390,13 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
 
                 <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4 mt-auto"><span>COST:</span><span>{calcCost} RES</span></div>
                 <div className="flex gap-2 mb-2"><button className="flex-1 bg-[#00f0ff] text-black font-bold border border-[#00f0ff] p-2 hover:bg-white text-xs uppercase" onClick={saveToHUD}>Equip</button><button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase" onClick={saveToSpellbook}>Archive</button></div>
-                <button className={`w-full font-bold p-3 uppercase transition-colors mb-4 ${disableAttacks ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#ff6600] text-black hover:bg-white'}`} disabled={disableAttacks} onClick={primeImprovised}>{disableAttacks ? 'SYSTEM LOCKED' : 'Improvise Directly to Grid (1 Res)'}</button>
+                <button 
+                    className={`w-full font-bold p-3 uppercase transition-colors mb-4 ${lockImprovise ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#ff6600] text-black hover:bg-white'}`} 
+                    disabled={lockImprovise} 
+                    onClick={primeImprovised}
+                >
+                    {isDeploymentPhase ? 'DEPLOYMENT PHASE: COMBAT OFFLINE' : (!isMyTurn ? 'STANDBY: NOT YOUR TURN' : (disableAttacks ? 'SYSTEM LOCKED' : 'Improvise Directly to Grid (1 Res)'))}
+                </button>
                 
                 <div className="grid grid-cols-2 gap-2 border-t border-gray-700 pt-4">
                     {customCards.map(c => {
