@@ -49,8 +49,7 @@ export default function App() {
     const [sessionId, setSessionId] = useState('');
     
     const [gameState, setGameState] = useState(DEFAULT_STATE);
-    const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only (Waiting for Firebase Keys)');
-    
+    const [dbStatus, setDbStatus] = useState(isFirebaseConfigured ? 'Waiting to Connect...' : 'Local Only');
     const [dismissedLog, setDismissedLog] = useState(0);
 
     const [localId] = useState(() => {
@@ -87,110 +86,21 @@ export default function App() {
                 needsUpdate = true;
             }
 
-            Object.keys(data.players).forEach(pid => {
-                if (data.players[pid]) {
-                    data.players[pid].customCards = safeArray(data.players[pid].customCards);
-                    data.players[pid].savedSkills = safeArray(data.players[pid].savedSkills);
-                    data.players[pid].statuses = safeArray(data.players[pid].statuses);
-                    if (data.players[pid].resPool === undefined) data.players[pid].resPool = 3;
-                }
-            });
-            
-            if (data.encounter) {
-                data.encounter.enemies = safeArray(data.encounter.enemies);
-                data.encounter.initiativeQueue = safeArray(data.encounter.initiativeQueue);
-                data.encounter.enemies.forEach(e => { 
-                    if (e) {
-                        e.statuses = safeArray(e.statuses);
-                        if (e.currentBarriers && typeof e.currentBarriers === 'object' && !Array.isArray(e.currentBarriers)) {
-                            e.currentBarriers = Object.values(e.currentBarriers);
-                        }
-                    } 
-                });
-            }
-            
-            if (data.tokens) data.tokens = safeArray(data.tokens);
-
             if (needsUpdate) {
                 setGameState(data);
                 roomRef.set(data);
             } else {
                 setGameState(data);
             }
-            
             setDbStatus('Connected to ' + sessionId);
         });
 
         return () => roomRef.off('value', listener);
     }, [sessionId, role, localId]);
 
-    // THE ENCOUNTER INTERCEPTOR
     const pushUpdate = (updater) => {
         setGameState(prev => {
             let next = updater(prev);
-            
-            // Auto-Heal & Phase Shift Protocol
-            if (next.encounter && next.encounter.round > 0) {
-                let currentEnemies = safeArray(next.encounter.enemies);
-                
-                // Centralized Phase Shift: On-Clear Backup
-                const activeEnemiesLeft = currentEnemies.filter(e => e.isActive).length;
-                if (activeEnemiesLeft === 0 && currentEnemies.length > 0) {
-                    let newlyActivated = 0;
-                    currentEnemies = currentEnemies.map(e => {
-                        if (!e.isActive && e.spawnMode === 'clear') {
-                            newlyActivated++;
-                            return { ...e, isActive: true };
-                        }
-                        return e;
-                    });
-                    
-                    if (newlyActivated > 0) {
-                        next.encounter.enemies = currentEnemies;
-                        if (!next.globalLog || (Date.now() - next.globalLog.timestamp > 1000)) {
-                            next.globalLog = {
-                                message: `>> PHASE SHIFT: ${newlyActivated} delayed Hostile(s) entered the battlefield!`,
-                                timestamp: Date.now()
-                            };
-                        }
-                    }
-                }
-
-                // Auto-Resolve Encounter if all enemies are completely eliminated
-                if (currentEnemies.length === 0) {
-                    next.encounter.round = 0;
-                    next.encounter.initiativeQueue = [];
-                    next.encounter.activeTokenId = null;
-                    next.encounter.enemyPoolTotal = 10;
-                    if (next.activeAction) next.activeAction = null;
-                    
-                    const pClone = JSON.parse(JSON.stringify(next.players || {}));
-                    Object.keys(pClone).forEach(pid => {
-                        const p = pClone[pid];
-                        const f = parseInt(p.dpFront) || 0;
-                        const s = parseInt(p.dpSupport) || 0;
-                        const b = parseInt(p.dpBack) || 0;
-                        p.currentHp = 20 + (f * 3) + (s * 2) + (b * 1);
-                        p.resPool = 3;
-                        p.usedParry = false;
-                        p.usedIntercept = false;
-                        p.usedEvade = false;
-                        p.usedBasicAttack = false;
-                        p.statuses = [];
-                    });
-                    next.players = pClone;
-                    
-                    const tClone = safeArray(next.tokens).filter(t => t.type === 'player');
-                    tClone.forEach(t => { t.movementRemaining = t.speed || 3; });
-                    next.tokens = tClone;
-                    
-                    next.globalLog = {
-                        message: ">> ENCOUNTER CLEARED: All Hostiles eliminated. Agents auto-healed, states purged, Resonance normalized.",
-                        timestamp: Date.now()
-                    };
-                }
-            }
-
             if (isFirebaseConfigured && sessionId) {
                 firebase.database().ref('sessions/' + sessionId).set(next);
             }
@@ -199,10 +109,10 @@ export default function App() {
     };
 
     const hardResetSession = () => {
-        if (window.confirm("CRITICAL WARNING: This will permanently wipe ALL Agent character sheets, custom grimoires, and grid data for this Session ID. Players will need to refresh their browsers to generate new sheets. Proceed?")) {
+        if (window.confirm("CRITICAL WARNING: This will permanently wipe all session data. Proceed?")) {
             if (isFirebaseConfigured && sessionId) {
                 firebase.database().ref('sessions/' + sessionId).set(DEFAULT_STATE);
-                alert("Session Data Purged. Ready for new campaign.");
+                alert("Session Data Purged.");
             }
         }
     };
@@ -210,7 +120,6 @@ export default function App() {
     const joinSession = (selectedRole) => {
         const cleanId = sessionIdInput.trim().toUpperCase();
         if (!cleanId) return alert("Please enter a valid Session ID.");
-        
         setSessionId(cleanId);
         setRole(selectedRole);
         setActiveTab(selectedRole === 'gm' ? 'gm' : 'player');
@@ -224,14 +133,13 @@ export default function App() {
     if (!role) {
         return (
             <div className="min-h-screen bg-[#05080a] text-slate-200 flex flex-col items-center justify-center font-sans p-4 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a222c] via-[#05080a] to-[#05080a] z-0"></div>
                 <div className="z-10 bg-black border border-[#00f0ff] p-8 md:p-12 shadow-[0_0_30px_rgba(0,240,255,0.15)] max-w-lg w-full">
                     <h1 className="text-4xl md:text-5xl font-bold text-white text-center mb-2 tracking-tight">RESONANCE <span className="text-[#ff6600] font-light">ENGINE</span></h1>
                     <p className="text-gray-400 text-center font-mono text-xs uppercase tracking-widest mb-10">Tactical Operations Terminal</p>
                     <div className="space-y-6 font-mono">
                         <div>
                             <label className="text-[#00f0ff] text-xs font-bold uppercase tracking-widest block mb-2">Session Uplink ID</label>
-                            <input type="text" className="w-full bg-gray-900 border border-gray-600 p-3 text-white text-center text-xl uppercase font-bold tracking-widest outline-none focus:border-[#ff6600] transition-colors" value={sessionIdInput} onChange={(e) => setSessionIdInput(e.target.value.toUpperCase())} placeholder="ENTER SESSION ID" />
+                            <input type="text" className="w-full bg-gray-900 border border-gray-600 p-3 text-white text-center text-xl uppercase font-bold tracking-widest outline-none focus:border-[#ff6600]" value={sessionIdInput} onChange={(e) => setSessionIdInput(e.target.value.toUpperCase())} placeholder="ENTER SESSION ID" />
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-800">
                             <button className="bg-[#00f0ff] text-black font-bold p-4 uppercase tracking-wider hover:bg-white transition-colors" onClick={() => joinSession('player')}>Connect as Agent</button>
@@ -268,7 +176,7 @@ export default function App() {
                         </div>
                         <button className="text-[10px] text-red-500 font-mono uppercase font-bold border border-red-900 bg-red-950/30 px-2 py-1 hover:bg-red-500 hover:text-white transition-colors" onClick={leaveSession}>Disconnect</button>
                     </div>
-                    <nav className="flex gap-1 font-mono text-sm uppercase overflow-x-auto max-w-[90vw] md:max-w-none pb-1 md:pb-0 scrollbar-hide">
+                    <nav className="flex gap-1 font-mono text-sm uppercase overflow-x-auto max-w-[90vw] md:max-w-none pb-1 md:pb-0">
                         {visibleTabs.map(tab => (
                             <button key={tab.id} className={`px-3 py-2 md:px-4 whitespace-nowrap transition-colors border-t border-l border-r ${activeTab === tab.id ? 'bg-[#ff6600] text-black border-[#ff6600] font-bold' : 'bg-[#1a222c] text-gray-400 border-gray-700 hover:text-white'}`} onClick={() => setActiveTab(tab.id)}>
                                 {tab.label}
@@ -286,22 +194,6 @@ export default function App() {
                 {activeTab === 'ref' && <Reference />}
                 {activeTab === 'rules' && <Rulebook />} 
             </main>
-
-            {gameState.globalLog && gameState.globalLog.timestamp !== dismissedLog && (
-                <div className="fixed inset-0 bg-black/85 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-[#0b0f14] border border-[#ff6600] p-6 max-w-2xl w-full shadow-[0_0_40px_rgba(255,102,0,0.3)] font-mono flex flex-col max-h-[90vh]">
-                        <div className="text-[#ff6600] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase tracking-widest flex items-center gap-2">
-                            <span className="animate-pulse">⚠</span> System Broadcast
-                        </div>
-                        <div className="text-white whitespace-pre-wrap overflow-y-auto flex-1 mb-6 text-sm leading-relaxed p-2 bg-black border border-gray-800">
-                            {gameState.globalLog.message}
-                        </div>
-                        <button className="w-full bg-[#ff6600] text-black font-bold p-3 uppercase tracking-widest hover:bg-white transition-colors" onClick={() => setDismissedLog(gameState.globalLog.timestamp)}>
-                            Acknowledge
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
