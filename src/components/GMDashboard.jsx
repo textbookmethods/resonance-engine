@@ -10,8 +10,19 @@ const safeArray = (arr) => {
 };
 
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 
-export default function GMDashboard({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
+class GMDashboardErrorBoundary extends React.Component {
+    constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+    static getDerivedStateFromError(error) { return { hasError: true, error }; }
+    componentDidCatch(error, errorInfo) { console.error("GM Dashboard Error:", error, errorInfo); }
+    render() {
+        if (this.state.hasError) return ( <div className="bg-[#0b0f14] border border-red-600 p-8 font-mono text-slate-200 flex flex-col items-center justify-center text-center space-y-4 m-10"> <h2 className="text-2xl font-bold text-red-500 uppercase tracking-widest">⚠ GM Terminal Error</h2> <p className="text-xs text-gray-400 max-w-md">The dashboard experienced a telemetry sync anomaly: {String(this.state.error?.message || 'Data stream interrupted')}</p> <button className="bg-red-600 text-black font-bold px-6 py-3 uppercase text-xs hover:bg-white transition-colors" onClick={() => this.setState({ hasError: false })}> Reboot Dashboard </button> </div> );
+        return this.props.children;
+    }
+}
+
+function GMDashboardInner({ encounter = {}, tokens = [], players = {}, pushUpdate, hardResetSession }) {
     const [selectedBestiaryId, setSelectedBestiaryId] = useState(bestiary[0]?.id || 'e01');
     const [spawnMode, setSpawnMode] = useState('immediate');
     const [spawnRound, setSpawnRound] = useState(1);
@@ -89,14 +100,33 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
 
             const activeTokens = safeArray(s.tokens);
             const queue = activeTokens.map(t => t && t.id).filter(Boolean);
+            
             // Fisher-Yates shuffle for new round initiative
             for (let i = queue.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [queue[i], queue[j]] = [queue[j], queue[i]];
             }
 
+            // Restore movement points for all tokens at start of round
+            const newTokens = deepClone(activeTokens);
+            newTokens.forEach(t => {
+                if (t) t.movementRemaining = t.speed ?? 3;
+            });
+
+            // Reset agent actions
+            const pClone = deepClone(s.players || {});
+            Object.values(pClone).forEach(p => {
+                if (p) {
+                    p.usedBasicAttack = false;
+                    p.usedParry = false;
+                    p.usedEvade = false;
+                }
+            });
+
             return {
                 ...s,
+                tokens: newTokens,
+                players: pClone,
                 encounter: {
                     ...enc,
                     round: nextRound,
@@ -159,7 +189,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 <div className="flex gap-4 items-center">
                     <div className="bg-black border border-gray-700 px-4 py-2 text-right">
                         <div className="text-[10px] text-gray-500 uppercase tracking-widest">Global Hostile Res</div>
-                        <div className="text-xl font-bold text-[#ff6600]">{safeEnc.enemyPoolTotal || 10} RES</div>
+                        <div className="text-xl font-bold text-[#ff6600]">{safeEnc.enemyPoolTotal ?? 10} RES</div>
                     </div>
                     <button className="bg-red-950 border border-red-600 text-red-400 font-bold px-4 py-3 uppercase text-xs hover:bg-red-600 hover:text-white transition-colors" onClick={hardResetSession}>
                         ⚠ Hard Reset Campaign
@@ -181,8 +211,8 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                             <div className="text-right">
                                 <div className="text-[10px] text-gray-500 uppercase tracking-widest">Active Pool</div>
                                 <div className="flex gap-2 justify-end mt-1">
-                                    <button className="bg-gray-800 text-white px-2 py-0.5 font-bold text-xs border border-gray-600 hover:bg-red-900" onClick={() => pushUpdate(s => ({ ...s, encounter: { ...(s.encounter || {}), enemyPoolTotal: Math.max(0, safeInt(s.encounter?.enemyPoolTotal) - 1) } }))}>-1</button>
-                                    <button className="bg-gray-800 text-white px-2 py-0.5 font-bold text-xs border border-gray-600 hover:bg-green-900" onClick={() => pushUpdate(s => ({ ...s, encounter: { ...(s.encounter || {}), enemyPoolTotal: safeInt(s.encounter?.enemyPoolTotal) + 1 } }))}>+1</button>
+                                    <button className="bg-gray-800 text-white px-2 py-0.5 font-bold text-xs border border-gray-600 hover:bg-red-900" onClick={() => pushUpdate(s => ({ ...s, encounter: { ...(s.encounter || {}), enemyPoolTotal: Math.max(0, safeInt(s.encounter?.enemyPoolTotal ?? 10) - 1) } }))}>-1</button>
+                                    <button className="bg-gray-800 text-white px-2 py-0.5 font-bold text-xs border border-gray-600 hover:bg-green-900" onClick={() => pushUpdate(s => ({ ...s, encounter: { ...(s.encounter || {}), enemyPoolTotal: safeInt(s.encounter?.enemyPoolTotal ?? 10) + 1 } }))}>+1</button>
                                 </div>
                             </div>
                         </div>
@@ -205,7 +235,7 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                                     name = players[t.refId]?.name || 'Agent';
                                     tColor = '#00f0ff';
                                 } else {
-                                    name = activeEnemies.find(e => e.uid === t.refId)?.name || 'Hostile';
+                                    name = enemies.find(e => e.uid === t.refId)?.name || 'Hostile';
                                     tColor = '#ff6600';
                                 }
 
@@ -325,5 +355,13 @@ export default function GMDashboard({ encounter = {}, tokens = [], players = {},
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function GMDashboard(props) {
+    return (
+        <GMDashboardErrorBoundary>
+            <GMDashboardInner {...props} />
+        </GMDashboardErrorBoundary>
     );
 }
