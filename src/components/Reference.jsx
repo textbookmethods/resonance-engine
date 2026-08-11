@@ -68,7 +68,7 @@ export default function Reference() {
                         <div className="bg-black border border-gray-700 p-6 shadow-md">
                             <h2 className="text-white font-bold text-xl uppercase tracking-widest mb-4">Affinity Multipliers (RPS)</h2>
                             <p className="text-gray-400 text-xs mb-6 leading-relaxed">
-                                Striking a target with an element they are weak to applies a <strong className="text-[#22c55e]">1.5x Damage Multiplier</strong> and triggers an automated <strong className="text-[#00f0ff]">Exploit (+2 Res)</strong> teamwork bonus. Striking a target with an element they resist applies a <strong className="text-red-500">0.5x Damage Multiplier</strong>.
+                                Striking a target with an element they are weak to applies a <strong className="text-[#22c55e]">1.5x Damage Multiplier</strong> and triggers an automated <strong className="text-[#00f0ff]">Exploit (+4 Res)</strong> teamwork bonus. Striking a target with an element they resist applies a <strong className="text-red-500">0.5x Damage Multiplier</strong>.
                             </p>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
@@ -167,25 +167,25 @@ export default function Reference() {
                                                 <div className="text-[10px] text-gray-500 mb-2 uppercase tracking-wider border-b border-gray-800 pb-1">
                                                     Valid Elem: {allowedElements.join(', ')}
                                                 </div>
-                                                {st === 'Bleed' && <p className="text-xs text-gray-400">Takes 3 Absolute HP damage at round end.</p>}
-                                                {st === 'Burn' && <p className="text-xs text-gray-400">Takes 3 Thermal HP damage at round end.</p>}
-                                                {st === 'Poisoned' && <p className="text-xs text-gray-400">Takes 3 Toxic HP damage at round end. Infinitely stacks.</p>}
+                                                {st === 'Bleed' && <p className="text-xs text-gray-400">Takes 1 True Damage at start of turn.</p>}
+                                                {st === 'Burn' && <p className="text-xs text-gray-400">Takes 2 Thermal Damage at start of turn. Water/Cryo cancels.</p>}
+                                                {st === 'Poisoned' && <p className="text-xs text-gray-400">Healing received halved. Takes 1 Toxic Damage at start of turn.</p>}
                                                 {st === 'Haste' && <p className="text-xs text-gray-400">Movement points increased by +2.</p>}
                                                 {st === 'Slowed' && <p className="text-xs text-gray-400">Movement points reduced by -2.</p>}
                                                 
-                                                {st === 'Knockdown' && <p className="text-xs text-gray-400">Movement points halved for the current turn.</p>}
-                                                {st === 'Blind' && <p className="text-xs text-gray-400">Targeting restricted to adjacent hexes (Range 1). AoE zeroed.</p>}
-                                                {st === 'Shielded' && <p className="text-xs text-gray-400">Absorbs 5 damage from the next attack, then shatters.</p>}
-                                                {st === 'Vulnerable' && <p className="text-xs text-gray-400">Takes 1.5x Multiplier to damage from the next attack.</p>}
-                                                {st === 'Shocked' && <p className="text-xs text-gray-400">All defensive arrays jammed to 0 mitigation.</p>}
-                                                {st === 'Evasive' && <p className="text-xs text-gray-400">Forces next incoming attack to bypass Front Parry entirely.</p>}
+                                                {st === 'Knockdown' && <p className="text-xs text-gray-400">Movement points halved next turn. Melee attacks against unit gain Flanking (+50% Dmg).</p>}
+                                                {st === 'Blind' && <p className="text-xs text-gray-400">Targeting range reduced to 1. AoE radius becomes 0.</p>}
+                                                {st === 'Shielded' && <p className="text-xs text-gray-400">Energy barrier mitigating incoming payloads (absorbs 5 damage, then shatters).</p>}
+                                                {st === 'Vulnerable' && <p className="text-xs text-gray-400">Takes 1.5x damage from all sources.</p>}
+                                                {st === 'Shocked' && <p className="text-xs text-gray-400">Cannot use abilities costing &gt;2 Res.</p>}
+                                                {st === 'Evasive' && <p className="text-xs text-gray-400">Automatically mitigates next non-Flanking/non-AoE attack.</p>}
                                                 
-                                                {st === 'Immobilized' && <p className="text-xs text-gray-400">Movement points hard-locked to 0. Cannot use Blink/Dash.</p>}
-                                                {st === 'Stunned' && <p className="text-xs text-gray-400">Total lockdown. Movement 0, Attacks locked, Defenses jammed.</p>}
-                                                {st === 'Invulnerable' && <p className="text-xs text-gray-400">Completely negates 100% of the next incoming attack's damage and effects.</p>}
+                                                {st === 'Immobilized' && <p className="text-xs text-gray-400">Movement reduced to 0. Cannot be pushed/pulled.</p>}
+                                                {st === 'Stunned' && <p className="text-xs text-gray-400">Movement reduced to 0. Cannot act. Evasion drops to 0.</p>}
+                                                {st === 'Invulnerable' && <p className="text-xs text-gray-400">Negates all incoming damage.</p>}
 
-                                                {st === 'Execute' && <p className="text-xs text-gray-400">Terminal erasure. Instantly drops HP to 0, bypassing all defenses.</p>}
-                                                {st === 'Hijacked' && <p className="text-xs text-gray-400">Neural Override. Attacker gains one-time control of Target's ability matrix.</p>}
+                                                {st === 'Execute' && <p className="text-xs text-gray-400">Instantly reduces HP to 0. Bypasses Invulnerable/Shields.</p>}
+                                                {st === 'Hijacked' && <p className="text-xs text-gray-400">Unit is controlled by opposing network.</p>}
                                             </div>
                                         );
                                     })}
@@ -306,7 +306,7 @@ export default function Reference() {
                                 <ul className="text-[10px] text-gray-500 list-disc pl-4 space-y-1">
                                     <li>Completely ignores Affinity calculations.</li>
                                     <li>Completely bypasses all defenses.</li>
-                                    <li>Immediately adds to the target's Res pool (up to cap).</li>
+                                    <li>Immediately adds to the target's Res pool (up to soft-cap).</li>
                                     <li>Automatically triggers Teamwork: <strong>Assist</strong>.</li>
                                 </ul>
                             </div>
@@ -319,15 +319,15 @@ export default function Reference() {
                             </p>
                             <div className="space-y-3 text-sm">
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Exploit (+2 Res)</span>
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Exploit (+4 Res)</span>
                                     <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for striking a Hostile's Elemental Weakness (1.5x) or hitting a target actively suffering from the [Vulnerable] state.</span>
                                 </div>
                                 <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Tag-Team (+2 Res)</span>
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Tag-Team (+4 Res)</span>
                                     <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for successfully executing an attack vector that originates outside the target's 180-degree front facing arc (Flanking).</span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Assist (+1 Res)</span>
+                                    <span className="text-[#00f0ff] font-bold uppercase tracking-wider">Assist (+2 Res)</span>
                                     <span className="text-gray-400 text-xs text-right max-w-sm">Awarded for successfully applying a Restorative/Energize payload to an ally, OR applying a positive state ([Shielded], [Haste], etc.) to an ally.</span>
                                 </div>
                             </div>
