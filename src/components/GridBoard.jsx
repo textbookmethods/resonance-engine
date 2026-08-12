@@ -3,13 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { armory } from '../data/armory';
 
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'Fallback', range: '1', baseDmg: 3 }];
-const CLASS_COLORS = { Vanguard: '#ef4444', Paladin: '#eab308', Sniper: '#22c55e', Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#00f0ff' };
+const CLASS_COLORS = { Vanguard: '#ef4444', Paladin: '#eab308', Sniper: '#22c55e', Conduit: '#a855f7', Skirmisher: '#f97316', Saboteur: '#ec4899', Rookie: '#d1d5db' };
 const ELEMENT_COLORS = { 'Thermal': '#ef4444', 'Cryo': '#3b82f6', 'Electro': '#eab308', 'Toxic': '#22c55e', 'Radiant': '#fcd34d', 'Void': '#a855f7', 'Kinetic': '#94a3b8', 'Steam': '#cbd5e1' };
 
 const ELEMENT_DICTIONARY = { 'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'], 'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'], 'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'], 'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'], 'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'], 'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'], 'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood'] };
 const STATE_DICTIONARY = { 'Hijacked': ['hijack', 'mind control', 'dominate', 'possess', 'control'], 'Execute': ['execute', 'erase', 'delete'], 'Bleed': ['bleed', 'hemorrhage', 'lacerate'], 'Burn': ['burn', 'ignite', 'scorch'], 'Poisoned': ['poison', 'venom', 'decay'], 'Immobilized': ['immobilize', 'root', 'snare'], 'Stunned': ['stun', 'paralyze', 'petrify'], 'Shielded': ['shield', 'protect', 'barrier'], 'Vulnerable': ['vulnerable', 'expose', 'sunder'], 'Knockdown': ['knockdown', 'trip', 'shove'], 'Blind': ['blind', 'obscure', 'smoke'], 'Haste': ['haste', 'speed', 'quick'], 'Slowed': ['slow', 'sluggish', 'chill'], 'Shocked': ['shock', 'glitch', 'jolt'], 'Evasive': ['evade', 'dodge', 'blur'], 'Invulnerable': ['invulnerable', 'stasis', 'immune'] };
 const MOBILITY_DICTIONARY = { 'Blink': ['blink', 'teleport', 'jump'], 'Push': ['push', 'repel', 'throw'], 'Pull': ['pull', 'attract', 'draw'] };
-const STATE_DESCRIPTIONS = { 'Hijacked': 'Unit is controlled by opposing network.', 'Execute': 'Instantly reduces HP to 0. Bypasses Invulnerable/Shields.', 'Bleed': 'Takes 1 True Damage at start of turn.', 'Burn': 'Takes 2 Thermal Damage at start of turn. Water/Cryo cancels.', 'Poisoned': 'Healing received halved. Takes 1 Toxic Damage at start of turn.', 'Immobilized': 'Movement reduced to 0. Cannot be pushed/pulled.', 'Stunned': 'Movement reduced to 0. Cannot act. Evasion drops to 0.', 'Shielded': 'Energy barrier mitigating incoming payloads.', 'Vulnerable': 'Takes 1.5x damage from all sources.', 'Knockdown': 'Movement points halved next turn. Melee attacks against unit gain Flanking.', 'Blind': 'Targeting range reduced to 1. AoE radius becomes 0.', 'Haste': '+2 Movement Points.', 'Slowed': '-2 Movement Points.', 'Shocked': 'Cannot use abilities costing >2 Res.', 'Evasive': 'Automatically mitigates next non-Flanking/non-AoE attack.', 'Invulnerable': 'Negates all incoming damage.' };
+const STATE_DESCRIPTIONS = { 'Hijacked': 'Unit is controlled by opposing network.', 'Execute': 'Instantly reduces HP to 0. Bypasses Invulnerable/Shields.', 'Bleed': 'Takes 1 True Damage at End of Turn.', 'Burn': 'Takes 2 Thermal Damage at End of Turn. Water/Cryo cancels.', 'Poisoned': 'Healing received halved. Takes 1 Toxic Damage at End of Turn.', 'Immobilized': 'Movement reduced to 0. Cannot be pushed/pulled.', 'Stunned': 'Movement reduced to 0. Cannot act. Evasion drops to 0.', 'Shielded': 'Energy barrier mitigating incoming payloads.', 'Vulnerable': 'Takes 1.5x damage from all sources.', 'Knockdown': 'Movement points halved next turn. Melee attacks against unit gain Flanking.', 'Blind': 'Targeting range reduced to 1. AoE radius becomes 0.', 'Haste': '+2 Movement Points.', 'Slowed': '-2 Movement Points.', 'Shocked': 'Cannot use abilities costing >2 Res.', 'Evasive': 'Automatically mitigates next non-Flanking/non-AoE attack.', 'Invulnerable': 'Negates all incoming damage.' };
 
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
@@ -37,7 +37,13 @@ const normalizeAbility = (ability) => {
     return { name: cleanName, cost: eCost, value: parsedDmg, element: parsedElement, range: eRange, aoe: parsedAoe, effect: pEff, terrain: pTerrain };
 };
 
-const getCoreState = (input) => { if (!input) return ''; const match = String(input).match(/\[(.*?)\]/); const clean = (match ? match[1] : String(input)).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; } return String(input); };
+const getCoreState = (input) => {
+    if (!input) return ''; const match = String(input).match(/\[(.*?)\]/); const clean = (match ? match[1] : String(input)).toLowerCase().trim();
+    const S_DICT = { 'Bleed': ['bleed'], 'Burn': ['burn'], 'Poisoned': ['poison'], 'Knockdown': ['knockdown'], 'Slowed': ['slow'], 'Haste': ['haste', 'speed'], 'Stunned': ['stun', 'paralyze'], 'Immobilized': ['immobilize', 'root'], 'Shielded': ['shield', 'barrier'], 'Vulnerable': ['vulnerable', 'expose'], 'Shocked': ['shock', 'glitch'], 'Evasive': ['evade', 'dodge'], 'Invulnerable': ['invulnerable', 'stasis'], 'Execute': ['execute', 'erase'], 'Hijacked': ['hijack', 'dominate'] };
+    for (const [core, synonyms] of Object.entries(S_DICT)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; }
+    return String(input);
+};
+
 const getCoreElement = (input) => { if (!input) return 'Kinetic'; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) { if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1); } return 'Kinetic'; };
 const getCoreMobility = (input) => { if (!input) return ''; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(MOBILITY_DICTIONARY)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; } return String(input); };
 
@@ -74,12 +80,46 @@ const calculateReachableHexes = (startIdx, maxCost, grid, tokens, isEnemy, enemi
     const reachable = new Map(); for (let [idx, cost] of costs.entries()) { if (idx === startIdx || !tokenMap.has(idx)) reachable.set(idx, cost); } return reachable;
 };
 
+const processEOT = (state, tokenId) => {
+    if (!tokenId) return state; const s = deepClone(state); const tIdx = safeArray(s.tokens).findIndex(t => t && t.id === tokenId);
+    if (tIdx === -1) return s; const t = s.tokens[tIdx];
+    let dmg = 0; let logStr = ''; const grid = getSafeGrid(s.grid);
+    if (t.pos !== null && t.pos !== undefined) { const cell = grid[t.pos]; if (cell && cell.terrain === 'major') { dmg += 5; logStr += '[Major Terrain] 5 Dmg. '; } }
+    let statuses = [];
+    if (t.type === 'player' && s.players?.[t.refId]) statuses = safeArray(s.players[t.refId].statuses);
+    else if (t.type === 'enemy') { const e = safeArray(s.encounter?.enemies).find(en => en && en.uid === t.refId); if (e) statuses = safeArray(e.statuses); }
+    const coreStates = statuses.map(st => getCoreState(st));
+    if (coreStates.includes('Bleed')) { dmg += 1; logStr += '[Bleed] 1 Dmg. '; }
+    if (coreStates.includes('Burn')) { dmg += 2; logStr += '[Burn] 2 Dmg. '; }
+    if (coreStates.includes('Poisoned')) { dmg += 1; logStr += '[Poisoned] 1 Dmg. '; }
+    if (dmg > 0) {
+        let isDead = false; let entName = 'Entity'; let expGained = 0;
+        if (t.type === 'player' && s.players?.[t.refId]) {
+            const p = s.players[t.refId]; const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0; const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+            p.currentHp = Math.max(0, (p.currentHp !== undefined ? p.currentHp : derivedMaxHp) - dmg); entName = p.name || 'Agent'; if (p.currentHp <= 0) isDead = true;
+        } else if (t.type === 'enemy') {
+            const eIdx = safeArray(s.encounter?.enemies).findIndex(en => en && en.uid === t.refId);
+            if (eIdx !== -1) { s.encounter.enemies[eIdx].currentHp = Math.max(0, safeInt(s.encounter.enemies[eIdx].currentHp) - dmg); entName = s.encounter.enemies[eIdx].name; if (s.encounter.enemies[eIdx].currentHp <= 0) { isDead = true; expGained = safeInt(s.encounter.enemies[eIdx].exp || (s.encounter.enemies[eIdx].tier * 10)); } }
+        } else if (t.type === 'echo') {
+            t.currentHp = Math.max(0, safeInt(t.currentHp) - dmg); entName = 'Tactical Echo'; if (t.currentHp <= 0) isDead = true;
+        }
+        let finalLog = `>> END OF TURN [${entName}]: ${logStr}HP reduced by ${dmg}.`;
+        if (isDead) {
+            finalLog += ` => FATAL. Entity erased.`;
+            if (t.type === 'enemy') { s.encounter.enemies = s.encounter.enemies.filter(en => en.uid !== t.refId); s.tokens = s.tokens.filter(tok => tok.id !== t.id); s.encounter.pendingExp = safeInt(s.encounter.pendingExp) + expGained; } 
+            else if (t.type === 'echo') { s.tokens = s.tokens.filter(tok => tok.id !== t.id); }
+        }
+        s.encounter.logFeed = [...safeArray(s.encounter?.logFeed), { id: Date.now().toString() + Math.random().toString(), text: finalLog }].slice(-50);
+    }
+    return s;
+};
+
 class GridBoardErrorBoundary extends React.Component {
     constructor(props) { super(props); this.state = { hasError: false, error: null }; }
     static getDerivedStateFromError(error) { return { hasError: true, error }; }
     componentDidCatch(error, errorInfo) { console.error("Grid Error:", error, errorInfo); }
     render() {
-        if (this.state.hasError) return ( <div className="bg-[#0b0f14] border border-red-600 p-8 font-mono text-slate-200 flex flex-col items-center justify-center text-center space-y-4 m-10"> <h2 className="text-2xl font-bold text-red-500 uppercase tracking-widest">⚠ Tactical Terminal Recovered</h2> <p className="text-xs text-gray-400 max-w-md">The Slate grid experienced a telemetry sync anomaly: {String(this.state.error?.message || 'Data stream interrupted')}</p> <button className="bg-red-600 text-black font-bold px-6 py-3 uppercase text-xs hover:bg-white transition-colors" onClick={() => this.setState({ hasError: false })}> Re-initialize Grid View </button> </div> );
+        if (this.state.hasError) return ( <div className="bg-[#0f172a] border border-red-600 p-8 font-mono text-slate-200 flex flex-col items-center justify-center text-center space-y-4 m-10"> <h2 className="text-2xl font-bold text-red-500 uppercase tracking-widest">⚠ Tactical Terminal Recovered</h2> <p className="text-xs text-gray-400 max-w-md">The Slate grid experienced a telemetry sync anomaly: {String(this.state.error?.message || 'Data stream interrupted')}</p> <button className="bg-red-600 text-black font-bold px-6 py-3 uppercase text-xs hover:bg-white transition-colors" onClick={() => this.setState({ hasError: false })}> Re-initialize Grid View </button> </div> );
         return this.props.children;
     }
 }
@@ -149,7 +189,8 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
     };
 
     const advanceTurn = () => {
-        pushUpdate(s => {
+        pushUpdate(rawS => {
+            let s = processEOT(rawS, rawS.encounter?.activeTokenId);
             const enc = s.encounter || {}; const q = safeArray(enc.initiativeQueue); if (q.length === 0) return s;
             const pClone = deepClone(s.players || {});
             
@@ -218,9 +259,9 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         if (!isGM && currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         const activeCoreStates = safeArray(p.statuses).map(st => getCoreState(st)); const isBlind = activeCoreStates.includes('Blind'); const disableAttacks = activeCoreStates.includes('Stunned'); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
         const wpn = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0];
-        let finalRange = isBlind ? '1' : (wpn.range || '1-3'); let finalAoe = isBlind ? 0 : (c.a !== undefined ? c.a : 0); if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
+        let finalRange = isBlind ? '1' : (wpn.range || '1-3'); let finalAoe = isBlind ? 0 : (c.isEcho ? 0 : (c.a !== undefined ? c.a : 0)); if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
         const mobilityRaw = c.mobilityName || c.mobility || ''; const coreMobility = getCoreMobility(mobilityRaw); const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
-        pushUpdate(s => ({ ...s, activeAction: { type: isBlink ? 'blink' : 'target', source: activeT.type === 'echo' ? `Echo of ${p.name || 'Player'}` : String(p.name || 'Player'), sourceId: String(activeT.refId), casterTokenId: activeT.type === 'echo' ? String(activeT.id) : null, isEnemy: false, isBasic: false, isImprovised: isImprovised || false, originalCost: safeInt(originalCost), cost: safeInt(requiredRes), name: String(c.name || 'Custom Action'), payload: String(c.payload || 'damage'), d: safeInt(c.d), a: finalAoe, u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMobility || ''), range: String(finalRange), effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), terrain: String(c.terrain || ''), desc: String(c.desc || ''), cardId: c.id ? String(c.id) : null, isEcho: c.isEcho || false } })); 
+        pushUpdate(s => ({ ...s, activeAction: { type: isBlink ? 'blink' : 'target', source: activeT.type === 'echo' ? `Echo of ${p.name || 'Player'}` : String(p.name || 'Player'), sourceId: String(activeT.refId), casterTokenId: activeT.type === 'echo' ? String(activeT.id) : null, isEnemy: false, isBasic: false, isImprovised: isImprovised || false, originalCost: safeInt(originalCost), cost: safeInt(requiredRes), name: String(c.name || 'Custom Action'), payload: String(c.payload || 'damage'), d: safeInt(c.d), a: finalAoe || 0, u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMobility || ''), range: String(finalRange), effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), terrain: String(c.terrain || ''), desc: String(c.desc || ''), cardId: c.id ? String(c.id) : null, isEcho: c.isEcho || false } })); 
     };
 
     const executeMove = (index) => {
@@ -253,7 +294,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 else if (action.sourceId && !action.isHijacked) { const p = newPlayers[action.sourceId]; if (p) { const pRes = p.resPool ?? 3; if (action.isImprovised) { p.resPool = Math.max(0, pRes - 1); log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`; } else { const costDeduction = parseInt(action.cost) || 0; p.resPool = Math.max(0, pRes - costDeduction); if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`; } } }
                 if (action.isHijacked) { const eIdx = safeArray(s.encounter?.enemies).findIndex(e => e && String(e.uid) === String(action.sourceId)); if (eIdx !== -1) { const newE = deepClone(safeArray(s.encounter?.enemies)); newE[eIdx].statuses = safeArray(newE[eIdx].statuses).filter(st => getCoreState(st) !== 'Hijacked'); log += `\n>> HIJACK TERMINATED: Target released from Neural Link.`; const res = evaluateCrush(newTokens, gridData, newPlayers, newE, new Set(), log); return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemies: res.eList, logFeed: [...safeArray(s.encounter?.logFeed), { id: Date.now().toString(), text: String(res.logStr) }].slice(-50) }, activeAction: null }; } }
                 const res = evaluateCrush(newTokens, gridData, newPlayers, s.encounter?.enemies || [], new Set(), log);
-                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemyPoolTotal: newEnemyPoolTotal, logFeed: [...safeArray(s.encounter?.logFeed), { id: Date.now().toString(), text: String(res.logStr) }].slice(-50) }, activeAction: null };
+                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemyPoolTotal: newEnemyPoolTotal, logFeed: [...safeArray(s.encounter?.logFeed), { id: Date.now().toString() + Math.random().toString(), text: String(res.logStr) }].slice(-50) }, activeAction: null };
             }
             return s;
         });
@@ -268,6 +309,10 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             const payloadType = action.payload || 'damage'; const rawDmg = safeInt(action.d); const dispCore = action.elementCore || action.element || 'Kinetic'; const showType = (action.elementRaw && String(action.elementRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${action.elementRaw} [Core: ${dispCore}]` : dispCore;
             let newPlayers = deepClone(s.players || {}); let newEnemies = deepClone(safeArray(s.encounter?.enemies)); let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal ?? 10);
             let hitCount = 0; let actualTargetHex = targetHex; let log = `--- COMBAT LOG: ${action.name || 'Action'} [${showType}] ---\n`;
+            
+            const isSurge = safeInt(s.encounter?.round) >= 4;
+            const sMult = isSurge ? 2 : 1;
+
             if (action.isImprovised) { const roll = Math.floor(Math.random() * 6) + 1; log += `>> IMPROVISED ROLL: [${roll}]\n`; if (roll >= 5) log += `>> CASCADE: Reality bent to Agent's will.\n`; else if (roll >= 3) { const fbDmg = safeInt(action.originalCost); log += `>> SURGE: Action succeeds, but Agent suffers ${fbDmg} feedback damage.\n`; if (!action.isEnemy && action.sourceId) { const p = newPlayers[action.sourceId]; if (p) { p.currentHp = Math.max(0, safeInt(p.currentHp) - fbDmg); fctQueue.push({ pos: originPosIdx, text: `-${fbDmg}`, color: '#ef4444', id: Math.random() }); } } } else { log += `>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`; if (attIdx !== -1) actualTargetHex = originPosIdx; } }
             
             if (action.isEcho && !action.isEchoSpellCast) {
@@ -305,10 +350,31 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                             const rpsMult = getAffinityMultiplier(dispCore, enemy.affinity);
 
                             if (payloadType === 'heal') { let incomingHeal = Math.ceil(rawDmg * rpsMult); if (rpsMult === 1.5) log += `>> AFFINITY ADVANTAGE: 1.5x Healing\n`; if (rpsMult === 0.5) log += `>> AFFINITY DISADVANTAGE: 0.5x Healing\n`; newHp += incomingHeal; log += `Hostile [${enemy.name}]: Restored ${incomingHeal} HP. HP is now ${newHp}.\n`; fctQueue.push({ pos: t.pos, text: `+${incomingHeal}`, color: '#22c55e', id: Math.random() }); } 
-                            else if (payloadType === 'battery') { newEnemyPoolTotal = Math.min(100, newEnemyPoolTotal + rawDmg); log += `Hostile [${enemy.name}]: Transferred ${rawDmg} Resonance to the Global Hostile Pool.\n`; fctQueue.push({ pos: t.pos, text: `+${rawDmg} RES`, color: '#ff6600', id: Math.random() }); } 
+                            else if (payloadType === 'battery') { const transfer = rawDmg * (action.isEnemy ? 1 : sMult); newEnemyPoolTotal = Math.min(100, newEnemyPoolTotal + transfer); log += `Hostile [${enemy.name}]: Transferred ${transfer} Resonance to the Global Hostile Pool.\n`; fctQueue.push({ pos: t.pos, text: `+${transfer} RES`, color: '#ff6600', id: Math.random() }); } 
                             else {
                                 if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> AFFINITY ADVANTAGE: 1.5x Dmg\n`; } if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `>> AFFINITY DISADVANTAGE: 0.5x Dmg\n`; } if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> FLANKING BONUS: 1.5x Dmg\n`; }
                                 if (rpsMult === 1.5 || coreStates.includes('Vulnerable')) triggeredExploit = true; if (isFlanking) triggeredTagTeam = true;
+                                if (isOnSteamReact) { incomingDmg += 5; log += `>> STEAM BLAST: (+5 Dmg)\n`; } if (isOnCombustReact) { incomingDmg += 5; log += `>> COMBUSTION: (+5 Dmg)\n`; } if (isOnConductReact) { incomingDmg += 5; log += `>> CONDUCTION: (+5 Dmg)\n`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `>> ANNIHILATION: (+5 Dmg)\n`; }
+                                if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5); if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `>> [Shielded] mitigated 5 damage.\n`; } if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `>> [Invulnerable] completely negated the attack.\n`; } if (coreStates.includes('Evasive') && !isExecute) log += `>> [Evasive] triggered.\n`;
+
+                                if (isExecute) { barriers.fill(0); newHp = 0; staggered = true; log += `>> HOSTILE EXECUTED! [Instant Erasure]\n`; fctQueue.push({ pos: t.pos, text: 'FATAL', color: '#ef4444', id: Math.random() }); } 
+                                else { let dmgRemaining = incomingDmg; for (let i = 0; i < barriers.length; i++) { if (barriers[i] > 0 && dmgRemaining > 0) { if (barriers[i] >= dmgRemaining) { barriers[i] -= dmgRemaining; dmgRemaining = 0; } else { dmgRemaining -= barriers[i]; barriers[i] = 0; } } } newHp = Math.max(0, newHp - dmgRemaining); const hadBarriers = safeArray(enemy.currentBarriers).some(b => b > 0); const allShattered = barriers.every(b => b === 0); if (hadBarriers && allShattered) staggered = true; log += `Hostile [${enemy.name}]: Took ${dmgRemaining} HP dmg. HP is now ${newHp}.\n`; if (staggered && !enemy.staggered) log += `>> TARGET STAGGERED!\n`; fctQueue.push({ pos: t.pos, text: `-${dmgRemaining}`, color: '#ef4444', id: Math.random() }); }
+                            }
+                            let updatedStatuses = safeArray(enemy.statuses).filter(st => !consumeStates.includes(getCoreState(st)));
+                            if (action.effectName && (!isExecute || payloadType !== 'damage')) { let newlyAppliedCore = action.effectCore || getCoreState(action.effectName); updatedStatuses.push(action.effectName); log += `>> State [${action.effectName}] applied to ${enemy.name}!\n`; if (newlyAppliedCore === 'Haste') t.movementRemaining = (t.movementRemaining || 0) + 2; else if (newlyAppliedCore === 'Slowed') t.movementRemaining = Math.max(0, (t.movementRemaining || 0) - 2); else if (newlyAppliedCore === 'Immobilized' || newlyAppliedCore === 'Stunned') t.movementRemaining = 0; else if (newlyAppliedCore === 'Knockdown') t.movementRemaining = Math.floor((t.movementRemaining || 0) / 2); else if (newlyAppliedCore === 'Hijacked' && newHp > 0 && !coreStates.includes('Invulnerable')) hijackedEnemyId = String(enemy.uid); }
+                            if (newHp <= 0) { log += `>> TARGET DESTROYED! Entity purged from grid.\n`; deadEnemyUids.add(String(enemy.uid)); } else { newEnemies[eIndex] = { ...enemy, currentBarriers: safeArray(barriers), currentHp: newHp, staggered, statuses: safeArray(updatedStatuses) }; }
+                        }
+                    } 
+                    else if (t.type === 'player') {
+                        const p = newPlayers[t.refId];
+                        if (p) {
+                            const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0; const wpn = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0]; let isSynergy = fDP >= (wpn.reqF||0) && sDP >= (wpn.reqS||0) && bDP >= (wpn.reqB||0); let wpnBonus = isSynergy ? (wpn.bonusFront || 0) : 0; let coreStates = safeArray(p.statuses).map(st => getCoreState(st)); let forcedEvasion = coreStates.includes('Evasive'); let incomingDmg = rawDmg;
+                            const rpsMult = getAffinityMultiplier(dispCore, p.affinity || 'Kinetic'); const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
+
+                            if (payloadType === 'heal') { let incomingHeal = Math.ceil(rawDmg * rpsMult); if (rpsMult === 1.5) log += `>> AFFINITY ADVANTAGE: 1.5x Healing\n`; if (rpsMult === 0.5) log += `>> AFFINITY DISADVANTAGE: 0.5x Healing\n`; p.currentHp = Math.min(derivedMaxHp, safeInt(p.currentHp ?? derivedMaxHp) + incomingHeal); log += `Agent [${p.name || 'P1'}]: Restored ${incomingHeal} HP. HP is now ${p.currentHp}.\n`; if (action.sourceId && String(t.refId) !== String(action.sourceId)) triggeredAssist = true; fctQueue.push({ pos: t.pos, text: `+${incomingHeal}`, color: '#22c55e', id: Math.random() }); } 
+                            else if (payloadType === 'battery') { const transfer = rawDmg * sMult; p.resPool = Math.min(10, (p.resPool ?? 3) + transfer); log += `Agent [${p.name || 'P1'}]: Energized for +${transfer} Resonance.\n`; if (action.sourceId && String(t.refId) !== String(action.sourceId)) triggeredAssist = true; fctQueue.push({ pos: t.pos, text: `+${transfer} RES`, color: '#d1d5db', id: Math.random() }); } 
+                            else {
+                                if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> AFFINITY ADVANTAGE: 1.5x Dmg\n`; } if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `>> AFFINITY DISADVANTAGE: 0.5x Dmg\n`; } if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> FLANKING BONUS: 1.5x Dmg\n`; }
                                 if (isOnSteamReact) { incomingDmg += 5; log += `>> STEAM BLAST: (+5 Dmg)\n`; } if (isOnCombustReact) { incomingDmg += 5; log += `>> COMBUSTION: (+5 Dmg)\n`; } if (isOnConductReact) { incomingDmg += 5; log += `>> CONDUCTION: (+5 Dmg)\n`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `>> ANNIHILATION: (+5 Dmg)\n`; }
                                 if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5); if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `>> [Shielded] mitigated 5 damage.\n`; } if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `>> [Invulnerable] completely negated the attack.\n`; }
 
@@ -355,10 +421,10 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 const p = newPlayers[action.sourceId];
                 if (p) {
                     let pRes = p.resPool ?? 3;
-                    if (action.isBasic) { p.usedBasicAttack = true; pRes += 2; log += `>> [+2 Res] Basic Attack executed.\n`; } 
+                    if (action.isBasic) { p.usedBasicAttack = true; pRes += (2 * sMult); log += `>> [+${2*sMult} Res] Basic Attack executed.\n`; } 
                     else if (action.isImprovised) { pRes = Math.max(0, pRes - 1); log += `>> [-1 Res] Improvised Skill Matrix engaged.\n`; } 
                     else { const costDeduction = safeInt(action.cost); pRes = Math.max(0, pRes - costDeduction); if (costDeduction > 0) log += `>> [-${costDeduction} Res] Skill executed.\n`; }
-                    let syncLogs = []; if (triggeredExploit) { pRes += 4; syncLogs.push('EXPLOIT (+4 Res)'); } if (triggeredTagTeam) { pRes += 4; syncLogs.push('TAG-TEAM (+4 Res)'); } if (triggeredAssist) { pRes += 2; syncLogs.push('ASSIST (+2 Res)'); } if (syncLogs.length > 0) log += `>> AUTOMATED SYNERGY: ${syncLogs.join(', ')}\n`; p.resPool = pRes;
+                    let syncLogs = []; if (triggeredExploit) { pRes += (4 * sMult); syncLogs.push(`EXPLOIT (+${4*sMult} Res)`); } if (triggeredTagTeam) { pRes += (4 * sMult); syncLogs.push(`TAG-TEAM (+${4*sMult} Res)`); } if (triggeredAssist) { pRes += (2 * sMult); syncLogs.push(`ASSIST (+${2*sMult} Res)`); } if (syncLogs.length > 0) log += `>> AUTOMATED SYNERGY: ${syncLogs.join(', ')}\n`; p.resPool = pRes;
                 }
             }
 
@@ -378,14 +444,15 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
             if (changedCount > 0) log += `>> TERRAIN SHIFT: ${changedCount} hex(es) painted.\n`; if (steamCount > 0) log += `>> ELEMENTAL REACTION: ${steamCount} hex(es) triggered a Steam Explosion!\n`; if (combustCount > 0) log += `>> ELEMENTAL REACTION: ${combustCount} hex(es) ignited in a Toxic Combustion!\n`; if (conductCount > 0) log += `>> ELEMENTAL REACTION: ${conductCount} hex(es) conducted Chain Lightning!\n`; if (annihilateCount > 0) log += `>> ELEMENTAL REACTION: ${annihilateCount} hex(es) underwent Matter Annihilation!\n`;
 
+            let newPendingExp = safeInt(s.encounter?.pendingExp);
             if (deadEnemyUids.size > 0) { 
                 let expGain = 0;
                 newEnemies.forEach(e => { if (e && deadEnemyUids.has(String(e.uid))) { expGain += safeInt(e.exp || (e.tier * 10)); } });
                 newEnemies = newEnemies.filter(e => e && !deadEnemyUids.has(String(e.uid))); 
                 newTokens = newTokens.filter(t => t && !(t.type === 'enemy' && deadEnemyUids.has(String(t.refId))));
                 if (expGain > 0) {
-                    Object.values(newPlayers).forEach(p => { if (p) p.exp = (p.exp || 0) + expGain; });
-                    log += `>> TEAM REWARD: +${expGain} EXP distributed to all deployed Agents.\n`;
+                    newPendingExp += expGain;
+                    log += `>> TEAM REWARD PENDING: +${expGain} EXP secured in encounter pool.\n`;
                 }
             }
             if (deadEchoIds.size > 0) { newTokens = newTokens.filter(t => !deadEchoIds.has(String(t.id))); }
@@ -399,14 +466,14 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 if (hEnemy && safeArray(hEnemy.abilities).length > 0) {
                     const extraLog = `>> NEURAL HIJACK SUCCESSFUL! Agent has seized control of Hostile [${hEnemy.name}].\n`; logEntry.text += '\n' + extraLog;
                     const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, extraLog); let newQueue = safeArray(s.encounter?.initiativeQueue).filter(id => res.eList.some(en => en && en.uid === id));
-                    return { ...s, players: res.pObj, encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal, initiativeQueue: newQueue, logFeed: [...safeArray(s.encounter?.logFeed), logEntry].slice(-50) }, tokens: newTokens, grid: newGrid, activeAction: { type: 'hijack_select', enemy: hEnemy, hijackControllerId: action.sourceId } };
+                    return { ...s, players: res.pObj, encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal, pendingExp: newPendingExp, initiativeQueue: newQueue, logFeed: [...safeArray(s.encounter?.logFeed), logEntry].slice(-50) }, tokens: newTokens, grid: newGrid, activeAction: { type: 'hijack_select', enemy: hEnemy, hijackControllerId: action.sourceId } };
                 }
             }
 
             const res = evaluateCrush(newTokens, newGrid, newPlayers, newEnemies, deadEnemyUids, ""); if (res.logStr) logEntry.text += '\n' + res.logStr;
             if (deadEnemyUids.size > 0) { res.eList = res.eList.filter(e => e && !deadEnemyUids.has(String(e.uid))); newTokens = newTokens.filter(t => t && !(t.type === 'enemy' && deadEnemyUids.has(String(t.refId)))); }
             let newQueue = safeArray(s.encounter?.initiativeQueue).filter(id => newTokens.some(t => t && t.id === id));
-            return { ...s, players: res.pObj, encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal, initiativeQueue: newQueue, logFeed: [...safeArray(s.encounter?.logFeed), logEntry].slice(-50) }, tokens: newTokens, grid: newGrid, activeAction: null };
+            return { ...s, players: res.pObj, encounter: { ...(s.encounter || {}), enemies: res.eList, enemyPoolTotal: newEnemyPoolTotal, pendingExp: newPendingExp, initiativeQueue: newQueue, logFeed: [...safeArray(s.encounter?.logFeed), logEntry].slice(-50) }, tokens: newTokens, grid: newGrid, activeAction: null };
         });
         setAoeRotation(0);
     };
@@ -441,14 +508,15 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
     const renderInitiativeTracker = () => {
         if (safeEnc?.round === 0 || safeArray(safeEnc?.initiativeQueue).length === 0) return null;
         return (
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 bg-black/80 border border-gray-700 p-2 shadow-lg max-w-[90vw] overflow-x-auto scrollbar-hide">
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 bg-[#0f172a]/90 border border-gray-700 p-2 shadow-lg max-w-[90vw] overflow-x-auto scrollbar-hide">
                 {safeArray(safeEnc.initiativeQueue).map((tid) => {
                     const isAct = tid === safeEnc.activeTokenId; const qT = activeTokens.find(t => t && t.id === tid); if (!qT) return null;
                     let name = 'Unknown'; let tColor = '#555';
-                    if (qT.type === 'player') { name = safePlayers[qT.refId]?.name || 'Agent'; tColor = '#00f0ff'; } 
-                    else { name = activeEnemies.find(e => e.uid === qT.refId)?.name || 'Hostile'; tColor = '#ff6600'; }
+                    if (qT.type === 'player') { name = safePlayers[qT.refId]?.name || 'Agent'; tColor = '#d1d5db'; } 
+                    else if (qT.type === 'echo') { name = 'Tactical Echo'; tColor = '#e9d5ff'; }
+                    else { name = activeEnemies.find(e => e.uid === qT.refId)?.name || 'Hostile'; tColor = '#a855f7'; }
                     return (
-                        <div key={tid} onClick={() => setSelectedToken(tid)} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border ${isAct ? 'border-white bg-white/20 scale-110 mx-2 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-gray-800 bg-black hover:border-gray-500'}`}>
+                        <div key={tid} onClick={() => setSelectedToken(tid)} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border ${isAct ? 'border-[#d1d5db] bg-white/10 scale-110 mx-2 shadow-[0_0_10px_rgba(209,213,219,0.3)]' : 'border-gray-700 bg-[#1e293b] hover:border-gray-500'}`}>
                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tColor }}></div>
                             <span className={`text-[10px] font-bold uppercase whitespace-nowrap ${isAct ? 'text-white' : 'text-gray-400'}`}>{String(name).substring(0, 10)}</span>
                         </div>
@@ -492,8 +560,8 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
             const { x, y } = getHexCoords(t.pos); const isImprovised = activeAction.isImprovised;
             return (
-                <div key={`preview-${t.id}`} className="absolute z-[120] bg-black/95 border border-[#00f0ff] p-2 flex flex-col text-[10px] w-48 shadow-[0_0_15px_rgba(0,240,255,0.4)] pointer-events-none transition-all duration-200" style={{ left: `${x + hexWidth + 5}px`, top: `${y - 10}px` }}>
-                    <div className="text-[#00f0ff] font-bold border-b border-gray-700 pb-1 mb-1 uppercase flex justify-between"><span>Target Math</span><span>{t.type === 'player' ? String(pObj?.name || 'Agent') : (t.type === 'echo' ? 'Construct' : 'Hostile')}</span></div>
+                <div key={`preview-${t.id}`} className="absolute z-[120] bg-[#0f172a]/95 border border-[#d1d5db] p-2 flex flex-col text-[10px] w-48 shadow-[0_0_15px_rgba(209,213,219,0.4)] pointer-events-none transition-all duration-200" style={{ left: `${x + hexWidth + 5}px`, top: `${y - 10}px` }}>
+                    <div className="text-[#d1d5db] font-bold border-b border-gray-700 pb-1 mb-1 uppercase flex justify-between"><span>Target Math</span><span>{t.type === 'player' ? String(pObj?.name || 'Agent') : (t.type === 'echo' ? 'Construct' : 'Hostile')}</span></div>
                     {isImprovised ? ( <div className="text-orange-400 font-bold text-center py-2 animate-pulse">⚠ IMPROVISED (1d6) ⚠<br/>Math Unknown</div> ) : (
                         <>
                             <div className="flex justify-between"><span>Base {payloadType === 'heal' ? 'Heal' : payloadType === 'battery' ? 'Energize' : 'Dmg'}:</span><span>{rawDmg}</span></div>
@@ -509,7 +577,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                                 </>
                             )}
                             {payloadType === 'heal' && rpsMult !== 1.0 && <div className="flex justify-between text-yellow-400"><span>Affinity:</span><span>x{rpsMult}</span></div>}
-                            <div className="border-t border-gray-700 mt-1 pt-1 flex justify-between font-bold text-white text-xs"><span>{payloadType === 'damage' ? 'EXPECTED:' : payloadType === 'heal' ? 'RECOVERY:' : 'TRANSFER:'}</span><span className={payloadType === 'damage' ? (finalDmg === 'FATAL' || finalDmg > 0 ? 'text-red-500' : 'text-gray-500') : payloadType === 'heal' ? 'text-[#22c55e]' : 'text-[#00f0ff]'}>{finalDmg} {payloadType === 'damage' ? 'DMG' : payloadType === 'heal' ? 'HP' : 'RES'}</span></div>
+                            <div className="border-t border-gray-700 mt-1 pt-1 flex justify-between font-bold text-white text-xs"><span>{payloadType === 'damage' ? 'EXPECTED:' : payloadType === 'heal' ? 'RECOVERY:' : 'TRANSFER:'}</span><span className={payloadType === 'damage' ? (finalDmg === 'FATAL' || finalDmg > 0 ? 'text-red-500' : 'text-gray-500') : payloadType === 'heal' ? 'text-[#22c55e]' : 'text-[#d1d5db]'}>{finalDmg} {payloadType === 'damage' ? 'DMG' : payloadType === 'heal' ? 'HP' : 'RES'}</span></div>
                             {activeAction.effectName && <div className="text-purple-400 mt-1">Applies: [{String(activeAction.effectName)}]</div>}
                             {activeAction.m > 0 && <div className="text-blue-400 mt-0.5">Mobility: {String(activeAction.coreMobility)} {activeAction.m}</div>}
                         </>
@@ -549,7 +617,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             if (!cell) return null; const { x, y } = getHexCoords(idx); const row = Math.floor(idx / COLS);
             let bgColor = '#1e293b'; let hexBorder = '1px solid rgba(255,255,255,0.05)'; let hexZ = 1;
             
-            if (safeEnc?.round === 0) { if (row < 5) { bgColor = 'rgba(255, 102, 0, 0.08)'; hexBorder = '1px dashed rgba(255, 102, 0, 0.2)'; } else { bgColor = 'rgba(0, 240, 255, 0.08)'; hexBorder = '1px dashed rgba(0, 240, 255, 0.2)'; } }
+            if (safeEnc?.round === 0) { if (row < 5) { bgColor = 'rgba(168, 85, 247, 0.08)'; hexBorder = '1px dashed rgba(168, 85, 247, 0.2)'; } else { bgColor = 'rgba(209, 213, 219, 0.08)'; hexBorder = '1px dashed rgba(209, 213, 219, 0.2)'; } }
             if (cell.terrain === 'minor') bgColor = 'rgba(234, 179, 8, 0.4)'; if (cell.terrain === 'major') bgColor = 'rgba(168, 85, 247, 0.4)'; if (cell.terrain === 'severe') bgColor = 'rgba(59, 130, 246, 0.4)'; 
 
             let isTargetable = false; let isMovable = false; let isAoETarget = false; let isBlockedByLoS = false; let isDimmedByMask = false;
@@ -559,18 +627,12 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 else if (activeAction.type === 'target') { if (validTargetsMap.has(idx)) isTargetable = true; else isDimmedByMask = true; if (hoveredHex !== null && aoeHexes.includes(idx)) { isAoETarget = true; isDimmedByMask = false; } if (!isTargetable && !isAoETarget) isBlockedByLoS = true; }
             }
 
-            if (isAoETarget) { bgColor = 'rgba(255, 0, 0, 0.6)'; hexBorder = '2px solid #ff0000'; hexZ = 10; } else if (isTargetable) { bgColor = 'rgba(255, 102, 0, 0.3)'; hexBorder = '2px dashed rgba(255, 102, 0, 0.8)'; hexZ = 5; } else if (isMovable) { bgColor = 'rgba(34, 197, 94, 0.35)'; hexBorder = '2px dashed rgba(34, 197, 94, 0.8)'; hexZ = 5; } else if (showTargetMask && isDimmedByMask) { bgColor = 'rgba(0,0,0,0.85)'; hexBorder = '1px solid rgba(255,255,255,0.05)'; }
+            if (isAoETarget) { bgColor = 'rgba(255, 0, 0, 0.6)'; hexBorder = '2px solid #ff0000'; hexZ = 10; } else if (isTargetable) { bgColor = 'rgba(168, 85, 247, 0.3)'; hexBorder = '2px dashed rgba(168, 85, 247, 0.8)'; hexZ = 5; } else if (isMovable) { bgColor = 'rgba(34, 197, 94, 0.35)'; hexBorder = '2px dashed rgba(34, 197, 94, 0.8)'; hexZ = 5; } else if (showTargetMask && isDimmedByMask) { bgColor = 'rgba(0,0,0,0.85)'; hexBorder = '1px solid rgba(255,255,255,0.05)'; }
 
             return (
                 <div key={`bg-${idx}`} onClick={() => handleHexClick(idx)} onMouseEnter={() => setHoveredHex(idx)} onMouseLeave={() => setHoveredHex(null)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleHexDrop(e, idx)} className="absolute transition-all duration-150" style={{ zIndex: hexZ, left: `${x}px`, top: `${y}px`, width: `${hexWidth}px`, height: `${hexHeight}px`, backgroundColor: bgColor, border: hexBorder, clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)', transform: 'scale(0.95)', cursor: activeAction && activeAction.type !== 'hijack_select' ? 'crosshair' : 'pointer' }}>
                     {isBlockedByLoS && !isAoETarget && showTargetMask && <div className="absolute inset-0 flex items-center justify-center text-red-500 opacity-20 text-[10px]">✕</div>}
-                    {cell.terrainElement && !isBlockedByLoS && (
-                        <div className="absolute bottom-2 w-full text-center pointer-events-none opacity-80">
-                            <span className="text-[7px] font-bold uppercase tracking-widest px-1 bg-black/80 rounded" style={{ color: ELEMENT_COLORS[cell.terrainElement] || '#ffffff', border: `1px solid ${ELEMENT_COLORS[cell.terrainElement] || '#ffffff'}` }}>
-                                {cell.terrainElement}
-                            </span>
-                        </div>
-                    )}
+                    {cell.terrainElement && !isBlockedByLoS && ( <div className="absolute bottom-2 w-full text-center pointer-events-none opacity-80"> <span className="text-[7px] font-bold uppercase tracking-widest px-1 bg-black/80 rounded" style={{ color: ELEMENT_COLORS[cell.terrainElement] || '#ffffff', border: `1px solid ${ELEMENT_COLORS[cell.terrainElement] || '#ffffff'}` }}> {cell.terrainElement} </span> </div> )}
                 </div>
             );
         });
@@ -581,14 +643,14 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         return activeTokens.map(t => {
             if (!t || t.pos === undefined || t.pos === null || t.pos < 0 || t.pos >= 150) return null;
             const { x, y } = getHexCoords(t.pos); const orderInHex = hexGroups[t.pos] ? hexGroups[t.pos].findIndex(tok => tok && String(tok.id) === String(t.id)) : 0; const offsetX = orderInHex > 0 ? orderInHex * 10 : 0; const offsetY = orderInHex > 0 ? orderInHex * 10 : 0;
-            let displayChar = t.type === 'enemy' ? 'E' : (t.type === 'echo' ? '✧' : 'P'); let tBg = t.type === 'enemy' ? '#ff6600' : (t.type === 'echo' ? '#a855f7' : '#00f0ff'); let txtColor = t.type === 'echo' ? '#ffffff' : '#000000';
+            let displayChar = t.type === 'enemy' ? 'E' : (t.type === 'echo' ? '✧' : 'P'); let tBg = t.type === 'enemy' ? '#a855f7' : (t.type === 'echo' ? '#e9d5ff' : '#d1d5db'); let txtColor = t.type === 'echo' ? '#000000' : '#000000';
             if (t.type === 'player') { const p = safePlayers[t.refId] || {}; if (p.name) displayChar = String(p.name).substring(0, 2).toUpperCase(); } else if (t.type === 'enemy') { const e = activeEnemies.find(en => en && String(en.uid) === String(t.refId)); if (e && e.name) displayChar = String(e.name).substring(0, 2).toUpperCase(); }
             const showHoverControls = selectedToken === t.id && (isGM || (t.type === 'player' && String(t.refId) === String(localId))); const isAct = safeEnc?.activeTokenId === String(t.id); const tokZ = isAct ? 50 : (selectedToken === t.id ? 40 : 30);
             return (
-                <div key={`tok-${t.id}`} draggable={safeEnc?.round === 0 && t.type !== 'echo'} onDragStart={(e) => { if(e) { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'moveToken', tokenId: t.id })); } }} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold shadow-lg cursor-pointer transition-transform hover:scale-110 ${isAct ? 'ring-4 ring-white' : ''}`} onClick={(e) => { e.stopPropagation(); if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') return executeMove(t.pos); if (activeAction.type === 'blink') return executeBlink(t.pos); if (activeAction.type === 'target') return resolveCombat(t.pos); } setSelectedToken(selectedToken === t.id ? null : t.id); }} style={{ zIndex: tokZ, backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, border: t.type === 'echo' ? '2px solid white' : 'none' }}>
+                <div key={`tok-${t.id}`} draggable={safeEnc?.round === 0 && t.type !== 'echo'} onDragStart={(e) => { if(e) { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'moveToken', tokenId: t.id })); } }} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold shadow-lg cursor-pointer transition-transform hover:scale-110 ${isAct ? 'ring-4 ring-white' : ''}`} onClick={(e) => { e.stopPropagation(); if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') return executeMove(t.pos); if (activeAction.type === 'blink') return executeBlink(t.pos); if (activeAction.type === 'target') return resolveCombat(t.pos); } setSelectedToken(selectedToken === t.id ? null : t.id); }} style={{ zIndex: tokZ, backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, border: t.type === 'echo' ? '2px solid black' : 'none' }}>
                     <div className="absolute inset-0 pointer-events-none transition-transform duration-300" style={{ transform: `rotate(${(t.facing || 0) * 60}deg)` }}><div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 left-1/2 -translate-x-1/2"></div></div>
                     <span className="text-[11px] z-10 relative">{displayChar}</span>
-                    {showHoverControls && ( <div className="absolute -bottom-14 flex gap-1 bg-black/90 p-1 border border-gray-600 rounded shadow-lg pointer-events-auto" style={{ zIndex: 50 }}> <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600" onClick={(e) => rotateToken(e, t.id, -1)} title="Rotate Left">↶</button> <button className="bg-[#22c55e] text-black w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button> <button className="bg-blue-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-blue-600" onClick={(e) => rotateToken(e, t.id, 1)} title="Rotate Right">↷</button> {isGM && <button className="bg-red-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-red-600 ml-1" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>} </div> )}
+                    {showHoverControls && ( <div className="absolute -bottom-14 flex gap-1 bg-[#0f172a]/90 p-1 border border-gray-600 rounded shadow-lg pointer-events-auto" style={{ zIndex: 50 }}> <button className="bg-[#1e293b] text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-black" onClick={(e) => rotateToken(e, t.id, -1)} title="Rotate Left">↶</button> <button className="bg-[#22c55e] text-black w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button> <button className="bg-[#1e293b] text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-black" onClick={(e) => rotateToken(e, t.id, 1)} title="Rotate Right">↷</button> {isGM && <button className="bg-red-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-red-600 ml-1" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>} </div> )}
                 </div>
             );
         });
@@ -599,17 +661,17 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         return activeTokens.map((t) => {
             if (!t || t.pos === undefined || t.pos === null || t.pos < 0 || t.pos >= 150) return null;
             const { x, y } = getHexCoords(t.pos); const orderInHex = hexGroups[t.pos] ? hexGroups[t.pos].findIndex(tok => tok && String(tok.id) === String(t.id)) : 0; const baseOffsetX = orderInHex > 0 ? orderInHex * 10 : 0; const baseOffsetY = orderInHex > 0 ? orderInHex * 10 : 0; const labelFanOffsetY = orderInHex > 0 ? (orderInHex * -42) : 0;
-            let hpDisplay = null; let tBg = '#ff6600'; let activeStatusList = []; let isInactive = false;
+            let hpDisplay = null; let tBg = '#a855f7'; let activeStatusList = []; let isInactive = false;
             const isHovered = hoveredHex === t.pos;
 
             if (t.type === 'enemy') {
                 const linkedEnemy = safeArray(safeEnc?.enemies).find(e => e && String(e.uid) === String(t.refId));
-                if (linkedEnemy) { activeStatusList = safeArray(linkedEnemy.statuses); let maxRange = 1; if (!linkedEnemy.isActive) isInactive = true; safeArray(linkedEnemy.abilities).forEach(ability => { const ab = normalizeAbility(ability); if (ab.range) { const parts = String(ab.range).split('-'); const r = parts.length === 2 ? parseInt(parts[1]) : parseInt(parts[0]); if (!isNaN(r) && r > maxRange) maxRange = r; } }); tBg = '#ff6600'; hpDisplay = ( <div className={`bg-black/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap ${isInactive ? 'opacity-40 grayscale' : ''}`} style={{ borderColor: '#ff6600', color: '#ff6600' }}> <span className="text-white mb-0.5">{String(linkedEnemy.name || 'Hostile')}</span> <span>T{linkedEnemy.tier || 1} | {String(linkedEnemy.affinity || 'Kinetic')} | RNG {maxRange} | {linkedEnemy.currentHp}/{linkedEnemy.maxHp || linkedEnemy.currentHp} HP</span> </div> ); }
+                if (linkedEnemy) { activeStatusList = safeArray(linkedEnemy.statuses); let maxRange = 1; if (!linkedEnemy.isActive) isInactive = true; safeArray(linkedEnemy.abilities).forEach(ability => { const ab = normalizeAbility(ability); if (ab.range) { const parts = String(ab.range).split('-'); const r = parts.length === 2 ? parseInt(parts[1]) : parseInt(parts[0]); if (!isNaN(r) && r > maxRange) maxRange = r; } }); tBg = '#a855f7'; hpDisplay = ( <div className={`bg-[#0f172a]/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap ${isInactive ? 'opacity-40 grayscale' : ''}`} style={{ borderColor: '#a855f7', color: '#a855f7' }}> <span className="text-white mb-0.5">{String(linkedEnemy.name || 'Hostile')}</span> <span>T{linkedEnemy.tier || 1} | {String(linkedEnemy.affinity || 'Kinetic')} | RNG {maxRange} | {linkedEnemy.currentHp}/{linkedEnemy.maxHp || linkedEnemy.currentHp} HP</span> </div> ); }
             } else if (t.type === 'player') {
-                const p = safePlayers[t.refId] || {}; activeStatusList = safeArray(p.statuses); const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0; let pClass = "Rookie"; if (fDP >= 10) pClass = "Vanguard"; else if (sDP >= 10) pClass = "Conduit"; else if (bDP >= 10) pClass = "Sniper"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1); tBg = CLASS_COLORS[pClass] || '#00f0ff'; const wpn = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0]; const wpnRange = wpn?.range || '1-3'; hpDisplay = ( <div className="bg-black/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap" style={{ borderColor: tBg, color: tBg }}> <span className="text-white mb-0.5">{String(p.name || 'Agent')}</span> <span>{pClass} | {String(p.affinity || 'Kinetic')} | RNG {wpnRange} | {p.currentHp ?? derivedMaxHp}/{derivedMaxHp} HP | {p.resPool ?? 3} RES</span> </div> );
+                const p = safePlayers[t.refId] || {}; activeStatusList = safeArray(p.statuses); const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0; let pClass = "Rookie"; if (fDP >= 10) pClass = "Vanguard"; else if (sDP >= 10) pClass = "Conduit"; else if (bDP >= 10) pClass = "Sniper"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1); tBg = CLASS_COLORS[pClass] || '#d1d5db'; const wpn = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0]; const wpnRange = wpn?.range || '1-3'; hpDisplay = ( <div className="bg-[#0f172a]/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap" style={{ borderColor: tBg, color: tBg }}> <span className="text-white mb-0.5">{String(p.name || 'Agent')}</span> <span>{pClass} | {String(p.affinity || 'Kinetic')} | RNG {wpnRange} | {p.currentHp ?? derivedMaxHp}/{derivedMaxHp} HP | {p.resPool ?? 3} RES</span> </div> );
             } else if (t.type === 'echo') {
-                tBg = '#a855f7';
-                hpDisplay = ( <div className="bg-black/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap" style={{ borderColor: tBg, color: tBg }}> <span className="text-white mb-0.5">Tactical Echo</span> <span>{t.currentHp}/10 HP | Spell: {t.spell?.name || 'Action'}</span> </div> );
+                tBg = '#e9d5ff';
+                hpDisplay = ( <div className="bg-[#0f172a]/95 text-[10px] font-bold px-2 py-1 border rounded flex flex-col items-center leading-none shadow-lg whitespace-nowrap" style={{ borderColor: tBg, color: tBg }}> <span className="text-white mb-0.5">Tactical Echo</span> <span>{t.currentHp}/10 HP | Spell: {t.spell?.name || 'Action'}</span> </div> );
             }
             
             if (!hpDisplay) return null;
@@ -629,15 +691,15 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             if (activeT.type === 'echo') {
                 const pObj = safePlayers[activeT.refId] || {};
                 return (
-                    <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-[#a855f7] font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
-                        <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"> <span className="text-[#a855f7] font-bold tracking-widest uppercase">Tactical Echo</span> <button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button> </div>
+                    <div className="w-full md:w-64 bg-[#1e293b] p-4 border border-[#e9d5ff] font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
+                        <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"> <span className="text-[#e9d5ff] font-bold tracking-widest uppercase">Tactical Echo</span> <button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button> </div>
                         <div className="text-white text-lg font-bold uppercase">Echo of {pObj.name || 'Agent'}</div>
-                        <div className="bg-black border border-gray-700 p-2 text-center font-bold text-[#a855f7]"> <div className="text-gray-500 text-[10px] uppercase">Hit Points</div> <div className="flex items-center justify-center gap-2"> {isGM && <button className="text-gray-400 hover:text-white px-2 text-xl" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].currentHp = Math.max(0, newT[tIdx].currentHp - 1); return { ...s, tokens: newT }; }) }}>-</button>} <div className="text-2xl text-white">{activeT.currentHp}</div> {isGM && <button className="text-gray-400 hover:text-white px-2 text-xl" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].currentHp += 1; return { ...s, tokens: newT }; }) }}>+</button>} </div> </div>
+                        <div className="bg-[#0f172a] border border-gray-700 p-2 text-center font-bold text-[#e9d5ff]"> <div className="text-gray-500 text-[10px] uppercase">Hit Points</div> <div className="flex items-center justify-center gap-2"> {isGM && <button className="text-gray-400 hover:text-white px-2 text-xl" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].currentHp = Math.max(0, newT[tIdx].currentHp - 1); return { ...s, tokens: newT }; }) }}>-</button>} <div className="text-2xl text-white">{activeT.currentHp}</div> {isGM && <button className="text-gray-400 hover:text-white px-2 text-xl" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].currentHp += 1; return { ...s, tokens: newT }; }) }}>+</button>} </div> </div>
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Loaded Spell</div>
-                        <div className="bg-black border border-[#a855f7] p-2 text-xs relative flex flex-col">
-                            <div className="font-bold text-[#a855f7] truncate">{activeT.spell?.name || 'Action'}</div>
+                        <div className="bg-[#0f172a] border border-[#e9d5ff] p-2 text-xs relative flex flex-col">
+                            <div className="font-bold text-[#e9d5ff] truncate">{activeT.spell?.name || 'Action'}</div>
                             <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{activeT.spell?.cost || 0} Res (From Owner)</div>
-                            <button className={`mt-2 w-full font-bold py-2 uppercase transition-colors ${!isMyTurn && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-[#a855f7] text-black hover:bg-white'}`} disabled={!isMyTurn && !isGM} onClick={() => primeCard({...activeT.spell, name: `[Echo] ${activeT.spell.name}`}, false, activeT.spell.cost, activeT)}> COMMAND ECHO: CAST </button>
+                            <button className={`mt-2 w-full font-bold py-2 uppercase transition-colors ${!isMyTurn && !isGM ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-[#e9d5ff] text-black hover:bg-white'}`} disabled={!isMyTurn && !isGM} onClick={() => primeCard({...activeT.spell, name: `[Echo] ${activeT.spell.name}`}, false, activeT.spell.cost, activeT)}> COMMAND ECHO: CAST </button>
                         </div>
                         {(isGM || amIOwner) && ( <button className="w-full font-bold py-2 mt-4 uppercase text-xs border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors" onClick={(e) => deleteToken(e, activeT.id)}> Deconstruct Echo </button> )}
                     </div>
@@ -648,34 +710,34 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 const p = safePlayers[activeT.refId] || {}; const activeWeapon = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0];
                 const fDP = parseInt(p.dpFront) || 0; const sDP = parseInt(p.dpSupport) || 0; const bDP = parseInt(p.dpBack) || 0;
                 let pClass = "Rookie"; if (fDP >= 10) pClass = "Vanguard"; else if (sDP >= 10) pClass = "Conduit"; else if (bDP >= 10) pClass = "Sniper"; else if (fDP >= 5 && sDP >= 5) pClass = "Paladin"; else if (fDP >= 5 && bDP >= 5) pClass = "Skirmisher"; else if (sDP >= 5 && bDP >= 5) pClass = "Saboteur"; 
-                const pColor = CLASS_COLORS[pClass] || '#00f0ff'; let isSynergy = fDP >= (activeWeapon.reqF||0) && sDP >= (activeWeapon.reqS||0) && bDP >= (activeWeapon.reqB||0);
+                const pColor = CLASS_COLORS[pClass] || '#d1d5db'; let isSynergy = fDP >= (activeWeapon.reqF||0) && sDP >= (activeWeapon.reqS||0) && bDP >= (activeWeapon.reqB||0);
                 const calcBaseDmg = fDP + (activeWeapon.baseDmg || 0) + (isSynergy ? (activeWeapon.bonusDmg || 0) : 0); const derivedMaxHp = 20 + (fDP * 3) + (sDP * 2) + (bDP * 1);
                 const activeCoreStates = safeArray(p.statuses).map(st => getCoreState(st));
                 const isStunned = activeCoreStates.includes('Stunned'); const isShocked = activeCoreStates.includes('Shocked'); const isImmobilized = activeCoreStates.includes('Immobilized'); const isBlind = activeCoreStates.includes('Blind');
                 const disableMovement = isStunned || isImmobilized || (!isGM && !isThisActiveToken); const disableAttacks = isStunned || (!isGM && !isThisActiveToken);
                 
                 return (
-                    <div className="w-full md:w-64 bg-[#1a222c] p-4 border font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto" style={{ borderColor: pColor }}>
+                    <div className="w-full md:w-64 bg-[#1e293b] p-4 border font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto" style={{ borderColor: pColor }}>
                         {isThisActiveToken && (isGM || amIOwner) && safeEnc.round > 0 && ( <button className="w-full bg-[#22c55e] text-black font-bold py-3 text-sm uppercase tracking-widest hover:bg-white transition-colors border-2 border-[#22c55e] animate-pulse mb-2" onClick={(e) => { e.stopPropagation(); advanceTurn(); }}> End Turn </button> )}
                         <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"><span className="font-bold tracking-widest uppercase" style={{ color: pColor }}>Player Uplink</span><button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button></div>
-                        <div className="text-white text-xl font-bold uppercase flex justify-between items-center">{String(p.name || 'Agent')}<span className="text-[10px] px-2 py-0.5 bg-black border font-bold" style={{ borderColor: pColor, color: pColor }}>{pClass}</span></div>
+                        <div className="text-white text-xl font-bold uppercase flex justify-between items-center">{String(p.name || 'Agent')}<span className="text-[10px] px-2 py-0.5 bg-[#0f172a] border font-bold" style={{ borderColor: pColor, color: pColor }}>{pClass}</span></div>
                         
-                        <div className="bg-black border border-gray-700 p-2 text-center font-bold flex flex-col gap-2" style={{ color: pColor }}>
+                        <div className="bg-[#0f172a] border border-gray-700 p-2 text-center font-bold flex flex-col gap-2" style={{ color: pColor }}>
                             <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase">Hit Points</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const pClone = deepClone(s.players || {}); if (pClone[activeT.refId]) pClone[activeT.refId].currentHp = Math.max(0, (pClone[activeT.refId].currentHp ?? derivedMaxHp) - 1); return { ...s, players: pClone }; }) }}>-</button>} <div className="text-xl" style={{ color: pColor }}>{p.currentHp ?? derivedMaxHp} <span className="text-gray-600 text-sm">/</span> <span className="text-sm text-gray-500">{derivedMaxHp}</span></div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const pClone = deepClone(s.players || {}); if (pClone[activeT.refId]) pClone[activeT.refId].currentHp = (pClone[activeT.refId].currentHp ?? derivedMaxHp) + 1; return { ...s, players: pClone }; }) }}>+</button>} </div> </div>
                             <div className="w-full h-px bg-gray-700"></div>
                             <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = Math.max(0, (newT[tIdx].movementRemaining ?? 3) - 1); return { ...s, tokens: newT }; }) }}>-</button>} <div className="text-xl" style={{ color: pColor }}>{activeT.movementRemaining ?? activeT.speed ?? 3} <span className="text-gray-600 text-sm">/</span> <span className="text-sm text-gray-500">{activeT.speed ?? 3}</span></div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = (newT[tIdx].movementRemaining ?? 3) + 1; return { ...s, tokens: newT }; }) }}>+</button>} </div> </div>
                         </div>
 
-                        <div className="bg-gray-900 border border-gray-700 p-2 mt-1">
+                        <div className="bg-[#1e293b] border border-gray-700 p-2 mt-1">
                             <div className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1">Active States</div>
                             <div className="flex flex-wrap gap-1 mb-2"> {safeArray(p.statuses).length === 0 && <span className="text-xs text-gray-600">None.</span>} {safeArray(p.statuses).map((st, i) => ( <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">{String(st)} {(isGM) && ( <button className="text-red-400 hover:text-white" onClick={() => pushUpdate(state => { const pClone = deepClone(state.players || {}); if (pClone[activeT.refId] && pClone[activeT.refId].statuses) pClone[activeT.refId].statuses.splice(i, 1); return { ...state, players: pClone }; })}>✕</button> )}</span> ))} </div>
-                            {(isGM) && ( <div className="flex gap-1"> <select id="pState" className="flex-1 bg-black border border-gray-600 text-white text-xs p-1 outline-none"> <option value="">-- Add State --</option> {Object.keys(STATE_DESCRIPTIONS).map(st => <option key={st} value={st}>{st}</option>)} </select> <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => { const el = document.getElementById('pState'); const val = el ? el.value : ''; if (val) { pushUpdate(state => { const pClone = deepClone(state.players || {}); if (pClone[activeT.refId]) { pClone[activeT.refId].statuses = [...safeArray(pClone[activeT.refId].statuses), val]; } return { ...state, players: pClone }; }); if (el) el.value = ''; } }}>+</button> </div> )}
+                            {(isGM) && ( <div className="flex gap-1"> <select id="pState" className="flex-1 bg-[#0f172a] border border-gray-600 text-white text-xs p-1 outline-none"> <option value="">-- Add State --</option> {Object.keys(STATE_DESCRIPTIONS).map(st => <option key={st} value={st}>{st}</option>)} </select> <button className="bg-purple-600 text-white px-2 font-bold text-xs hover:bg-purple-500" onClick={() => { const el = document.getElementById('pState'); const val = el ? el.value : ''; if (val) { pushUpdate(state => { const pClone = deepClone(state.players || {}); if (pClone[activeT.refId]) { pClone[activeT.refId].statuses = [...safeArray(pClone[activeT.refId].statuses), val]; } return { ...state, players: pClone }; }); if (el) el.value = ''; } }}>+</button> </div> )}
                         </div>
 
                         {(isGM || amIOwner) && (
                             <div className="flex gap-2 mt-2">
                                 <button className={`flex-1 font-bold py-1 uppercase text-xs transition-colors ${(disableMovement || !isMyTurn) && !isGM ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={(disableMovement || !isMyTurn) && !isGM} onClick={() => primeTokenMove(activeT)}>Move</button>
-                                <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks || !isSynergy) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-black text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks || !isSynergy) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks || !isSynergy)} onClick={() => {
+                                <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks || !isSynergy) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-[#0f172a] text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks || !isSynergy) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks || !isSynergy)} onClick={() => {
                                     if (!isGM && !isThisActiveToken) return alert("System Locked: It is not your turn."); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED."); if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn."); if (!isGM && !isSynergy) return alert("System Locked: DP Requirements not met for equipped weapon.");
                                     let finalRange = isBlind ? '1' : (activeWeapon.range || '1'); if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
                                     pushUpdate(s => ({ ...s, activeAction: { type: 'target', isBasic: true, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', effectName: '', terrain: '', desc: '', a: 0, u: 0, source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), range: String(finalRange), elementRaw: String(activeWeapon.element || 'Kinetic'), elementCore: String(getCoreElement(activeWeapon.element || 'Kinetic')), effectCore: '', cost: 0, isEcho: false } }))
@@ -688,15 +750,15 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                         {safeArray(p.customCards).map(c => {
                             if (!c) return null; const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore; const cardCost = parseInt(c.cost) || 0; const isNoFuel = (p.resPool ?? 3) < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
                             return (
-                                <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
+                                <div key={c.id || Math.random()} className="bg-[#0f172a] border border-[#d1d5db] p-2 text-xs relative group flex flex-col">
                                     <div className="flex-1 pr-6 pb-2">
-                                        <div className="font-bold text-[#00f0ff] truncate">{String(c.name || 'Custom Action')}</div>
+                                        <div className="font-bold text-[#d1d5db] truncate">{String(c.name || 'Custom Action')}</div>
                                         <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                         <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
-                                        {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Restorative</div>} {c.payload === 'battery' && <div className="text-[#00f0ff] text-[10px] font-bold mt-1">Energize</div>} {c.isEcho && <div className="text-[#a855f7] text-[10px] font-bold mt-1">Tactical Echo</div>} {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{String(c.effectName)}]</div>} {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>} {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
+                                        {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Restorative</div>} {c.payload === 'battery' && <div className="text-[#d1d5db] text-[10px] font-bold mt-1">Energize</div>} {c.isEcho && <div className="text-[#a855f7] text-[10px] font-bold mt-1">Tactical Echo</div>} {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{String(c.effectName)}]</div>} {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>} {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                         <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks} onClick={() => primeCard(c, false, 0, activeT)}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
                                     </div>
-                                    <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const pClone = deepClone(s.players || {}); if (pClone[activeT.refId]) pClone[activeT.refId].customCards = safeArray(pClone[activeT.refId].customCards).filter(item => item && String(item.id) !== String(c.id)); return { ...s, players: pClone }; }); }}>✕</button>
+                                    <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-[#1e293b] border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const pClone = deepClone(s.players || {}); if (pClone[activeT.refId]) pClone[activeT.refId].customCards = safeArray(pClone[activeT.refId].customCards).filter(item => item && String(item.id) !== String(c.id)); return { ...s, players: pClone }; }); }}>✕</button>
                                 </div>
                             );
                         })}
@@ -706,7 +768,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
             if (activeT.type === 'enemy') {
                 const linkedEnemy = safeArray(safeEnc?.enemies).find(e => e && String(e.uid) === String(activeT.refId));
-                if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
+                if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1e293b] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
                 const eCoreStates = safeArray(linkedEnemy.statuses).map(st => getCoreState(st));
                 const isThisActiveToken = safeEnc.activeTokenId === String(activeT.id);
@@ -715,21 +777,21 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 const isBlind = eCoreStates.includes('Blind');
 
                 return (
-                    <div className="w-full md:w-64 bg-[#1a222c] p-4 border border-[#ff6600] font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
-                        {isThisActiveToken && isGM && safeEnc.round > 0 && ( <button className="w-full bg-[#ff6600] text-black font-bold py-3 text-sm uppercase tracking-widest hover:bg-white transition-colors border-2 border-[#ff6600] animate-pulse mb-2" onClick={(e) => { e.stopPropagation(); advanceTurn(); }}> End Turn </button> )}
-                        <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"><span className="text-[#ff6600] font-bold tracking-widest uppercase">Hostile Bio-Scan</span><button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button></div>
+                    <div className="w-full md:w-64 bg-[#1e293b] p-4 border border-[#a855f7] font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
+                        {isThisActiveToken && isGM && safeEnc.round > 0 && ( <button className="w-full bg-[#a855f7] text-black font-bold py-3 text-sm uppercase tracking-widest hover:bg-white transition-colors border-2 border-[#a855f7] animate-pulse mb-2" onClick={(e) => { e.stopPropagation(); advanceTurn(); }}> End Turn </button> )}
+                        <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"><span className="text-[#a855f7] font-bold tracking-widest uppercase">Hostile Bio-Scan</span><button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button></div>
                         <div className="text-white text-lg font-bold uppercase">{String(linkedEnemy.name || 'Enemy')}</div>
                         
-                        <div className="bg-black border border-gray-700 p-2 text-center font-bold flex flex-col gap-2 text-[#ff6600]">
+                        <div className="bg-[#0f172a] border border-gray-700 p-2 text-center font-bold flex flex-col gap-2 text-[#a855f7]">
                             <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase">Hit Points</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(activeT.refId)); if (eIdx !== -1) newE[eIdx].currentHp = Math.max(0, newE[eIdx].currentHp - 1); return { ...s, encounter: { ...s.encounter, enemies: newE }}; }) }}>-</button>} <div className="text-xl text-white">{linkedEnemy.currentHp}</div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(activeT.refId)); if (eIdx !== -1) newE[eIdx].currentHp += 1; return { ...s, encounter: { ...s.encounter, enemies: newE }}; }) }}>+</button>} </div> </div>
                             <div className="w-full h-px bg-gray-700"></div>
-                            <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = Math.max(0, (newT[tIdx].movementRemaining ?? 3) - 1); return { ...s, tokens: newT }; }) }}>-</button>} <div className="text-xl text-[#ff6600]">{activeT.movementRemaining ?? activeT.speed ?? 3} <span className="text-gray-600 text-sm">/</span> <span className="text-sm text-gray-500">{activeT.speed ?? 3}</span></div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = (newT[tIdx].movementRemaining ?? 3) + 1; return { ...s, tokens: newT }; }) }}>+</button>} </div> </div>
+                            <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase" title="Remaining / Speed">Move Pts</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = Math.max(0, (newT[tIdx].movementRemaining ?? 3) - 1); return { ...s, tokens: newT }; }) }}>-</button>} <div className="text-xl text-[#a855f7]">{activeT.movementRemaining ?? activeT.speed ?? 3} <span className="text-gray-600 text-sm">/</span> <span className="text-sm text-gray-500">{activeT.speed ?? 3}</span></div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(tok => tok && tok.id === activeT.id); if (tIdx !== -1) newT[tIdx].movementRemaining = (newT[tIdx].movementRemaining ?? 3) + 1; return { ...s, tokens: newT }; }) }}>+</button>} </div> </div>
                         </div>
 
-                        <div className="bg-gray-900 border border-gray-700 p-2 mt-1">
-                            <div className="flex justify-between items-center mb-1"><span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Active States</span>{linkedEnemy.affinity && <span className="text-[#ff6600] text-[10px] font-bold uppercase border border-[#ff6600] px-1">Type: {String(linkedEnemy.affinity)}</span>}</div>
+                        <div className="bg-[#0f172a] border border-gray-700 p-2 mt-1">
+                            <div className="flex justify-between items-center mb-1"><span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider">Active States</span>{linkedEnemy.affinity && <span className="text-[#a855f7] text-[10px] font-bold uppercase border border-[#a855f7] px-1">Type: {String(linkedEnemy.affinity)}</span>}</div>
                             <div className="flex flex-wrap gap-1 mb-2"> {safeArray(linkedEnemy.statuses).length === 0 && <span className="text-xs text-gray-600">None.</span>} {safeArray(linkedEnemy.statuses).map((st, i) => ( <span key={i} title={STATE_DESCRIPTIONS[getCoreState(st)] || 'Active Status Check'} className="bg-purple-900 text-white text-[10px] px-1.5 py-0.5 border border-purple-500 flex items-center gap-1 cursor-help">{String(st)} {isGM && ( <button className="text-red-400 hover:text-white" onClick={() => pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(linkedEnemy.uid)); if (eIdx !== -1) { newE[eIdx].statuses = safeArray(newE[eIdx].statuses); newE[eIdx].statuses.splice(i, 1); } return { ...s, encounter: { ...s.encounter, enemies: newE } }; })}>✕</button> )}</span> ))} </div>
-                            {isGM && ( <div className="flex gap-1"> <select id="eState" className="flex-1 bg-black border border-gray-600 text-white text-[10px] p-1 outline-none"> <option value="">-- Add State --</option> {Object.keys(STATE_DESCRIPTIONS).map(st => <option key={st} value={st}>{st}</option>)} </select> <button className="bg-gray-800 text-white px-2 text-[10px] font-bold border border-gray-600 hover:bg-[#00f0ff] hover:text-black transition-colors" onClick={() => { const el = document.getElementById('eState'); const val = el ? el.value : ''; if (val) { pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(linkedEnemy.uid)); if (eIdx !== -1) { newE[eIdx].statuses = safeArray(newE[eIdx].statuses); newE[eIdx].statuses.push(val); } return { ...s, encounter: { ...s.encounter, enemies: newE } }; }); if (el) el.value = ''; } }}>+</button> </div> )}
+                            {isGM && ( <div className="flex gap-1"> <select id="eState" className="flex-1 bg-[#1e293b] border border-gray-600 text-white text-[10px] p-1 outline-none"> <option value="">-- Add State --</option> {Object.keys(STATE_DESCRIPTIONS).map(st => <option key={st} value={st}>{st}</option>)} </select> <button className="bg-gray-800 text-white px-2 text-[10px] font-bold border border-gray-600 hover:bg-[#d1d5db] hover:text-black transition-colors" onClick={() => { const el = document.getElementById('eState'); const val = el ? el.value : ''; if (val) { pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(linkedEnemy.uid)); if (eIdx !== -1) { newE[eIdx].statuses = safeArray(newE[eIdx].statuses); newE[eIdx].statuses.push(val); } return { ...s, encounter: { ...s.encounter, enemies: newE } }; }); if (el) el.value = ''; } }}>+</button> </div> )}
                         </div>
 
                         {isGM && ( <button className={`w-full font-bold py-2 mt-2 uppercase text-xs transition-colors ${disableMovement ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#22c55e] text-black hover:bg-white'}`} disabled={disableMovement} onClick={() => primeTokenMove(activeT)}>{disableMovement ? 'LOCKED' : 'Prime Movement'}</button> )}
@@ -738,9 +800,9 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                         {safeArray(linkedEnemy.abilities).map((ability, aIdx) => {
                             if (!ability) return null; const ab = normalizeAbility(ability);
                             return (
-                                <div key={aIdx} className="bg-gray-900 border border-gray-700 p-2 text-sm flex justify-between items-center relative">
-                                    <div> <span className="text-[#00f0ff] font-bold text-xs">{String(ab.name)}</span> {ab.effect && <span title={STATE_DESCRIPTIONS[getCoreState(ab.effect)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{String(ab.effect)}]</span>} {ab.terrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{String(ab.terrain).toUpperCase()}]</span>} </div>
-                                    {isGM && ( <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#ff6600] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => { if (disableAttacks) return alert("System Locked: Entity is STUNNED."); const currentHostileRes = safeEnc?.enemyPoolTotal ?? 10; if (currentHostileRes < ab.cost) return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${ab.cost} RES\nCurrent Pool: ${currentHostileRes} RES`); let finalRange = isBlind ? '1' : ab.range; let finalAoe = isBlind ? 0 : ab.aoe; if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed."); pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(ab.name), payload: 'damage', cost: safeInt(ab.cost), d: safeInt(ab.value), a: finalAoe || 0, range: String(finalRange), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(ab.cost), m: 0, coreMobility: '', u: 0, desc: '' } })); }}>{disableAttacks ? 'LOCKED' : `TARGET (${ab.cost} RES)`}</button> )}
+                                <div key={aIdx} className="bg-[#0f172a] border border-gray-700 p-2 text-sm flex justify-between items-center relative">
+                                    <div> <span className="text-[#d1d5db] font-bold text-xs">{String(ab.name)}</span> {ab.effect && <span title={STATE_DESCRIPTIONS[getCoreState(ab.effect)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{String(ab.effect)}]</span>} {ab.terrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{String(ab.terrain).toUpperCase()}]</span>} </div>
+                                    {isGM && ( <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#a855f7] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => { if (disableAttacks) return alert("System Locked: Entity is STUNNED."); const currentHostileRes = safeEnc?.enemyPoolTotal ?? 10; if (currentHostileRes < ab.cost) return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${ab.cost} RES\nCurrent Pool: ${currentHostileRes} RES`); let finalRange = isBlind ? '1' : ab.range; let finalAoe = isBlind ? 0 : ab.aoe; if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed."); pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(ab.name), payload: 'damage', cost: safeInt(ab.cost), d: safeInt(ab.value), a: finalAoe || 0, range: String(finalRange), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(ab.cost), m: 0, coreMobility: '', u: 0, desc: '' } })); }}>{disableAttacks ? 'LOCKED' : `TARGET (${ab.cost} RES)`}</button> )}
                                 </div>
                             );
                         })}
@@ -749,28 +811,28 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             }
         }
 
-        if (!isGM) { return ( <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full"> <div className="text-gray-500 text-xs text-center mt-10 p-4 border border-dashed border-gray-700">Select a token on the grid to view its bio-scan.</div> </div> ); }
+        if (!isGM) { return ( <div className="w-full md:w-56 bg-[#1e293b] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full"> <div className="text-gray-500 text-xs text-center mt-10 p-4 border border-dashed border-gray-700">Select a token on the grid to view its bio-scan.</div> </div> ); }
 
         return (
-            <div className="w-full md:w-56 bg-[#1a222c] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
-                <div className="text-[#00f0ff] font-bold mb-2 tracking-widest uppercase">Terrain Brush</div>
-                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='minor' ? 'border-[#ff6600] bg-black text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-gray-800'}`} onClick={()=>setPaintBrush(paintBrush==='minor'?null:'minor')}>🟨 Minor (u=1)</button>
-                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='major' ? 'border-[#ff6600] bg-black text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-gray-800'}`} onClick={()=>setPaintBrush(paintBrush==='major'?null:'major')}>🟪 Major (u=3)</button>
-                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='severe' ? 'border-[#ff6600] bg-black text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-gray-800'}`} onClick={()=>setPaintBrush(paintBrush==='severe'?null:'severe')}>🟦 Severe (u=5)</button>
-                <button className={`p-2 border text-sm text-left mt-2 transition-colors ${paintBrush==='clear' ? 'border-red-500 text-red-500' : 'border-gray-700 text-gray-400 hover:bg-gray-800'}`} onClick={()=>setPaintBrush(paintBrush==='clear'?null:'clear')}>Clear Hex Tile</button>
+            <div className="w-full md:w-56 bg-[#1e293b] p-4 border border-slate-700 font-mono flex flex-col gap-3 shrink-0 h-full overflow-y-auto">
+                <div className="text-[#d1d5db] font-bold mb-2 tracking-widest uppercase">Terrain Brush</div>
+                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='minor' ? 'border-[#a855f7] bg-[#0f172a] text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-[#0f172a]'}`} onClick={()=>setPaintBrush(paintBrush==='minor'?null:'minor')}>🟨 Minor (u=1)</button>
+                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='major' ? 'border-[#a855f7] bg-[#0f172a] text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-[#0f172a]'}`} onClick={()=>setPaintBrush(paintBrush==='major'?null:'major')}>🟪 Major (u=3)</button>
+                <button className={`p-2 border text-sm text-left transition-colors ${paintBrush==='severe' ? 'border-[#a855f7] bg-[#0f172a] text-white font-bold' : 'border-gray-700 text-gray-300 hover:bg-[#0f172a]'}`} onClick={()=>setPaintBrush(paintBrush==='severe'?null:'severe')}>🟦 Severe (u=5)</button>
+                <button className={`p-2 border text-sm text-left mt-2 transition-colors ${paintBrush==='clear' ? 'border-red-500 text-red-500' : 'border-gray-700 text-gray-400 hover:bg-[#0f172a]'}`} onClick={()=>setPaintBrush(paintBrush==='clear'?null:'clear')}>Clear Hex Tile</button>
                 
-                <div className="text-[#ff6600] font-bold mt-6 mb-2 tracking-widest uppercase">Deploy Tokens</div>
+                <div className="text-[#a855f7] font-bold mt-6 mb-2 tracking-widest uppercase">Deploy Tokens</div>
                 
-                <div className="bg-gray-900 border border-gray-700 p-2 flex flex-col gap-2">
+                <div className="bg-[#0f172a] border border-gray-700 p-2 flex flex-col gap-2">
                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Deploy Linked Agent</div>
-                    <select className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" value={draftPlayerId} onChange={e=>setDraftPlayerId(e.target.value)}> <option value="">-- Select Player --</option> {Object.entries(safePlayers).map(([id, p]) => <option key={id} value={id}>{String(p?.name || 'Unnamed Agent')}</option>)} </select>
-                    <div draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'deploy', type: 'player', refId: draftPlayerId }))} className="w-full bg-[#00f0ff] text-black p-2 font-bold text-xs uppercase text-center cursor-grab active:cursor-grabbing hover:bg-white transition-colors">≡ Drag to Grid ≡</div>
+                    <select className="w-full bg-[#1e293b] border border-gray-600 p-1 text-white outline-none text-xs" value={draftPlayerId} onChange={e=>setDraftPlayerId(e.target.value)}> <option value="">-- Select Player --</option> {Object.entries(safePlayers).map(([id, p]) => <option key={id} value={id}>{String(p?.name || 'Unnamed Agent')}</option>)} </select>
+                    <div draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'deploy', type: 'player', refId: draftPlayerId }))} className="w-full bg-[#d1d5db] text-black p-2 font-bold text-xs uppercase text-center cursor-grab active:cursor-grabbing hover:bg-white transition-colors">≡ Drag to Grid ≡</div>
                 </div>
 
-                <div className="bg-gray-900 border border-gray-700 p-2 flex flex-col gap-2 mt-2">
+                <div className="bg-[#0f172a] border border-gray-700 p-2 flex flex-col gap-2 mt-2">
                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Deploy Hostile</div>
-                    <select className="w-full bg-black border border-gray-600 p-1 text-white outline-none text-xs" value={draftEnemyId} onChange={e=>setDraftEnemyId(e.target.value)}> <option value="">-- Select Hostile --</option> {activeEnemies.map(e => e && <option key={e.uid} value={e.uid}>{String(e.name)} (T{e.tier})</option>)} </select>
-                    <div draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'deploy', type: 'enemy', refId: draftEnemyId }))} className="w-full bg-[#ff6600] text-black p-2 font-bold text-xs uppercase text-center cursor-grab active:cursor-grabbing hover:bg-white transition-colors">≡ Drag to Grid ≡</div>
+                    <select className="w-full bg-[#1e293b] border border-gray-600 p-1 text-white outline-none text-xs" value={draftEnemyId} onChange={e=>setDraftEnemyId(e.target.value)}> <option value="">-- Select Hostile --</option> {activeEnemies.map(e => e && <option key={e.uid} value={e.uid}>{String(e.name)} (T{e.tier})</option>)} </select>
+                    <div draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'deploy', type: 'enemy', refId: draftEnemyId }))} className="w-full bg-[#a855f7] text-white p-2 font-bold text-xs uppercase text-center cursor-grab active:cursor-grabbing hover:bg-white hover:text-black transition-colors">≡ Drag to Grid ≡</div>
                 </div>
             </div>
         );
@@ -792,10 +854,16 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             
             <div className="flex-1 bg-[#05080a] border border-slate-700 overflow-hidden relative shadow-inner flex flex-col">
                 
-                <div className="absolute bottom-4 left-4 w-72 md:max-w-[280px] flex flex-col z-50 pointer-events-none max-h-48">
-                    <div className="bg-black/80 border border-gray-700 pointer-events-auto flex flex-col h-full shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-                        <div className="bg-gray-800/80 text-gray-300 text-[10px] font-bold uppercase px-3 py-1.5 tracking-widest border-b border-gray-700 shrink-0">Combat Telemetry Log</div>
-                        <div className="flex-1 overflow-y-auto p-3 space-y-2 space-y-reverse text-[10px] text-gray-300 font-mono flex flex-col-reverse scrollbar-hide">
+                {safeInt(safeEnc?.round) >= 4 && (
+                    <div className="absolute top-16 right-4 bg-[#a855f7]/20 border border-[#a855f7] px-4 py-2 z-50 text-xs font-mono uppercase text-[#e9d5ff] shadow-[0_0_15px_rgba(168,85,247,0.5)] animate-pulse">
+                        RESONANCE SURGE ACTIVE (2X GEN)
+                    </div>
+                )}
+
+                <div className="absolute bottom-4 left-4 w-72 md:max-w-[320px] flex flex-col z-50 pointer-events-none max-h-56">
+                    <div className="bg-[#0f172a]/90 border border-gray-700 pointer-events-auto flex flex-col h-full shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                        <div className="bg-[#1e293b] text-gray-300 text-[10px] font-bold uppercase px-3 py-1.5 tracking-widest border-b border-gray-700 shrink-0">Combat Telemetry Log</div>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2 text-[10px] text-gray-300 font-mono flex flex-col">
                             {safeArray(safeEnc.logFeed).slice().reverse().map(l => ( <div key={l.id} className="whitespace-pre-wrap border-b border-gray-800/50 pb-2">{l.text}</div> ))}
                             {safeArray(safeEnc.logFeed).length === 0 && <div className="text-gray-600 italic">Awaiting tactical events...</div>}
                         </div>
@@ -804,9 +872,9 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
                 {renderInitiativeTracker()}
 
-                <div className="absolute top-4 right-4 bg-black border border-gray-700 px-4 py-2 z-50 text-xs font-mono uppercase text-gray-400 shadow-md">
+                <div className="absolute top-4 right-4 bg-[#0f172a] border border-gray-700 px-4 py-2 z-50 text-xs font-mono uppercase text-gray-400 shadow-md">
                     <div className="mb-1">Phase: <span className="font-bold text-white">{safeEnc?.round === 0 ? 'Deployment Phase' : `Round ${safeEnc?.round}`}</span></div>
-                    <div className="border-t border-gray-700 pt-1 mt-1 mb-1">Hostile Res: <span className="font-bold text-[#ff6600]">{safeEnc?.enemyPoolTotal ?? 10}</span></div>
+                    <div className="border-t border-gray-700 pt-1 mt-1 mb-1">Hostile Res: <span className="font-bold text-[#a855f7]">{safeEnc?.enemyPoolTotal ?? 10}</span></div>
                 </div>
 
                 {activeAction && activeAction.type === 'hijack_select' && activeAction.enemy && (
@@ -834,11 +902,11 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400 items-center">
                                     {activeAction.isImprovised && <span className="text-[#ff6600] animate-pulse uppercase">⚠ IMPROVISED (1d6) ⚠</span>}
                                     {activeAction.payload === 'heal' && <span className="text-[#22c55e]">PAYLOAD: RESTORATIVE</span>}
-                                    {activeAction.payload === 'battery' && <span className="text-[#00f0ff]">PAYLOAD: ENERGIZE</span>}
-                                    {activeAction.isEcho && <span className="text-[#a855f7]">TACTICAL ECHO DEPLOYMENT</span>}
+                                    {activeAction.payload === 'battery' && <span className="text-[#d1d5db]">PAYLOAD: ENERGIZE</span>}
+                                    {activeAction.isEcho && !activeAction.isEchoSpellCast && <span className="text-[#a855f7]">TACTICAL ECHO DEPLOYMENT</span>}
                                     {activeAction.d !== undefined && <span>VAL: {safeInt(activeAction.d)}</span>}
-                                    {activeAction.elementCore && <span className="text-[#ff6600]">TYPE: {(activeAction.elementRaw && String(activeAction.elementRaw).toLowerCase() !== String(activeAction.elementCore).toLowerCase()) ? `${activeAction.elementRaw} [Core: ${activeAction.elementCore}]` : String(activeAction.elementCore)}</span>}
-                                    {activeAction.a !== undefined && <span>AoE: {activeAction.a === 'line3' ? '3-HEX LINE' : activeAction.a === 'cluster3' ? '3-HEX CLUSTER' : `${activeAction.a} RADIUS`}</span>}
+                                    {activeAction.elementCore && <span className="text-[#d1d5db]">TYPE: {(activeAction.elementRaw && String(activeAction.elementRaw).toLowerCase() !== String(activeAction.elementCore).toLowerCase()) ? `${activeAction.elementRaw} [Core: ${activeAction.elementCore}]` : String(activeAction.elementCore)}</span>}
+                                    {activeAction.a !== undefined && <span>AoE: {(activeAction.isEcho && !activeAction.isEchoSpellCast) ? '0 (SINGLE TILE ANCHOR)' : (activeAction.a === 'line3' ? '3-HEX LINE' : activeAction.a === 'cluster3' ? '3-HEX CLUSTER' : `${activeAction.a} RADIUS`)}</span>}
                                     {activeAction.effectName && <span className="text-purple-400">STATE: [{(String(activeAction.effectName).toLowerCase() !== String(activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : String(activeAction.effectName)}]</span>}
                                     {activeAction.terrain && <span className="text-yellow-400">TERRAIN: [{String(activeAction.terrain).toUpperCase()}]</span>}
                                     {safeInt(activeAction.m) > 0 && <span className="text-blue-400">MOBILITY: {safeInt(activeAction.m)} [{String(activeAction.coreMobility || '').toUpperCase()}]</span>}

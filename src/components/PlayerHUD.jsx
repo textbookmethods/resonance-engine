@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { armory } from '../data/armory';
 
+// MINIFIED DICTIONARIES & CONSTANTS
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 const ELEMENT_DICTIONARY = { 'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'], 'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'], 'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'], 'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'], 'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'], 'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'], 'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood'] };
 const STATE_DICTIONARY = { 'Hijacked': ['hijack', 'mind control', 'dominate', 'possess', 'control'], 'Execute': ['execute', 'erase', 'delete'], 'Bleed': ['bleed', 'hemorrhage', 'lacerate'], 'Burn': ['burn', 'ignite', 'scorch'], 'Poisoned': ['poison', 'venom', 'decay'], 'Immobilized': ['immobilize', 'root', 'snare'], 'Stunned': ['stun', 'paralyze', 'petrify'], 'Shielded': ['shield', 'protect', 'barrier'], 'Vulnerable': ['vulnerable', 'expose', 'sunder'], 'Knockdown': ['knockdown', 'trip', 'shove'], 'Blind': ['blind', 'obscure', 'smoke'], 'Haste': ['haste', 'speed', 'quick'], 'Slowed': ['slow', 'sluggish', 'chill'], 'Shocked': ['shock', 'glitch', 'jolt'], 'Evasive': ['evade', 'dodge', 'blur'], 'Invulnerable': ['invulnerable', 'stasis', 'immune'] };
@@ -12,7 +13,9 @@ const STATE_DESCRIPTIONS = { 'Hijacked': 'Unit is controlled by opposing network
 const ELEMENT_STATE_MAP = { 'Kinetic': ['Bleed', 'Immobilized', 'Stunned', 'Shielded', 'Vulnerable', 'Knockdown', 'Evasive'], 'Thermal': ['Burn', 'Blind', 'Vulnerable', 'Execute'], 'Cryo': ['Slowed', 'Immobilized', 'Stunned', 'Shielded'], 'Electro': ['Shocked', 'Stunned', 'Haste', 'Blind', 'Hijacked'], 'Toxic': ['Poisoned', 'Blind', 'Vulnerable'], 'Radiant': ['Blind', 'Haste', 'Shielded', 'Invulnerable'], 'Void': ['Execute', 'Evasive', 'Blind', 'Slowed', 'Immobilized', 'Hijacked'] };
 const STATE_TIERS = { 'Bleed': 1, 'Burn': 1, 'Poisoned': 1, 'Haste': 1, 'Slowed': 1, 'Knockdown': 3, 'Blind': 3, 'Shielded': 3, 'Vulnerable': 3, 'Shocked': 3, 'Evasive': 3, 'Immobilized': 5, 'Stunned': 5, 'Invulnerable': 5, 'Execute': 10, 'Hijacked': 10 };
 
+// UTILS
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
+const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null && i !== undefined); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null && i !== undefined); return []; };
 const getCoreState = (input) => { if (!input) return ''; const match = String(input).match(/\[(.*?)\]/); const clean = (match ? match[1] : String(input)).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(STATE_DICTIONARY)) { if (core.toLowerCase() === clean || synonyms.some(s => clean.includes(s))) return core; } return String(input); };
 const getCoreElement = (input) => { if (!input) return 'Kinetic'; const clean = String(input).toLowerCase().trim(); for (const [core, synonyms] of Object.entries(ELEMENT_DICTIONARY)) { if (core === clean || synonyms.includes(clean)) return core.charAt(0).toUpperCase() + core.slice(1); } return 'Kinetic'; };
@@ -71,13 +74,29 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const isDeploymentPhase = encounter?.round === 0;
     const lockImprovise = disableAttacks || isDeploymentPhase || !isMyTurn;
 
+    const maxRift = Math.min(10, Math.max(1, (player.currentHp ?? derivedMaxHp) - 1));
+
+    const refreshTurn = () => {
+        safePush(s => {
+            const newP = { ...(s.players?.[localId] || {}), usedParry: false, usedIntercept: false, usedEvade: false, usedBasicAttack: false };
+            const newT = deepClone(safeArray(s.tokens)); const tIdx = newT.findIndex(t => t.type === 'player' && String(t.refId) === String(localId)); if (tIdx !== -1) newT[tIdx].movementRemaining = newT[tIdx].speed ?? 3;
+            return { ...s, players: { ...s.players, [localId]: newP }, tokens: newT };
+        });
+    };
+
+    const respecAgent = () => {
+        if (window.confirm('Reset this Agent to Base Spec? (Clears all DP to 0, heals to 20, and purges active HUD cards)')) {
+            safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), dpFront: 0, dpSupport: 0, dpBack: 0, currentHp: 20, resPool: 3, customCards: [] } } }));
+        }
+    };
+
     const executeRiftWalk = () => {
         if (!isMyTurn) return alert("System Locked: Not your active turn.");
-        if (riftValue < 1 || riftValue > 10) return alert("Invalid Rift Walk value. Must be 1-10.");
+        if (riftValue < 1 || riftValue > 10) return alert("Invalid Rift Walk value.");
         if ((player.currentHp ?? derivedMaxHp) <= riftValue) return alert("Warning: Overclock sacrifice would be fatal. Rift Walk aborted.");
         safePush(s => {
             const pClone = JSON.parse(JSON.stringify(s.players || {}));
-            if (pClone[localId]) { pClone[localId].currentHp = (pClone[localId].currentHp ?? derivedMaxHp) - riftValue; pClone[localId].resPool = (pClone[localId].resPool ?? 3) + riftValue; }
+            if (pClone[localId]) { pClone[localId].currentHp = (pClone[localId].currentHp ?? derivedMaxHp) - riftValue; pClone[localId].resPool = Math.min(10, (pClone[localId].resPool ?? 3) + riftValue); }
             const logEntry = { id: Date.now().toString() + Math.random().toString(), text: `>> RIFT WALK: ${pClone[localId].name || 'Agent'} sacrificed ${riftValue} HP to generate ${riftValue} Resonance!` };
             return { ...s, players: pClone, encounter: { ...(s.encounter||{}), logFeed: [...safeArray(s.encounter?.logFeed), logEntry].slice(-50) } };
         });
@@ -116,7 +135,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const requiredRes = isImprovised ? 1 : safeInt(c.cost); if (currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
-        let finalRange = isBlind ? '1' : (activeWeapon.range || '1-3'); let finalAoe = isBlind ? 0 : (c.a !== undefined ? c.a : 0); 
+        let finalRange = isBlind ? '1' : (activeWeapon.range || '1-3'); 
+        let finalAoe = isBlind ? 0 : (c.isEcho ? 0 : (c.a !== undefined ? c.a : 0)); 
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
         
         const mobilityRaw = c.mobilityName || c.mobility || ''; const coreMobility = getCoreMobility(mobilityRaw); const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
@@ -168,122 +188,135 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <span>HOSTILE RES: {encounter?.enemyPoolTotal || 0}</span>
                 </div>
             ) : (
-                <div className="col-span-1 lg:col-span-3 bg-black border border-[#00f0ff] text-[#00f0ff] p-3 flex justify-between items-center font-bold tracking-widest uppercase shadow-md">
+                <div className="col-span-1 lg:col-span-3 bg-[#0f172a] border border-[#d1d5db] text-[#d1d5db] p-3 flex justify-between items-center font-bold tracking-widest uppercase shadow-md">
                     <span>▶ AGENT PHASE ACTIVE</span>
-                    <span className="text-gray-500">HOSTILE RES: <span className="text-[#ff6600]">{encounter?.enemyPoolTotal || 0}</span></span>
+                    <span className="text-gray-500">HOSTILE RES: <span className="text-[#a855f7]">{encounter?.enemyPoolTotal || 0}</span></span>
                 </div>
             )}
 
-            <div className="bg-[#1a222c] p-4 border border-slate-700">
+            <div className="bg-[#1e293b] p-4 border border-slate-700">
                 <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-4">
-                    <h2 className="text-[#00f0ff] font-bold text-xl">Character Uplink</h2>
-                    <div className="text-gray-400 text-xs font-bold uppercase tracking-widest bg-gray-900 px-2 py-1 border border-gray-700">Movement: <span className="text-white">{myToken ? `${myToken.movementRemaining ?? myToken.speed ?? 3} / ${myToken.speed ?? 3}` : 'Off Grid'}</span></div>
+                    <h2 className="text-[#d1d5db] font-bold text-xl uppercase">Character Uplink</h2>
+                    <div className="text-gray-400 text-xs font-bold uppercase tracking-widest bg-[#0f172a] px-2 py-1 border border-gray-700">Movement: <span className="text-white">{myToken ? `${myToken.movementRemaining ?? myToken.speed ?? 3} / ${myToken.speed ?? 3}` : 'Off Grid'}</span></div>
                 </div>
 
                 <div className="space-y-4">
                     <div className="flex gap-2">
-                        <input className="flex-1 bg-black border border-gray-600 p-2 text-white outline-none font-bold" placeholder="Callsign / Name" value={player.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
+                        <input className="flex-1 bg-[#0f172a] border border-gray-600 p-2 text-white outline-none font-bold" placeholder="Callsign / Name" value={player.name || ''} onChange={e => updatePlayer('name', e.target.value)} />
                         {player.affinityLocked ? (
-                            <div className="w-1/3 bg-black border border-[#00f0ff] text-[#00f0ff] p-1 flex flex-col items-center justify-center font-bold tracking-wider shadow-[0_0_10px_rgba(0,240,255,0.2)]" title={ELEMENT_DESCRIPTIONS[player.affinity]}>
+                            <div className="w-1/3 bg-[#0f172a] border border-[#d1d5db] text-[#d1d5db] p-1 flex flex-col items-center justify-center font-bold tracking-wider shadow-[0_0_10px_rgba(209,213,219,0.2)]" title={ELEMENT_DESCRIPTIONS[player.affinity]}>
                                 <span className="text-[10px] uppercase truncate w-full text-center leading-none mb-0.5">{player.affinity}</span><span className="text-[7px] text-gray-400 leading-none">AFFINITY</span>
                             </div>
                         ) : (
-                            <div className="w-1/3 flex border border-[#ff6600]">
-                                <select className="flex-1 bg-black text-[#ff6600] text-[10px] font-bold px-1.5 outline-none uppercase w-full cursor-pointer" value={player.affinityRaw || 'Kinetic'} onChange={e => updatePlayer('affinityRaw', e.target.value)} title={ELEMENT_DESCRIPTIONS[player.affinityRaw || 'Kinetic']}>
+                            <div className="w-1/3 flex border border-[#a855f7]">
+                                <select className="flex-1 bg-[#0f172a] text-[#a855f7] text-[10px] font-bold px-1.5 outline-none uppercase w-full cursor-pointer" value={player.affinityRaw || 'Kinetic'} onChange={e => updatePlayer('affinityRaw', e.target.value)} title={ELEMENT_DESCRIPTIONS[player.affinityRaw || 'Kinetic']}>
                                     {Object.keys(ELEMENT_DESCRIPTIONS).map(el => <option key={el} value={el}>{el}</option>)}
                                 </select>
-                                <button className="bg-[#ff6600] text-black px-2 font-bold text-[10px] hover:bg-white transition-colors" onClick={() => { const rawVal = player.affinityRaw || 'Kinetic'; const coreVal = getCoreElement(rawVal); if(window.confirm(`Lock in ${rawVal.toUpperCase()} as your permanent Innate Affinity?`)) { safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), affinityRaw: rawVal, affinity: coreVal, affinityLocked: true } } })); } }}>LOCK</button>
+                                <button className="bg-[#a855f7] text-black px-2 font-bold text-[10px] hover:bg-white transition-colors" onClick={() => { const rawVal = player.affinityRaw || 'Kinetic'; const coreVal = getCoreElement(rawVal); if(window.confirm(`Lock in ${rawVal.toUpperCase()} as your permanent Innate Affinity?`)) { safePush(s => ({ ...s, players: { ...(s.players || {}), [localId]: { ...(s.players?.[localId] || {}), affinityRaw: rawVal, affinity: coreVal, affinityLocked: true } } })); } }}>LOCK</button>
                             </div>
                         )}
                     </div>
 
-                    <div className="bg-black border border-red-500 p-3 text-center w-full">
+                    <div className="bg-[#0f172a] border border-red-500 p-3 text-center w-full">
                         <div className="text-[10px] text-red-500 uppercase tracking-widest mb-1 font-bold">Hit Points</div>
                         <div className="text-3xl font-bold text-white">
                             {player.currentHp ?? derivedMaxHp} <span className="text-gray-600 text-2xl">/</span> <span className="text-gray-400 text-2xl">{derivedMaxHp}</span>
                         </div>
                     </div>
 
-                    <div className="bg-purple-950/30 border border-purple-500 p-3 text-center w-full mt-2">
-                        <div className="text-[10px] text-purple-400 uppercase tracking-widest mb-2 font-bold">Rift Walk (Overclock)</div>
+                    <div className="bg-[#0f172a]/50 border border-[#a855f7] p-3 text-center w-full mt-2">
+                        <div className="text-[10px] text-[#a855f7] uppercase tracking-widest mb-2 font-bold">Rift Walk (Overclock)</div>
                         <div className="flex gap-2 items-center justify-center">
-                            <div className="flex items-center justify-center gap-1 bg-black border border-purple-500">
-                                <button className="text-white px-3 py-1 font-bold hover:bg-purple-900" onClick={() => setRiftValue(v => Math.max(1, v - 1))}>-</button>
+                            <div className="flex items-center justify-center gap-1 bg-[#1e293b] border border-[#a855f7]">
+                                <button className="text-white px-3 py-1 font-bold hover:bg-[#a855f7] hover:text-black transition-colors" onClick={() => setRiftValue(v => Math.max(1, v - 1))}>-</button>
                                 <span className="text-white font-bold w-6 text-center text-sm">{riftValue}</span>
-                                <button className="text-white px-3 py-1 font-bold hover:bg-purple-900" onClick={() => setRiftValue(v => Math.min(10, v + 1))}>+</button>
+                                <button className="text-white px-3 py-1 font-bold hover:bg-[#a855f7] hover:text-black transition-colors" onClick={() => setRiftValue(v => Math.min(maxRift, v + 1))}>+</button>
                             </div>
-                            <button className="flex-1 bg-purple-600 text-white font-bold uppercase text-[10px] py-2 hover:bg-white hover:text-purple-600 transition-colors" onClick={executeRiftWalk}>
+                            <button className="flex-1 bg-[#a855f7] text-black font-bold uppercase text-[10px] py-2 hover:bg-white transition-colors" onClick={executeRiftWalk}>
                                 Sacrifice HP for Resonance
                             </button>
                         </div>
                     </div>
                     
-                    <div className="flex justify-between items-center text-[#ff6600] font-bold text-lg bg-black p-2 border border-gray-700 mt-2"><span>CLASS:</span><span>{activeClass}</span></div>
+                    <div className="flex justify-between items-center text-[#d1d5db] font-bold text-lg bg-[#0f172a] p-2 border border-gray-700 mt-2"><span>CLASS:</span><span>{activeClass}</span></div>
 
-                    <div className="bg-black border border-[#00f0ff] p-3 text-center">
+                    <div className="bg-[#0f172a] border border-[#d1d5db] p-3 text-center">
                         <div className="flex justify-between items-center mb-2">
-                            <div className="text-left"><span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest">TOTAL XP</span><div className="text-[#00f0ff] font-bold text-lg">{xp}</div></div>
+                            <div className="text-left"><span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest">TOTAL XP</span><div className="text-[#d1d5db] font-bold text-lg">{xp}</div></div>
                             <div className="text-right"><span className="text-gray-400 text-[10px] uppercase font-bold tracking-widest">AVAILABLE DP</span><div className={`font-bold text-lg ${availDp > 0 ? 'text-[#22c55e]' : 'text-gray-500'}`}>{Math.max(0, availDp)} / {earnedDp}</div></div>
                         </div>
                         <div className="text-[9px] text-gray-500 uppercase tracking-widest text-left">Base DP: 5 | +1 DP per 10 XP</div>
                     </div>
 
+                    {isDeploymentPhase && (
+                        <button className="w-full bg-red-950 border border-red-600 text-white font-bold py-2 text-[10px] mt-2 hover:bg-red-600 transition-colors uppercase" onClick={respecAgent}>
+                            ⚠ Respec Agent
+                        </button>
+                    )}
+
                     <div className="flex gap-2 text-center text-xs mt-2">
-                        <div className="flex-1 bg-black border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Front DP</label><div className="flex items-center justify-between bg-gray-900 border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpFront', Math.max(0, front - 1))}>-</button><span className="font-bold text-white text-lg">{front}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpFront', front + 1) }}>+</button></div></div>
-                        <div className="flex-1 bg-black border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Supp DP</label><div className="flex items-center justify-between bg-gray-900 border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpSupport', Math.max(0, supp - 1))}>-</button><span className="font-bold text-white text-lg">{supp}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpSupport', supp + 1) }}>+</button></div></div>
-                        <div className="flex-1 bg-black border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Back DP</label><div className="flex items-center justify-between bg-gray-900 border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpBack', Math.max(0, back - 1))}>-</button><span className="font-bold text-white text-lg">{back}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpBack', back + 1) }}>+</button></div></div>
+                        <div className="flex-1 bg-[#0f172a] border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Front DP</label><div className="flex items-center justify-between bg-[#1e293b] border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpFront', Math.max(0, front - 1))}>-</button><span className="font-bold text-white text-lg">{front}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpFront', front + 1) }}>+</button></div></div>
+                        <div className="flex-1 bg-[#0f172a] border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Supp DP</label><div className="flex items-center justify-between bg-[#1e293b] border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpSupport', Math.max(0, supp - 1))}>-</button><span className="font-bold text-white text-lg">{supp}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpSupport', supp + 1) }}>+</button></div></div>
+                        <div className="flex-1 bg-[#0f172a] border border-gray-600 p-1.5 flex flex-col"><label className="text-gray-400 block mb-1 font-bold">Back DP</label><div className="flex items-center justify-between bg-[#1e293b] border border-gray-700 mt-auto"><button className="px-2 py-1 hover:text-white" onClick={() => updatePlayer('dpBack', Math.max(0, back - 1))}>-</button><span className="font-bold text-white text-lg">{back}</span><button className="px-2 py-1 hover:text-[#22c55e] disabled:text-gray-600" disabled={availDp <= 0} onClick={() => { if(availDp>0) updatePlayer('dpBack', back + 1) }}>+</button></div></div>
                     </div>
 
                     <div className="mt-4 border-t border-gray-700 pt-4">
                         <h3 className="text-gray-400 mb-2 font-bold uppercase tracking-widest text-xs">Loadout</h3>
-                        <select className="w-full bg-black border border-gray-600 p-2 text-white outline-none mb-2 text-xs" value={player.weaponId || 'w01'} onChange={e => updatePlayer('weaponId', e.target.value)}>
+                        <select className="w-full bg-[#0f172a] border border-gray-600 p-2 text-white outline-none mb-2 text-xs" value={player.weaponId || 'w01'} onChange={e => updatePlayer('weaponId', e.target.value)}>
                             {usableWeapons.length > 0 && (
-                                <optgroup label="✓ SYNERGY ACTIVE (Reqs Met)" className="bg-[#1a222c] text-[#22c55e] font-bold">
+                                <optgroup label="✓ SYNERGY ACTIVE (Reqs Met)" className="bg-[#1e293b] text-[#22c55e] font-bold">
                                     {usableWeapons.map(w => ( <option key={w.id} value={w.id} className="text-white font-normal">{w.name} [{reqString(w)}]</option> ))}
                                 </optgroup>
                             )}
                             {unusableWeapons.length > 0 && (
-                                <optgroup label="⚠ INSUFFICIENT DP" className="bg-[#1a222c] text-red-500 font-bold">
+                                <optgroup label="⚠ INSUFFICIENT DP" className="bg-[#1e293b] text-red-500 font-bold">
                                     {unusableWeapons.map(w => ( <option key={w.id} value={w.id} className="text-gray-400 font-normal">{w.name} [{reqString(w)}]</option> ))}
                                 </optgroup>
                             )}
                         </select>
-                        <div className={`p-2 text-xs border relative ${isSynergy ? 'bg-orange-950/30 border-[#ff6600] text-orange-200' : 'bg-red-950/30 border-red-500 text-red-200'}`}>
+                        <div className={`p-2 text-xs border relative ${isSynergy ? 'bg-[#a855f7]/10 border-[#a855f7] text-[#e9d5ff]' : 'bg-red-950/30 border-red-500 text-red-200'}`}>
                             <div className="font-bold mb-1 uppercase tracking-wider">{isSynergy ? '✓ DP Req Met (Synergy Active)' : '⚠ DP Req Not Met'}</div>
                             <div className="flex justify-between items-center">
-                                <div><div className="font-bold text-white mb-1">Base Dmg: {calcBaseDmg}</div><div>Range: {activeWeapon.range} Hexes</div>{isSynergy && <div className="text-[#ff6600] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}</div>
-                                <button className={`font-bold px-3 py-1 uppercase transition-colors ${(isMyTurn && !player.usedBasicAttack && !disableAttacks && isSynergy) ? 'bg-[#00f0ff] text-black hover:bg-white' : 'bg-gray-800 text-gray-600 cursor-not-allowed'}`} disabled={!isMyTurn || player.usedBasicAttack || disableAttacks || !isSynergy} onClick={primeWeapon}>
+                                <div><div className="font-bold text-white mb-1">Base Dmg: {calcBaseDmg}</div><div>Range: {activeWeapon.range} Hexes</div>{isSynergy && <div className="text-[#a855f7] font-bold mt-1">Bonus: {activeWeapon.bonusDesc}</div>}</div>
+                                <button className={`font-bold px-3 py-1 uppercase transition-colors ${(isMyTurn && !player.usedBasicAttack && !disableAttacks && isSynergy) ? 'bg-[#d1d5db] text-black hover:bg-white' : 'bg-[#0f172a] text-gray-500 cursor-not-allowed'}`} disabled={!isMyTurn || player.usedBasicAttack || disableAttacks || !isSynergy} onClick={primeWeapon}>
                                     {!isSynergy ? 'DP REQ FAILED' : (disableAttacks ? 'LOCKED' : (player.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK'))}
                                 </button>
                             </div>
                         </div>
                     </div>
+
+                    <div className="mt-4 border-t border-gray-700 pt-4 space-y-3">
+                        <div className="flex justify-between items-center mb-2"><h3 className="text-gray-400 font-bold uppercase tracking-widest text-xs">Defensive Actions</h3><button className="text-[10px] bg-[#0f172a] border border-gray-600 px-2 py-0.5 text-white hover:bg-[#d1d5db] hover:text-black transition-colors" onClick={refreshTurn}>↻ Refresh Turn</button></div>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2"><div><span className={(player.usedParry || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#d1d5db] mr-2"}>Front Parry:</span><span className={(player.usedParry || disableDefenses) ? "text-gray-600" : (bonusFront>0 ? "font-bold text-[#a855f7]" : "font-bold text-white")}>{calcFrontParry}</span></div><button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedParry || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedParry || disableDefenses} onClick={() => updatePlayer('usedParry', true)}>{disableDefenses ? 'JAMMED' : (player.usedParry ? 'EXHAUSTED' : 'AVAILABLE')}</button></div>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2"><div><span className={(player.usedIntercept || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#d1d5db] mr-2"}>Support Intercept:</span><span className={(player.usedIntercept || disableDefenses) ? "text-gray-600" : (bonusSupp>0 ? "font-bold text-[#a855f7]" : "font-bold text-white")}>{calcSuppIntercept}</span></div><button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedIntercept || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedIntercept || disableDefenses} onClick={() => updatePlayer('usedIntercept', true)}>{disableDefenses ? 'JAMMED' : (player.usedIntercept ? 'EXHAUSTED' : 'AVAILABLE')}</button></div>
+                        <div className="flex items-center justify-between border-l-2 border-gray-700 pl-2"><div><span className={(player.usedEvade || disableDefenses) ? "text-red-500 line-through mr-2" : "text-[#d1d5db] mr-2"}>Backline Evasion:</span><span className={(player.usedEvade || disableDefenses) ? "text-gray-600" : (bonusBack>0 ? "font-bold text-[#a855f7]" : "font-bold text-white")}>{calcBackEvasion}</span></div><button className={`text-[10px] px-2 py-1 font-bold border ${(player.usedEvade || disableDefenses) ? 'bg-red-900 border-red-500 text-red-200 cursor-not-allowed' : 'bg-transparent border-gray-600 text-gray-400 hover:text-white'}`} disabled={player.usedEvade || disableDefenses} onClick={() => updatePlayer('usedEvade', true)}>{disableDefenses ? 'JAMMED' : (player.usedEvade ? 'EXHAUSTED' : 'AVAILABLE')}</button></div>
+                    </div>
                 </div>
             </div>
 
-            <div className={`bg-[#1a222c] p-4 border flex flex-col items-center justify-center relative overflow-hidden transition-colors ${isOverload ? 'border-red-500 shadow-[0_0_30px_rgba(255,0,0,0.2)]' : 'border-slate-700'}`}>
+            <div className={`bg-[#1e293b] p-4 border flex flex-col items-center justify-center relative overflow-hidden transition-colors ${isOverload ? 'border-red-500 shadow-[0_0_30px_rgba(255,0,0,0.2)]' : 'border-slate-700'}`}>
                 {isOverload && <div className="absolute inset-0 bg-red-900/20 animate-pulse pointer-events-none"></div>}
-                <h2 className={`font-bold text-2xl tracking-widest mb-4 z-10 ${isOverload ? 'text-red-500' : 'text-[#ff6600]'}`}>{isOverload ? 'MAX CAPACITY' : 'RESONANCE'}</h2>
-                <div className={`text-8xl mb-6 z-10 transition-colors ${isOverload ? 'text-red-400 drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] animate-pulse' : 'text-white drop-shadow-[0_0_15px_rgba(255,102,0,0.5)]'}`}>{currentRes}<span className="text-3xl text-gray-500">/10</span></div>
+                <h2 className={`font-bold text-2xl tracking-widest mb-4 z-10 ${isOverload ? 'text-red-500' : 'text-[#d1d5db]'}`}>{isOverload ? 'MAX CAPACITY' : 'RESONANCE'}</h2>
+                <div className={`text-8xl mb-6 z-10 transition-colors ${isOverload ? 'text-red-400 drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] animate-pulse' : 'text-white drop-shadow-[0_0_15px_rgba(209,213,219,0.5)]'}`}>{currentRes}<span className="text-3xl text-gray-500">/10</span></div>
                 
                 <div className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest text-center z-10">System Status:</div>
-                <div className="bg-black border border-gray-700 p-2 text-xs text-center text-[#22c55e] font-bold w-full shadow-inner shadow-[#22c55e]/20">
+                <div className="bg-[#0f172a] border border-gray-700 p-2 text-xs text-center text-[#22c55e] font-bold w-full shadow-inner shadow-[#22c55e]/10">
                     AUTOMATED SYNERGY TRACKING ACTIVE
                 </div>
             </div>
 
-            <div className="bg-[#1a222c] p-4 border border-slate-700 flex flex-col h-full">
-                <h2 className="text-[#00f0ff] font-bold text-xl mb-4 border-b border-gray-700 pb-2">Synthesis Matrix</h2>
+            <div className="bg-[#1e293b] p-4 border border-slate-700 flex flex-col h-full">
+                <h2 className="text-[#d1d5db] font-bold text-xl mb-4 border-b border-gray-700 pb-2 uppercase">Synthesis Matrix</h2>
                 <div className="space-y-3 mb-4 flex-1 overflow-y-auto pr-1">
                     
                     <div className="flex flex-col gap-1">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Skill Name:</span>
-                        <input type="text" className="w-full bg-black border border-[#00f0ff] p-2 text-white outline-none font-bold text-xs" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} />
+                        <input type="text" className="w-full bg-[#0f172a] border border-[#d1d5db] p-2 text-white outline-none font-bold text-xs" placeholder="Custom Action" value={builder.name} onChange={e=>setBuilder({...builder, name: e.target.value})} />
                     </div>
 
                     <div className="flex flex-col gap-1 mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Type:</span>
-                        <select className="w-full bg-black border border-[#ff6600] p-2 text-white text-[10px] font-bold outline-none cursor-pointer shadow-[0_0_10px_rgba(255,102,0,0.2)]" value={builder.payload || 'damage'} onChange={e=>setBuilder({...builder, payload: e.target.value})}>
+                        <select className="w-full bg-[#0f172a] border border-[#a855f7] p-2 text-[#e9d5ff] text-[10px] font-bold outline-none cursor-pointer shadow-[0_0_10px_rgba(168,85,247,0.2)]" value={builder.payload || 'damage'} onChange={e=>setBuilder({...builder, payload: e.target.value})}>
                             <option value="damage">[OFFENSIVE] - Inflict Damage</option>
                             <option value="heal">[RESTORATIVE] - Heal Hit Points</option>
                             <option value="battery">[ENERGIZE] - Transfer Resonance</option>
@@ -292,23 +325,23 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     
                     <div className="flex flex-col gap-1 mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Element Affinity:</span>
-                        <select className="w-full bg-black border border-gray-600 p-2 text-white text-[10px] outline-none focus:border-[#ff6600] cursor-pointer" value={builder.elementRaw || 'Kinetic'} onChange={handleElementChange}>
+                        <select className="w-full bg-[#0f172a] border border-gray-600 p-2 text-white text-[10px] outline-none focus:border-[#d1d5db] cursor-pointer" value={builder.elementRaw || 'Kinetic'} onChange={handleElementChange}>
                             {Object.keys(ELEMENT_DESCRIPTIONS).map(el => <option key={el} value={el}>{el.toUpperCase()} - {ELEMENT_DESCRIPTIONS[el]}</option>)}
                         </select>
                     </div>
 
                     <div className="flex justify-between items-center mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Value (v):</span>
-                        <div className="flex items-center justify-center gap-1 bg-black border border-gray-600 p-1">
-                            <button className="text-white px-2 hover:bg-gray-800" onClick={() => setBuilder({...builder, d: Math.max(0, builder.d - 1)})}>-</button>
+                        <div className="flex items-center justify-center gap-1 bg-[#0f172a] border border-gray-600 p-1">
+                            <button className="text-white px-2 hover:bg-gray-800 transition-colors" onClick={() => setBuilder({...builder, d: Math.max(0, builder.d - 1)})}>-</button>
                             <span className="text-white font-bold w-6 text-center text-xs">{builder.d}</span>
-                            <button className="text-white px-2 hover:bg-gray-800" onClick={() => setBuilder({...builder, d: builder.d + 1})}>+</button>
+                            <button className="text-white px-2 hover:bg-gray-800 transition-colors" onClick={() => setBuilder({...builder, d: builder.d + 1})}>+</button>
                         </div>
                     </div>
                     
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Target Area (a):</span>
-                        <select className="w-40 bg-black border border-gray-600 p-1 text-white text-[10px] cursor-pointer" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: e.target.value})}>
+                        <select className="w-40 bg-[#0f172a] border border-gray-600 p-1 text-white text-[10px] cursor-pointer" value={String(builder.a)} onChange={e=>setBuilder({...builder, a: e.target.value})}>
                             <option value="0">Single Target (u=0)</option>
                             <option value="1">Small Radius: 1-Hex (u=1)</option>
                             <option value="line3">Line: 3-Hex Beam (u=1)</option>
@@ -320,17 +353,14 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <div className="flex flex-col gap-1 mt-2">
                         <div className="flex justify-between items-center">
                             <span className="text-purple-400 text-[10px] uppercase font-bold tracking-wider">State Utility (u):</span>
-                            <select 
-                                className={`w-16 bg-black border border-purple-500 p-1 text-white text-[10px] text-center font-bold ${builder.effectName ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} 
-                                value={String(builder.u)} 
-                                disabled={!!builder.effectName}
-                                onChange={e=>setBuilder({...builder, u: safeInt(e.target.value)})}
-                            >
-                                <option value="0">0</option><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
-                            </select>
+                            <div className={`flex items-center justify-center gap-1 bg-[#0f172a] border border-purple-500 p-1 ${builder.effectName ? 'opacity-50' : ''}`}>
+                                <button className="text-white px-2 hover:bg-purple-900 transition-colors" disabled={!!builder.effectName} onClick={() => setBuilder({...builder, u: Math.max(0, builder.u - 1)})}>-</button>
+                                <span className="text-white font-bold w-6 text-center text-xs">{builder.u}</span>
+                                <button className="text-white px-2 hover:bg-purple-900 transition-colors" disabled={!!builder.effectName} onClick={() => setBuilder({...builder, u: builder.u + 1})}>+</button>
+                            </div>
                         </div>
                         <select 
-                            className="w-full bg-black border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer mt-1" 
+                            className="w-full bg-[#0f172a] border border-purple-500 p-2 text-white outline-none text-[10px] cursor-pointer mt-1" 
                             value={builder.effectName || ''} 
                             onChange={e => {
                                 const st = e.target.value;
@@ -346,7 +376,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     
                     <div className="flex flex-col gap-1 mt-2">
                         <span className="text-yellow-500 text-[10px] uppercase font-bold tracking-wider">Terrain Gen (t):</span>
-                        <select className="w-full bg-black border border-yellow-600 p-2 text-white text-[10px] cursor-pointer" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
+                        <select className="w-full bg-[#0f172a] border border-yellow-600 p-2 text-white text-[10px] cursor-pointer" value={builder.terrain || ''} onChange={e=>setBuilder({...builder, terrain: e.target.value})}>
                             <option value="">-- NO TERRAIN MODIFICATION --</option>
                             <option value="minor">[MINOR] - Movement costs 2 pts (Cost: +1u)</option>
                             <option value="clear">[CLEAR] - Removes existing terrain (Cost: +2u)</option>
@@ -358,12 +388,14 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                     <div className="flex flex-col gap-1 mt-2">
                         <div className="flex justify-between items-center">
                             <span className="text-blue-400 text-[10px] uppercase font-bold tracking-wider">Mobility Dist (m):</span>
-                            <select className="w-16 bg-black border border-blue-500 p-1 text-white text-[10px] cursor-pointer text-center font-bold" value={String(builder.m)} onChange={e=>setBuilder({...builder, m: safeInt(e.target.value)})}>
-                                <option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
-                            </select>
+                            <div className="flex items-center justify-center gap-1 bg-[#0f172a] border border-blue-500 p-1">
+                                <button className="text-white px-2 hover:bg-blue-900 transition-colors" onClick={() => setBuilder({...builder, m: Math.max(0, builder.m - 1)})}>-</button>
+                                <span className="text-white font-bold w-6 text-center text-xs">{builder.m}</span>
+                                <button className="text-white px-2 hover:bg-blue-900 transition-colors" onClick={() => setBuilder({...builder, m: builder.m + 1})}>+</button>
+                            </div>
                         </div>
                         {builder.m > 0 && (
-                            <select className="w-full bg-black border border-blue-500 p-2 text-white outline-none text-[10px] cursor-pointer animate-fade-in mt-1" value={builder.mobilityName || ''} onChange={e=>setBuilder({...builder, mobilityName: e.target.value})}>
+                            <select className="w-full bg-[#0f172a] border border-blue-500 p-2 text-white outline-none text-[10px] cursor-pointer animate-fade-in mt-1" value={builder.mobilityName || ''} onChange={e=>setBuilder({...builder, mobilityName: e.target.value})}>
                                 <option value="">-- SELECT MOBILITY --</option>
                                 <option value="Blink">[BLINK] - Teleport Self (Ignores pathing)</option>
                                 <option value="Push">[PUSH] - Force target away</option>
@@ -372,28 +404,28 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2 mt-2 bg-gray-900 border border-gray-700 p-2">
+                    <div className="flex items-center gap-2 mt-3 bg-[#0f172a] border border-gray-700 p-2">
                         <input type="checkbox" id="echoToggle" className="cursor-pointer" checked={builder.isEcho || false} onChange={e => setBuilder({...builder, isEcho: e.target.checked})} />
                         <label htmlFor="echoToggle" className="text-gray-300 text-[10px] uppercase font-bold tracking-wider cursor-pointer select-none">
                             Manifest as Echo (Deploys static construct to cast)
                         </label>
                     </div>
 
-                    <div className="bg-gray-900 border border-gray-700 p-2 mt-4">
+                    <div className="bg-[#0f172a] border border-gray-700 p-2 mt-4">
                         <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1 block">Affinity Calculation (α)</span>
-                        <div className={`text-xs font-bold ${affinityData.alpha === 0.75 ? 'text-[#22c55e]' : affinityData.alpha === 2.0 ? 'text-red-500' : 'text-[#00f0ff]'}`}>{affinityData.alpha}x | {affinityData.label}</div>
+                        <div className={`text-xs font-bold ${affinityData.alpha === 0.75 ? 'text-[#22c55e]' : affinityData.alpha === 2.0 ? 'text-red-500' : 'text-[#d1d5db]'}`}>{affinityData.alpha}x | {affinityData.label}</div>
                     </div>
 
                     <div className="mt-2">
                         <span className="text-gray-400 text-[10px] uppercase font-bold tracking-wider mb-1 block">Flavor Text:</span>
-                        <textarea className="w-full bg-black border border-gray-600 text-gray-300 p-2 text-[10px] outline-none resize-none" rows="2" placeholder="E.g., A searing lance..." value={builder.desc || ''} onChange={e=>setBuilder({...builder, desc: e.target.value})}></textarea>
+                        <textarea className="w-full bg-[#0f172a] border border-gray-600 text-gray-300 p-2 text-[10px] outline-none resize-none" rows="2" placeholder="E.g., A searing lance..." value={builder.desc || ''} onChange={e=>setBuilder({...builder, desc: e.target.value})}></textarea>
                     </div>
                 </div>
 
-                <div className="bg-black p-3 border border-[#ff6600] flex justify-between items-center text-[#ff6600] font-bold text-xl mb-4 mt-auto"><span>COST:</span><span>{calcCost} RES</span></div>
-                <div className="flex gap-2 mb-2"><button className="flex-1 bg-[#00f0ff] text-black font-bold border border-[#00f0ff] p-2 hover:bg-white text-xs uppercase" onClick={saveToHUD}>Equip</button><button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase" onClick={saveToSpellbook}>Archive</button></div>
+                <div className="bg-[#0f172a] p-3 border border-[#a855f7] flex justify-between items-center text-[#a855f7] font-bold text-xl mb-4 mt-auto"><span>COST:</span><span>{calcCost} RES</span></div>
+                <div className="flex gap-2 mb-2"><button className="flex-1 bg-[#d1d5db] text-black font-bold border border-[#d1d5db] p-2 hover:bg-white text-xs uppercase transition-colors" onClick={saveToHUD}>Equip</button><button className="flex-1 bg-gray-800 border border-gray-600 p-2 hover:bg-gray-700 text-white text-xs uppercase transition-colors" onClick={saveToSpellbook}>Archive</button></div>
                 <button 
-                    className={`w-full font-bold p-3 uppercase transition-colors mb-4 ${lockImprovise ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-[#ff6600] text-black hover:bg-white'}`} 
+                    className={`w-full font-bold p-3 uppercase transition-colors mb-4 ${lockImprovise ? 'bg-[#0f172a] text-gray-600 cursor-not-allowed border border-gray-700' : 'bg-[#a855f7] text-black hover:bg-white'}`} 
                     disabled={lockImprovise} 
                     onClick={primeImprovised}
                 >
@@ -405,24 +437,24 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
                         const cardCost = parseInt(c.cost) || 0; const isNoFuel = currentRes < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
                         return (
-                            <div key={c.id || Math.random()} className="bg-black border border-[#00f0ff] p-2 text-xs relative group flex flex-col">
+                            <div key={c.id || Math.random()} className="bg-[#0f172a] border border-[#d1d5db] p-2 text-xs relative group flex flex-col">
                                 <div className="flex-1 pr-12 pb-2">
-                                    <div className="font-bold text-[#00f0ff] truncate">{c.name || 'Custom Action'}</div>
+                                    <div className="font-bold text-[#d1d5db] truncate">{c.name || 'Custom Action'}</div>
                                     <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                     <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
                                     {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Restorative</div>}
-                                    {c.payload === 'battery' && <div className="text-[#00f0ff] text-[10px] font-bold mt-1">Energize</div>}
+                                    {c.payload === 'battery' && <div className="text-[#d1d5db] text-[10px] font-bold mt-1">Energize</div>}
                                     {c.isEcho && <div className="text-[#a855f7] text-[10px] font-bold mt-1">Tactical Echo</div>}
                                     {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-12 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                     {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
                                     
-                                    <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
+                                    <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-[#1e293b] text-gray-500 cursor-not-allowed border border-gray-700' : 'bg-[#d1d5db] text-black hover:bg-white'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
                                         {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
                                     </button>
                                 </div>
-                                <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-[#00f0ff] hover:text-black hover:bg-[#00f0ff] transition-colors" onClick={(e) => { e.stopPropagation(); editCardFromHUD(c); }} title="Edit Skill in Matrix">✎</button>
-                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-gray-900 border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }} title="Delete Card">✕</button>
+                                <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-[#1e293b] border-l border-b border-gray-700 text-[#d1d5db] hover:text-black hover:bg-[#d1d5db] transition-colors" onClick={(e) => { e.stopPropagation(); editCardFromHUD(c); }} title="Edit Skill in Matrix">✎</button>
+                                <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-[#1e293b] border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); updatePlayer('customCards', customCards.filter(card => String(card.id) !== String(c.id))); }} title="Delete Card">✕</button>
                             </div>
                         );
                     })}
