@@ -1,3 +1,4 @@
+// src/components/GridBoard.jsx
 /* eslint-disable */
 import React, { useState, useEffect } from 'react';
 import { armory } from '../data/armory';
@@ -164,7 +165,10 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (!e || !e.target) return; if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-            if (activeAction && (activeAction.a === 'line3' || activeAction.a === 'cluster3')) { if (e.key.toLowerCase() === 'r') setAoeRotation(r => (r + 1) % 6); if (e.key.toLowerCase() === 'q') setAoeRotation(r => (r - 1 + 6) % 6); }
+            if (activeAction && (activeAction.a === 'line3' || activeAction.a === 'cluster3' || activeAction.coreMobility === 'Push' || activeAction.coreMobility === 'Pull')) { 
+                if (e.key.toLowerCase() === 'r') setAoeRotation(r => (r + 1) % 6); 
+                if (e.key.toLowerCase() === 'q') setAoeRotation(r => (r - 1 + 6) % 6); 
+            }
         };
         window.addEventListener('keydown', handleKeyDown); return () => window.removeEventListener('keydown', handleKeyDown);
     }, [activeAction]);
@@ -221,7 +225,12 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         if (targetIdx === null || targetIdx === undefined || targetIdx === -1) return []; let hexes = [targetIdx]; if (!aType || aType === 0 || aType === '0') return hexes;
         if (aType === 1 || aType === '1') { for (let i = 0; i < 150; i++) if (getHexDistance(targetIdx, i) === 1) hexes.push(i); return hexes; } if (aType === 2 || aType === '2') { for (let i = 0; i < 150; i++) if (getHexDistance(targetIdx, i) <= 2 && i !== targetIdx) hexes.push(i); return hexes; }
         const tCube = getCubeCoords(targetIdx); let dirIdx = 0;
-        if (originPosIdx !== null && originPosIdx !== undefined && originPosIdx !== targetIdx) { const tCoords = getHexCoords(targetIdx); const aCoords = getHexCoords(originPosIdx); let angle = Math.atan2(tCoords.y - aCoords.y, tCoords.x - aCoords.x) * (180 / Math.PI); if (isNaN(angle)) angle = 0; if (angle < 0) angle += 360; dirIdx = (Math.round(angle / 60) % 6 + 6) % 6; } 
+        if (originPosIdx !== null && originPosIdx !== undefined && originPosIdx !== targetIdx) { 
+            const tCoords = getHexCoords(targetIdx); const aCoords = getHexCoords(originPosIdx); 
+            let angle = Math.atan2(tCoords.y - aCoords.y, tCoords.x - aCoords.x) * (180 / Math.PI); 
+            if (isNaN(angle)) angle = 0; if (angle < 0) angle += 360; 
+            dirIdx = (Math.round(angle / 60) % 6 + 6) % 6; 
+        } 
         else { const targetToken = activeTokens.find(t => t && t.pos === targetIdx); if (targetToken && targetToken.facing !== undefined) dirIdx = targetToken.facing; }
         dirIdx = (dirIdx + rotOffset) % 6; if (dirIdx < 0) dirIdx += 6; const hexDirs = [{q:1,r:0,s:-1}, {q:0,r:1,s:-1}, {q:-1,r:1,s:0}, {q:-1,r:0,s:1}, {q:0,r:-1,s:1}, {q:1,r:-1,s:0}]; const d = hexDirs[dirIdx] || hexDirs[0];
         if (aType === 'line3') { for (let step = 1; step <= 2; step++) { const nIdx = getIndexFromCube(tCube.q + d.q*step, tCube.r + d.r*step); if (nIdx !== null) { hexes.push(nIdx); if (gridData && gridData[nIdx] && (gridData[nIdx].terrain === 'severe' || gridData[nIdx].terrain === 'steam')) break; } } } 
@@ -253,17 +262,6 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         pushUpdate(s => ({ ...s, activeAction: { type: 'move', source: String(srcName), sourceId: String(t.id), isEnemy: t.type === 'enemy', isTokenId: true } }));
     };
 
-    const primeCard = (c, isImprovised = false, originalCost = 0, targetTokenOverride = null) => {
-        const activeT = targetTokenOverride || activeTokens.find(t => t && t.id === selectedToken); if (!activeT) return;
-        const p = safePlayers[activeT.refId] || {}; const currentRes = p.resPool ?? 3; const requiredRes = isImprovised ? 1 : safeInt(c.cost); 
-        if (!isGM && currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
-        const activeCoreStates = safeArray(p.statuses).map(st => getCoreState(st)); const isBlind = activeCoreStates.includes('Blind'); const disableAttacks = activeCoreStates.includes('Stunned'); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED.");
-        const wpn = safeArmory.find(w => String(w.id) === String(p.weaponId || 'w01')) || safeArmory[0];
-        let finalRange = isBlind ? '1' : (wpn.range || '1-3'); let finalAoe = isBlind ? 0 : (c.isEcho ? 0 : (c.a !== undefined ? c.a : 0)); if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-        const mobilityRaw = c.mobilityName || c.mobility || ''; const coreMobility = getCoreMobility(mobilityRaw); const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
-        pushUpdate(s => ({ ...s, activeAction: { type: isBlink ? 'blink' : 'target', source: activeT.type === 'echo' ? `Echo of ${p.name || 'Player'}` : String(p.name || 'Player'), sourceId: String(activeT.refId), casterTokenId: activeT.type === 'echo' ? String(activeT.id) : null, isEnemy: false, isBasic: false, isImprovised: isImprovised || false, originalCost: safeInt(originalCost), cost: safeInt(requiredRes), name: String(c.name || 'Custom Action'), payload: String(c.payload || 'damage'), d: safeInt(c.d), a: finalAoe || 0, u: safeInt(c.u), m: safeInt(c.m), coreMobility: String(coreMobility || ''), range: String(finalRange), effectName: String(c.effectName || ''), effectCore: String(c.effectCore || getCoreState(c.effectName) || ''), elementRaw: String(c.elementRaw || 'Kinetic'), elementCore: String(c.elementCore || getCoreElement(c.elementRaw || 'Kinetic')), terrain: String(c.terrain || ''), desc: String(c.desc || ''), cardId: c.id ? String(c.id) : null, isEcho: c.isEcho || false } })); 
-    };
-
     const executeMove = (index) => {
         const targetRow = Math.floor(index / COLS);
         pushUpdate(s => {
@@ -282,40 +280,34 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         });
     };
 
-    const executeBlink = (index) => {
-        pushUpdate(s => {
-            const action = s.activeAction || activeAction; const newTokens = deepClone(safeArray(s.tokens)); const tIdx = findActiveTokenIndex(action, newTokens);
-            if (tIdx !== -1) {
-                const t = newTokens[tIdx]; const gridData = getSafeGrid(s.grid); const targetCell = gridData[index] || { terrain: null };
-                if (targetCell.terrain === 'severe') { alert("Destination hex contains Severe Terrain. Blink aborted."); return s; }
-                t.pos = index; let log = `>> AGENT RELOCATED: Executed [${action.coreMobility || 'Blink'}] displacement vector for ${action.m || 1} hexes.`;
-                let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal ?? 10); let newPlayers = deepClone(s.players || {});
-                if (action.isEnemy && !action.isHijacked) { newEnemyPoolTotal = Math.max(0, newEnemyPoolTotal - (action.cost || 0)); log += `\n>> [-${action.cost || 0} Res] Hostile Action executed.`; } 
-                else if (action.sourceId && !action.isHijacked) { const p = newPlayers[action.sourceId]; if (p) { const pRes = p.resPool ?? 3; if (action.isImprovised) { p.resPool = Math.max(0, pRes - 1); log += `\n>> [-1 Res] Improvised Skill Matrix engaged.`; } else { const costDeduction = parseInt(action.cost) || 0; p.resPool = Math.max(0, pRes - costDeduction); if (costDeduction > 0) log += `\n>> [-${costDeduction} Res] Skill executed.`; } } }
-                if (action.isHijacked) { const eIdx = safeArray(s.encounter?.enemies).findIndex(e => e && String(e.uid) === String(action.sourceId)); if (eIdx !== -1) { const newE = deepClone(safeArray(s.encounter?.enemies)); newE[eIdx].statuses = safeArray(newE[eIdx].statuses).filter(st => getCoreState(st) !== 'Hijacked'); log += `\n>> HIJACK TERMINATED: Target released from Neural Link.`; const res = evaluateCrush(newTokens, gridData, newPlayers, newE, new Set(), log); return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemies: res.eList, logFeed: [...safeArray(s.encounter?.logFeed), { id: Date.now().toString(), text: String(res.logStr) }].slice(-50) }, activeAction: null }; } }
-                const res = evaluateCrush(newTokens, gridData, newPlayers, s.encounter?.enemies || [], new Set(), log);
-                return { ...s, tokens: newTokens, players: res.pObj, encounter: { ...(s.encounter||{}), enemyPoolTotal: newEnemyPoolTotal, logFeed: [...safeArray(s.encounter?.logFeed), { id: Date.now().toString() + Math.random().toString(), text: String(res.logStr) }].slice(-50) }, activeAction: null };
-            }
-            return s;
-        });
-    };
-
     const resolveCombat = (targetHex) => {
         pushUpdate(s => {
             const action = s.activeAction || activeAction; if (!action) return s;
             let newGrid = deepClone(getSafeGrid(s.grid)); let newTokens = deepClone(safeArray(s.tokens)); let fctQueue = [];
-            const attIdx = findActiveTokenIndex(action, newTokens); const originPosIdx = attIdx !== -1 ? newTokens[attIdx].pos : null;
-            if (originPosIdx !== null && !checkLineOfSight(originPosIdx, targetHex, newGrid)) { alert("Target hex is obstructed by Line of Sight."); return s; }
+            const attIdx = findActiveTokenIndex(action, newTokens); let originPosIdx = attIdx !== -1 ? newTokens[attIdx].pos : null;
+            
+            let log = ``; let newPlayers = deepClone(s.players || {}); let newEnemies = deepClone(safeArray(s.encounter?.enemies)); let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal ?? 10);
+            
+            if (action.isBlinkCast) {
+                if (getHexDistance(originPosIdx, targetHex) > action.blinkRange) { alert("Target hex is out of Blink range."); return s; }
+                if (newGrid[targetHex]?.terrain === 'severe') { alert("Cannot blink into severe terrain."); return s; }
+                const tokenOccupied = newTokens.find(t => t && t.pos === targetHex);
+                if (tokenOccupied && (!action.isEcho || action.isEchoSpellCast)) { alert("Target hex is occupied. Cannot blink here."); return s; }
+                
+                newTokens[attIdx].pos = targetHex;
+                originPosIdx = targetHex; 
+                log += `>> BLINK CAST: Relocated to Hex ${targetHex} before resolving payload.\n`;
+            } else if (originPosIdx !== null && !checkLineOfSight(originPosIdx, targetHex, newGrid)) { alert("Target hex is obstructed by Line of Sight."); return s; }
+
             const payloadType = action.payload || 'damage'; const rawDmg = safeInt(action.d); const dispCore = action.elementCore || action.element || 'Kinetic'; const showType = (action.elementRaw && String(action.elementRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${action.elementRaw} [Core: ${dispCore}]` : dispCore;
-            let newPlayers = deepClone(s.players || {}); let newEnemies = deepClone(safeArray(s.encounter?.enemies)); let newEnemyPoolTotal = safeInt(s.encounter?.enemyPoolTotal ?? 10);
-            let hitCount = 0; let actualTargetHex = targetHex; let log = `--- COMBAT LOG: ${action.name || 'Action'} [${showType}] ---\n`;
+            let hitCount = 0; let actualTargetHex = targetHex; log += `--- COMBAT LOG: ${action.name || 'Action'} [${showType}] ---\n`;
             
             const isSurge = safeInt(s.encounter?.round) >= 4;
             const sMult = isSurge ? 2 : 1;
 
             if (action.isImprovised) { const roll = Math.floor(Math.random() * 6) + 1; log += `>> IMPROVISED ROLL: [${roll}]\n`; if (roll >= 5) log += `>> CASCADE: Reality bent to Agent's will.\n`; else if (roll >= 3) { const fbDmg = safeInt(action.originalCost); log += `>> SURGE: Action succeeds, but Agent suffers ${fbDmg} feedback damage.\n`; if (!action.isEnemy && action.sourceId) { const p = newPlayers[action.sourceId]; if (p) { p.currentHp = Math.max(0, safeInt(p.currentHp) - fbDmg); fctQueue.push({ pos: originPosIdx, text: `-${fbDmg}`, color: '#ef4444', id: Math.random() }); } } } else { log += `>> BACKLASH: Catastrophic failure! Trajectory inverted!\n`; if (attIdx !== -1) actualTargetHex = originPosIdx; } }
             
-            if (action.isEcho && !action.isEchoSpellCast) {
+            if (action.isEcho && !action.isEchoSpellCast && !action.isBlinkCast) {
                 if (newTokens.some(t => t.pos === actualTargetHex)) { alert("Target hex occupied. Manifestation failed."); return s; }
                 if (action.sourceId && !action.isHijacked) { const p = newPlayers[action.sourceId]; if (p) { let pRes = p.resPool ?? 3; if (action.isImprovised) { pRes = Math.max(0, pRes - 1); log += `>> [-1 Res] Improvised Echo Manifested.\n`; } else { const costDeduction = safeInt(action.cost); pRes = Math.max(0, pRes - costDeduction); log += `>> [-${costDeduction} Res] Echo Manifested.\n`; } p.resPool = pRes; } }
                 newTokens.push({ id: `echo-${Date.now()}-${Math.floor(Math.random()*1000)}`, type: 'echo', pos: actualTargetHex, facing: originPosIdx !== null && newTokens[attIdx] ? newTokens[attIdx].facing : 0, speed: 0, movementRemaining: 0, refId: action.sourceId, currentHp: 10, maxHp: 10, statuses: [], spell: { ...action, isEcho: false, isEchoSpellCast: true } });
@@ -330,7 +322,21 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 if (!t) return;
                 if (aoeHexes.includes(t.pos)) {
                     hitCount++; const targetCoords = getHexCoords(t.pos); let isFlanking = false;
-                    if ((!effectiveAoe || effectiveAoe === '0' || effectiveAoe === 0) && originPosIdx !== null && originPosIdx !== t.pos) { const aCoords = getHexCoords(originPosIdx); const dx = aCoords.x - targetCoords.x; const dy = aCoords.y - targetCoords.y; let angle = Math.atan2(dy, dx) * (180 / Math.PI); if (isNaN(angle)) angle = 0; if (angle < 0) angle += 360; const facingAngle = (t.facing || 0) * 60; let diff = Math.abs(angle - facingAngle); if (isNaN(diff)) diff = 0; if (diff > 180) diff = 360 - diff; if (diff > 90) isFlanking = true; }
+                    
+                    if ((!effectiveAoe || effectiveAoe === '0' || effectiveAoe === 0) && originPosIdx !== null && originPosIdx !== t.pos) { 
+                        const aCoords = getHexCoords(originPosIdx); 
+                        const dx = aCoords.x - targetCoords.x; 
+                        const dy = aCoords.y - targetCoords.y; 
+                        let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                        if (isNaN(angle)) angle = 0; 
+                        if (angle < 0) angle += 360; 
+                        const facingAngle = (((t.facing || 0) * 60) - 90 + 360) % 360; 
+                        let diff = Math.abs(angle - facingAngle); 
+                        if (isNaN(diff)) diff = 0; 
+                        if (diff > 180) diff = 360 - diff; 
+                        if (diff > 89) isFlanking = true; 
+                    }
+                    
                     let baseCellElem = newGrid[t.pos]?.terrainElement; let isOnSteamReact = baseCellElem === 'Cryo' && dispCore === 'Thermal'; let isOnCombustReact = baseCellElem === 'Toxic' && dispCore === 'Thermal'; let isOnConductReact = (baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro'; let isOnAnnihilateReact = (baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void');
                     
                     if (t.type === 'echo') {
@@ -353,7 +359,6 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                             else if (payloadType === 'battery') { const transfer = rawDmg * (action.isEnemy ? 1 : sMult); newEnemyPoolTotal = Math.min(100, newEnemyPoolTotal + transfer); log += `Hostile [${enemy.name}]: Transferred ${transfer} Resonance to the Global Hostile Pool.\n`; fctQueue.push({ pos: t.pos, text: `+${transfer} RES`, color: '#ff6600', id: Math.random() }); } 
                             else {
                                 if (rpsMult === 1.5) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> AFFINITY ADVANTAGE: 1.5x Dmg\n`; } if (rpsMult === 0.5) { incomingDmg = Math.ceil(incomingDmg * 0.5); log += `>> AFFINITY DISADVANTAGE: 0.5x Dmg\n`; } if (isFlanking) { incomingDmg = Math.ceil(incomingDmg * 1.5); log += `>> FLANKING BONUS: 1.5x Dmg\n`; }
-                                if (rpsMult === 1.5 || coreStates.includes('Vulnerable')) triggeredExploit = true; if (isFlanking) triggeredTagTeam = true;
                                 if (isOnSteamReact) { incomingDmg += 5; log += `>> STEAM BLAST: (+5 Dmg)\n`; } if (isOnCombustReact) { incomingDmg += 5; log += `>> COMBUSTION: (+5 Dmg)\n`; } if (isOnConductReact) { incomingDmg += 5; log += `>> CONDUCTION: (+5 Dmg)\n`; } if (isOnAnnihilateReact) { incomingDmg += 5; log += `>> ANNIHILATION: (+5 Dmg)\n`; }
                                 if (coreStates.includes('Vulnerable')) incomingDmg = Math.ceil(incomingDmg * 1.5); if (coreStates.includes('Shielded')) { incomingDmg = Math.max(0, incomingDmg - 5); log += `>> [Shielded] mitigated 5 damage.\n`; } if (coreStates.includes('Invulnerable')) { incomingDmg = 0; log += `>> [Invulnerable] completely negated the attack.\n`; } if (coreStates.includes('Evasive') && !isExecute) log += `>> [Evasive] triggered.\n`;
 
@@ -396,15 +401,17 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
                     if (safeInt(action.m) > 0 && originPosIdx !== null && originPosIdx !== t.pos) {
                         if (action.coreMobility === 'Push' || action.coreMobility === 'Pull') {
+                            let pushDirIdx = aoeRotation % 6; if (action.coreMobility === 'Pull') pushDirIdx = (aoeRotation + 3) % 6;
+                            const hexDirs = [{q:1,r:0,s:-1}, {q:0,r:1,s:-1}, {q:-1,r:1,s:0}, {q:-1,r:0,s:1}, {q:0,r:-1,s:1}, {q:1,r:-1,s:0}];
+                            const pushVector = hexDirs[pushDirIdx];
+                            
                             let pushPos = t.pos; let collisionDmg = 0; const mobDist = safeInt(action.m);
                             for (let step = 0; step < mobDist; step++) {
-                                const adjHexes = getAdjacentHexes(pushPos); const validHexes = adjHexes.filter(h => newGrid && newGrid[h] && newGrid[h].terrain !== 'severe');
-                                if (validHexes.length === 0) { collisionDmg += (mobDist - step); break; }
-                                validHexes.sort((a,b) => { const distA = getHexDistance(a, originPosIdx); const distB = getHexDistance(b, originPosIdx); return action.coreMobility === 'Push' ? distB - distA : distA - distB; });
-                                const bestHex = validHexes[0]; const currentDist = getHexDistance(pushPos, originPosIdx); const bestDist = getHexDistance(bestHex, originPosIdx);
-                                if (action.coreMobility === 'Push' && bestDist <= currentDist) { collisionDmg += (mobDist - step); break; } if (action.coreMobility === 'Pull' && bestDist >= currentDist) { collisionDmg += (mobDist - step); break; } pushPos = bestHex;
+                                const cCube = getCubeCoords(pushPos); const nextIdx = getIndexFromCube(cCube.q + pushVector.q, cCube.r + pushVector.r);
+                                if (nextIdx === null || (newGrid && newGrid[nextIdx] && newGrid[nextIdx].terrain === 'severe')) { collisionDmg += (mobDist - step); break; }
+                                pushPos = nextIdx;
                             }
-                            t.pos = pushPos; log += `>> FORCED MOVEMENT: Entity thrown via [${action.coreMobility}] momentum.\n`;
+                            t.pos = pushPos; log += `>> FORCED MOVEMENT: Entity ${action.coreMobility === 'Push' ? 'pushed' : 'pulled'} via custom vector.\n`;
                             if (collisionDmg > 0) {
                                 if (t.type === 'enemy') { const eIndex = newEnemies.findIndex(e => e && String(e.uid) === String(t.refId)); if (eIndex !== -1 && newEnemies[eIndex].isActive) { newEnemies[eIndex].currentHp = Math.max(0, newEnemies[eIndex].currentHp - collisionDmg); if (newEnemies[eIndex].currentHp <= 0) deadEnemyUids.add(String(t.refId)); } } else if (t.type === 'player') { const p = newPlayers[t.refId]; if (p) p.currentHp = Math.max(0, safeInt(p.currentHp) - collisionDmg); } else if (t.type === 'echo') { t.currentHp -= collisionDmg; if(t.currentHp <= 0) deadEchoIds.add(t.id); }
                                 log += `>> SLAM COLLISION: Entity struck impassable terrain for ${collisionDmg} physical damage.\n`;
@@ -479,7 +486,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
     };
 
     const handleHexClick = (index) => {
-        if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') executeMove(index); else if (activeAction.type === 'blink') executeBlink(index); else if (activeAction.type === 'target') resolveCombat(index); } 
+        if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') executeMove(index); else if (activeAction.type === 'target') resolveCombat(index); } 
         else if (isGM && safeEnc?.round === 0) { const targetRow = Math.floor(index / COLS); if (targetRow < 5 && draftEnemyId) { handleDeployClick(index, 'enemy', draftEnemyId); } else if (targetRow >= 5 && draftPlayerId) { handleDeployClick(index, 'player', draftPlayerId); } else { setSelectedToken(null); } } 
         else if (paintBrush) {
             if (!isGM) return alert("Access Denied: Only the GM can overwrite grid terrain.");
@@ -528,17 +535,35 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
 
     const renderTargetPreviews = () => {
         if (!activeAction || activeAction.type !== 'target' || hoveredHex === null) return null;
-        const originTokenIdx = findActiveTokenIndex(activeAction, activeTokens); const originPosIdx = originTokenIdx !== -1 ? activeTokens[originTokenIdx].pos : null;
-        if (originPosIdx !== null && activeAction.a === 0 && !checkLineOfSight(originPosIdx, hoveredHex, activeGrid)) return null;
+        const originTokenIdx = findActiveTokenIndex(activeAction, activeTokens); 
+        let originPosIdx = originTokenIdx !== -1 ? activeTokens[originTokenIdx].pos : null;
+        
+        if (activeAction.isBlinkCast) originPosIdx = hoveredHex; 
+        else if (originPosIdx !== null && activeAction.a === 0 && !checkLineOfSight(originPosIdx, hoveredHex, activeGrid)) return null;
+        
         const effectiveAoe = (activeAction.isEcho && !activeAction.isEchoSpellCast) ? 0 : activeAction.a;
         const aoeHexes = getAoEHexes(hoveredHex, originPosIdx, effectiveAoe, aoeRotation, activeGrid);
         const payloadType = activeAction.payload || 'damage'; const rawDmg = safeInt(activeAction.d); const dispCore = activeAction.elementCore || activeAction.elementRaw || 'Kinetic'; const isExecute = getCoreState(activeAction.effectName) === 'Execute';
+        
         return activeTokens.map(t => {
             if (!t || t.pos === null || t.pos === undefined || t.pos < 0 || t.pos >= 150 || !aoeHexes.includes(t.pos)) return null;
             let isInactive = false; if (t.type === 'enemy') { const linkedEnemy = safeArray(safeEnc?.enemies).find(e => e && String(e.uid) === String(t.refId)); if (linkedEnemy && !linkedEnemy.isActive) isInactive = true; } if (isInactive) return null;
 
             let isFlanking = false;
-            if ((!effectiveAoe || effectiveAoe === '0' || effectiveAoe === 0) && originPosIdx !== null && originPosIdx !== t.pos) { const tCoords = getHexCoords(t.pos); const aCoords = getHexCoords(originPosIdx); const dx = aCoords.x - tCoords.x; const dy = aCoords.y - tCoords.y; let angle = Math.atan2(dy, dx) * (180 / Math.PI); if (isNaN(angle)) angle = 0; if (angle < 0) angle += 360; const facingAngle = (t.facing || 0) * 60; let diff = Math.abs(angle - facingAngle); if (isNaN(diff)) diff = 0; if (diff > 180) diff = 360 - diff; if (diff > 90) isFlanking = true; }
+            if ((!effectiveAoe || effectiveAoe === '0' || effectiveAoe === 0) && originPosIdx !== null && originPosIdx !== t.pos) { 
+                const tCoords = getHexCoords(t.pos); 
+                const aCoords = getHexCoords(originPosIdx); 
+                const dx = aCoords.x - tCoords.x; 
+                const dy = aCoords.y - tCoords.y; 
+                let angle = Math.atan2(dy, dx) * (180 / Math.PI); 
+                if (isNaN(angle)) angle = 0; 
+                if (angle < 0) angle += 360; 
+                const facingAngle = (((t.facing || 0) * 60) - 90 + 360) % 360; 
+                let diff = Math.abs(angle - facingAngle); 
+                if (isNaN(diff)) diff = 0; 
+                if (diff > 180) diff = 360 - diff; 
+                if (diff > 89) isFlanking = true; 
+            }
 
             let baseCellElem = activeGrid[t.pos]?.terrainElement; let isOnSteamReact = baseCellElem === 'Cryo' && dispCore === 'Thermal'; let isOnCombustReact = baseCellElem === 'Toxic' && dispCore === 'Thermal'; let isOnConductReact = (baseCellElem === 'Cryo' || baseCellElem === 'Steam') && dispCore === 'Electro'; let isOnAnnihilateReact = (baseCellElem === 'Void' && dispCore === 'Radiant') || (baseCellElem === 'Radiant' && dispCore === 'Void');
 
@@ -591,24 +616,32 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
         let originToken = null; let minR = 1; let maxR = 1;
         if (activeAction) {
             const tIdx = findActiveTokenIndex(activeAction, activeTokens); if (tIdx !== -1) originToken = activeTokens[tIdx];
-            if (activeAction.type === 'move' || activeAction.type === 'blink') { minR = 1; maxR = 1; } 
+            if (activeAction.type === 'move' || activeAction.isBlinkCast) { minR = 1; maxR = 1; } 
             else if (activeAction.range) { const parts = String(activeAction.range).split('-'); if (parts.length === 2) { minR = parseInt(parts[0]); maxR = parseInt(parts[1]); } else { minR = 0; maxR = parseInt(parts[0]); } }
         }
         
         const effectiveAoe = (activeAction && activeAction.isEcho && !activeAction.isEchoSpellCast) ? 0 : (activeAction ? activeAction.a : 0);
-        const aoeHexes = activeAction ? getAoEHexes(hoveredHex !== null ? hoveredHex : -1, originToken ? originToken.pos : null, effectiveAoe, aoeRotation, activeGrid) : [];
+        const aoeHexes = activeAction ? getAoEHexes(hoveredHex !== null ? hoveredHex : -1, originToken ? (activeAction.isBlinkCast ? hoveredHex : originToken.pos) : null, effectiveAoe, aoeRotation, activeGrid) : [];
         let validTargetsMap = new Set(); let validMoveMap = new Set(); let showTargetMask = false;
         
         if (activeAction && originToken) {
             if (activeAction.type === 'target') {
                 showTargetMask = true;
-                activeGrid.forEach((c, idx) => { const dist = getHexDistance(originToken.pos, idx); if (dist >= minR && dist <= maxR && c.terrain !== 'severe' && c.terrain !== 'steam' && checkLineOfSight(originToken.pos, idx, activeGrid)) validTargetsMap.add(idx); });
-            } else if (activeAction.type === 'move' || activeAction.type === 'blink') {
+                if (activeAction.isBlinkCast) {
+                    activeGrid.forEach((c, idx) => { 
+                        const dist = getHexDistance(originToken.pos, idx); 
+                        if (dist <= activeAction.blinkRange && c.terrain !== 'severe') {
+                            const isOcc = activeTokens.some(t => t.pos === idx);
+                            if (!isOcc || activeAction.isEcho) validTargetsMap.add(idx); 
+                        }
+                    });
+                } else {
+                    activeGrid.forEach((c, idx) => { const dist = getHexDistance(originToken.pos, idx); if (dist >= minR && dist <= maxR && c.terrain !== 'severe' && c.terrain !== 'steam' && checkLineOfSight(originToken.pos, idx, activeGrid)) validTargetsMap.add(idx); });
+                }
+            } else if (activeAction.type === 'move') {
                 showTargetMask = true;
                 activeGrid.forEach((c, idx) => {
-                    const dist = getHexDistance(originToken.pos, idx);
-                    if (activeAction.type === 'move') { if (safeEnc?.round === 0) { const targetRow = Math.floor(idx / COLS); if (originToken.type === 'player' && targetRow >= 5) validMoveMap.add(idx); if (originToken.type === 'enemy' && targetRow < 5) validMoveMap.add(idx); } else if (reachableCache.has(idx)) validMoveMap.add(idx); } 
-                    else if (activeAction.type === 'blink') { if (dist > 0 && dist <= safeInt(activeAction.m || 1) && c.terrain !== 'severe') validMoveMap.add(idx); }
+                    if (safeEnc?.round === 0) { const targetRow = Math.floor(idx / COLS); if (originToken.type === 'player' && targetRow >= 5) validMoveMap.add(idx); if (originToken.type === 'enemy' && targetRow < 5) validMoveMap.add(idx); } else if (reachableCache.has(idx)) validMoveMap.add(idx);
                 });
             }
         }
@@ -623,7 +656,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             let isTargetable = false; let isMovable = false; let isAoETarget = false; let isBlockedByLoS = false; let isDimmedByMask = false;
 
             if (activeAction) {
-                if (activeAction.type === 'move' || activeAction.type === 'blink') { if (validMoveMap.has(idx)) isMovable = true; else isDimmedByMask = true; } 
+                if (activeAction.type === 'move') { if (validMoveMap.has(idx)) isMovable = true; else isDimmedByMask = true; } 
                 else if (activeAction.type === 'target') { if (validTargetsMap.has(idx)) isTargetable = true; else isDimmedByMask = true; if (hoveredHex !== null && aoeHexes.includes(idx)) { isAoETarget = true; isDimmedByMask = false; } if (!isTargetable && !isAoETarget) isBlockedByLoS = true; }
             }
 
@@ -647,7 +680,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
             if (t.type === 'player') { const p = safePlayers[t.refId] || {}; if (p.name) displayChar = String(p.name).substring(0, 2).toUpperCase(); } else if (t.type === 'enemy') { const e = activeEnemies.find(en => en && String(en.uid) === String(t.refId)); if (e && e.name) displayChar = String(e.name).substring(0, 2).toUpperCase(); }
             const showHoverControls = selectedToken === t.id && (isGM || (t.type === 'player' && String(t.refId) === String(localId))); const isAct = safeEnc?.activeTokenId === String(t.id); const tokZ = isAct ? 50 : (selectedToken === t.id ? 40 : 30);
             return (
-                <div key={`tok-${t.id}`} draggable={safeEnc?.round === 0 && t.type !== 'echo'} onDragStart={(e) => { if(e) { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'moveToken', tokenId: t.id })); } }} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold shadow-lg cursor-pointer transition-transform hover:scale-110 ${isAct ? 'ring-4 ring-white' : ''}`} onClick={(e) => { e.stopPropagation(); if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') return executeMove(t.pos); if (activeAction.type === 'blink') return executeBlink(t.pos); if (activeAction.type === 'target') return resolveCombat(t.pos); } setSelectedToken(selectedToken === t.id ? null : t.id); }} style={{ zIndex: tokZ, backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, border: t.type === 'echo' ? '2px solid black' : 'none' }}>
+                <div key={`tok-${t.id}`} draggable={safeEnc?.round === 0 && t.type !== 'echo'} onDragStart={(e) => { if(e) { e.stopPropagation(); e.dataTransfer.setData('text/plain', JSON.stringify({ action: 'moveToken', tokenId: t.id })); } }} className={`absolute w-10 h-10 rounded-full flex flex-col items-center justify-center font-bold shadow-lg cursor-pointer transition-transform hover:scale-110 ${isAct ? 'ring-4 ring-white' : ''}`} onClick={(e) => { e.stopPropagation(); if (activeAction) { if (!authorizeActionExecution()) return; if (activeAction.type === 'move') return executeMove(t.pos); if (activeAction.type === 'target') return resolveCombat(t.pos); } setSelectedToken(selectedToken === t.id ? null : t.id); }} style={{ zIndex: tokZ, backgroundColor: tBg, color: txtColor, left: `${x + (hexWidth / 2 - 20) + offsetX}px`, top: `${y + (hexHeight / 2 - 20) + offsetY}px`, border: t.type === 'echo' ? '2px solid black' : 'none' }}>
                     <div className="absolute inset-0 pointer-events-none transition-transform duration-300" style={{ transform: `rotate(${(t.facing || 0) * 60}deg)` }}><div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-black absolute top-1 left-1/2 -translate-x-1/2"></div></div>
                     <span className="text-[11px] z-10 relative">{displayChar}</span>
                     {showHoverControls && ( <div className="absolute -bottom-14 flex gap-1 bg-[#0f172a]/90 p-1 border border-gray-600 rounded shadow-lg pointer-events-auto" style={{ zIndex: 50 }}> <button className="bg-[#1e293b] text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-black" onClick={(e) => rotateToken(e, t.id, -1)} title="Rotate Left">↶</button> <button className="bg-[#22c55e] text-black w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white" onClick={(e) => { e.stopPropagation(); primeTokenMove(t); }} title="Move Token">M</button> <button className="bg-[#1e293b] text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-black" onClick={(e) => rotateToken(e, t.id, 1)} title="Rotate Right">↷</button> {isGM && <button className="bg-red-600 text-white w-6 h-6 flex items-center justify-center text-xs font-bold border border-black hover:bg-white hover:text-red-600 ml-1" onClick={(e) => deleteToken(e, t.id)} title="Delete Token">✕</button>} </div> )}
@@ -740,7 +773,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                                 <button className={`flex-1 font-bold py-1 uppercase text-[10px] border transition-colors ${(p.usedBasicAttack || disableAttacks || !isSynergy) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-[#0f172a] text-white hover:bg-white hover:text-black'}`} style={{ borderColor: (p.usedBasicAttack || disableAttacks || !isSynergy) ? 'gray' : pColor }} disabled={(p.usedBasicAttack || disableAttacks || !isSynergy)} onClick={() => {
                                     if (!isGM && !isThisActiveToken) return alert("System Locked: It is not your turn."); if (!isGM && disableAttacks) return alert("System Locked: Agent is STUNNED."); if (!isGM && p.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn."); if (!isGM && !isSynergy) return alert("System Locked: DP Requirements not met for equipped weapon.");
                                     let finalRange = isBlind ? '1' : (activeWeapon.range || '1'); if (isBlind && !isGM) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
-                                    pushUpdate(s => ({ ...s, activeAction: { type: 'target', isBasic: true, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', effectName: '', terrain: '', desc: '', a: 0, u: 0, source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), range: String(finalRange), elementRaw: String(activeWeapon.element || 'Kinetic'), elementCore: String(getCoreElement(activeWeapon.element || 'Kinetic')), effectCore: '', cost: 0, isEcho: false } }))
+                                    pushUpdate(s => ({ ...s, activeAction: { type: 'target', isBasic: true, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', effectName: '', terrain: '', desc: '', a: 0, u: 0, source: String(p.name || 'Player'), sourceId: String(activeT.refId), isEnemy: false, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), range: String(finalRange), elementRaw: String(activeWeapon.element || 'Kinetic'), elementCore: String(getCoreElement(activeWeapon.element || 'Kinetic')), effectCore: '', cost: 0, isEcho: false, isBlinkCast: false } }))
                                 }}>{(!isSynergy && !isGM) ? 'DP REQ FAILED' : (disableAttacks) ? 'LOCKED' : (p.usedBasicAttack ? 'EXHAUSTED' : 'BASIC ATTACK')}</button>
                             </div>
                         )}
@@ -748,7 +781,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                         <div className="mt-2 text-gray-400 text-xs uppercase font-bold tracking-wider">Active Custom Cards</div>
                         {safeArray(p.customCards).length === 0 ? <div className="text-gray-600 text-xs">No cards loaded in HUD.</div> : null}
                         {safeArray(p.customCards).map(c => {
-                            if (!c) return null; const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore; const cardCost = parseInt(c.cost) || 0; const isNoFuel = (p.resPool ?? 3) < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
+                            if (!c) return null; const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore; const cardCost = parseInt(c.cost) || 0; const isNoFuel = (p.resPool ?? 3) < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlinkCast = safeInt(c.m) > 0 && coreMob === 'Blink';
                             return (
                                 <div key={c.id || Math.random()} className="bg-[#0f172a] border border-[#d1d5db] p-2 text-xs relative group flex flex-col">
                                     <div className="flex-1 pr-6 pb-2">
@@ -756,7 +789,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                                         <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-1 border-b border-gray-800 pb-1 truncate" title={showType}>Type: {showType}</div>
                                         <div className="text-white font-bold mb-1 mt-1 text-[10px]">Cost: -{cardCost} Res</div>
                                         {c.payload === 'heal' && <div className="text-[#22c55e] text-[10px] font-bold mt-1">Restorative</div>} {c.payload === 'battery' && <div className="text-[#d1d5db] text-[10px] font-bold mt-1">Energize</div>} {c.isEcho && <div className="text-[#a855f7] text-[10px] font-bold mt-1">Tactical Echo</div>} {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-2 text-purple-400 text-[10px] font-bold cursor-help">[{String(c.effectName)}]</div>} {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>} {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
-                                        <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks} onClick={() => primeCard(c, false, 0, activeT)}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}</button>
+                                        <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks) ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-white hover:text-black'}`} disabled={isNoFuel || disableAttacks} onClick={() => primeCard(c, false, 0, activeT)}>{disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlinkCast ? 'BLINK CAST' : 'TARGET SKILL'))}</button>
                                     </div>
                                     <button className="absolute top-0 right-0 w-6 h-6 flex items-center justify-center bg-[#1e293b] border-l border-b border-gray-700 text-gray-400 hover:text-white hover:bg-red-800 transition-colors" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const pClone = deepClone(s.players || {}); if (pClone[activeT.refId]) pClone[activeT.refId].customCards = safeArray(pClone[activeT.refId].customCards).filter(item => item && String(item.id) !== String(c.id)); return { ...s, players: pClone }; }); }}>✕</button>
                                 </div>
@@ -770,10 +803,13 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 const linkedEnemy = safeArray(safeEnc?.enemies).find(e => e && String(e.uid) === String(activeT.refId));
                 if (!linkedEnemy) return <div className="w-full md:w-64 bg-[#1e293b] p-4 border border-red-500 font-mono text-red-500">Unlinked Enemy Token</div>;
 
+                let isInactive = false;
+                if (!linkedEnemy.isActive) isInactive = true;
+
                 const eCoreStates = safeArray(linkedEnemy.statuses).map(st => getCoreState(st));
                 const isThisActiveToken = safeEnc.activeTokenId === String(activeT.id);
                 const disableMovement = eCoreStates.includes('Stunned') || eCoreStates.includes('Immobilized') || (!isGM && !isThisActiveToken);
-                const disableAttacks = eCoreStates.includes('Stunned') || (!isGM && !isThisActiveToken);
+                const disableAttacks = eCoreStates.includes('Stunned') || (!isGM && !isThisActiveToken) || isInactive;
                 const isBlind = eCoreStates.includes('Blind');
 
                 return (
@@ -781,6 +817,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                         {isThisActiveToken && isGM && safeEnc.round > 0 && ( <button className="w-full bg-[#a855f7] text-black font-bold py-3 text-sm uppercase tracking-widest hover:bg-white transition-colors border-2 border-[#a855f7] animate-pulse mb-2" onClick={(e) => { e.stopPropagation(); advanceTurn(); }}> End Turn </button> )}
                         <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2"><span className="text-[#a855f7] font-bold tracking-widest uppercase">Hostile Bio-Scan</span><button className="text-gray-400 hover:text-white" onClick={() => setSelectedToken(null)}>✕</button></div>
                         <div className="text-white text-lg font-bold uppercase">{String(linkedEnemy.name || 'Enemy')}</div>
+                        {isInactive && <div className="text-[10px] bg-red-900/50 text-red-400 font-bold px-2 py-1 text-center uppercase tracking-widest border border-red-800">Delayed Phase Token</div>}
                         
                         <div className="bg-[#0f172a] border border-gray-700 p-2 text-center font-bold flex flex-col gap-2 text-[#a855f7]">
                             <div className="flex items-center justify-between"> <div className="text-gray-500 text-[10px] uppercase">Hit Points</div> <div className="flex items-center gap-1"> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(activeT.refId)); if (eIdx !== -1) newE[eIdx].currentHp = Math.max(0, newE[eIdx].currentHp - 1); return { ...s, encounter: { ...s.encounter, enemies: newE }}; }) }}>-</button>} <div className="text-xl text-white">{linkedEnemy.currentHp}</div> {isGM && <button className="text-gray-400 hover:text-white px-2" onClick={(e) => { e.stopPropagation(); pushUpdate(s => { const newE = deepClone(safeArray(s.encounter?.enemies)); const eIdx = newE.findIndex(en => en && String(en.uid) === String(activeT.refId)); if (eIdx !== -1) newE[eIdx].currentHp += 1; return { ...s, encounter: { ...s.encounter, enemies: newE }}; }) }}>+</button>} </div> </div>
@@ -802,7 +839,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                             return (
                                 <div key={aIdx} className="bg-[#0f172a] border border-gray-700 p-2 text-sm flex justify-between items-center relative">
                                     <div> <span className="text-[#d1d5db] font-bold text-xs">{String(ab.name)}</span> {ab.effect && <span title={STATE_DESCRIPTIONS[getCoreState(ab.effect)] || 'State'} className="block text-purple-400 text-[10px] mt-0.5 cursor-help">[{String(ab.effect)}]</span>} {ab.terrain && <span className="block text-yellow-500 text-[10px] mt-0.5">Terrain: [{String(ab.terrain).toUpperCase()}]</span>} </div>
-                                    {isGM && ( <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#a855f7] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => { if (disableAttacks) return alert("System Locked: Entity is STUNNED."); const currentHostileRes = safeEnc?.enemyPoolTotal ?? 10; if (currentHostileRes < ab.cost) return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${ab.cost} RES\nCurrent Pool: ${currentHostileRes} RES`); let finalRange = isBlind ? '1' : ab.range; let finalAoe = isBlind ? 0 : ab.aoe; if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed."); pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(ab.name), payload: 'damage', cost: safeInt(ab.cost), d: safeInt(ab.value), a: finalAoe || 0, range: String(finalRange), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(ab.cost), m: 0, coreMobility: '', u: 0, desc: '' } })); }}>{disableAttacks ? 'LOCKED' : `TARGET (${ab.cost} RES)`}</button> )}
+                                    {isGM && ( <button className={`font-bold px-2 py-1 uppercase text-[10px] border transition-colors ${disableAttacks ? 'bg-gray-800 text-gray-500 border-gray-600 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-[#a855f7] hover:text-black border-gray-600'}`} disabled={disableAttacks} onClick={() => { if (disableAttacks) return alert("System Locked: Entity is STUNNED or not yet active in this phase."); const currentHostileRes = safeEnc?.enemyPoolTotal ?? 10; if (currentHostileRes < ab.cost) return alert(`System Locked: Insufficient Hostile Resonance.\nRequired: ${ab.cost} RES\nCurrent Pool: ${currentHostileRes} RES`); let finalRange = isBlind ? '1' : ab.range; let finalAoe = isBlind ? 0 : ab.aoe; if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed."); pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: String(linkedEnemy.name), sourceId: String(linkedEnemy.uid), isEnemy: true, name: String(ab.name), payload: 'damage', cost: safeInt(ab.cost), d: safeInt(ab.value), a: finalAoe || 0, range: String(finalRange), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: safeInt(ab.cost), m: 0, coreMobility: '', u: 0, desc: '' } })); }}>{disableAttacks ? 'LOCKED' : `TARGET (${ab.cost} RES)`}</button> )}
                                 </div>
                             );
                         })}
@@ -860,10 +897,10 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                     </div>
                 )}
 
-                <div className="absolute bottom-4 left-4 w-72 md:max-w-[320px] flex flex-col z-50 pointer-events-none max-h-56">
-                    <div className="bg-[#0f172a]/90 border border-gray-700 pointer-events-auto flex flex-col h-full shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                <div className="absolute bottom-4 left-4 w-72 md:max-w-[320px] flex flex-col z-50 max-h-56 pointer-events-auto">
+                    <div className="bg-[#0f172a]/90 border border-gray-700 flex flex-col h-full shadow-[0_0_15px_rgba(0,0,0,0.5)]">
                         <div className="bg-[#1e293b] text-gray-300 text-[10px] font-bold uppercase px-3 py-1.5 tracking-widest border-b border-gray-700 shrink-0">Combat Telemetry Log</div>
-                        <div className="flex-1 overflow-y-auto p-3 space-y-2 text-[10px] text-gray-300 font-mono flex flex-col">
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2 text-[10px] text-gray-300 font-mono flex flex-col pointer-events-auto scrollbar-hide">
                             {safeArray(safeEnc.logFeed).slice().reverse().map(l => ( <div key={l.id} className="whitespace-pre-wrap border-b border-gray-800/50 pb-2">{l.text}</div> ))}
                             {safeArray(safeEnc.logFeed).length === 0 && <div className="text-gray-600 italic">Awaiting tactical events...</div>}
                         </div>
@@ -885,7 +922,7 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                             <div className="flex gap-2 mt-2">
                                 {safeArray(activeAction.enemy.abilities).map((ability, aIdx) => {
                                     if (!ability) return null; const ab = normalizeAbility(ability);
-                                    return ( <button key={aIdx} className="bg-black text-white px-3 py-2 text-[10px] font-bold border border-purple-500 hover:bg-purple-500 hover:text-white transition-colors uppercase" onClick={() => { pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: `Hijacked ${activeAction.enemy.name}`, sourceId: String(activeAction.enemy.uid), isEnemy: true, isHijacked: true, hijackControllerId: activeAction.hijackControllerId, name: ab.name, cost: 0, payload: 'damage', d: safeInt(ab.value), a: ab.aoe || 0, range: String(ab.range), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', u: 0, desc: '', isEcho: false } })); }}>{String(ab.name)}</button> );
+                                    return ( <button key={aIdx} className="bg-black text-white px-3 py-2 text-[10px] font-bold border border-purple-500 hover:bg-purple-500 hover:text-white transition-colors uppercase" onClick={() => { pushUpdate(s => ({ ...s, activeAction: { type: 'target', source: `Hijacked ${activeAction.enemy.name}`, sourceId: String(activeAction.enemy.uid), isEnemy: true, isHijacked: true, hijackControllerId: activeAction.hijackControllerId, name: ab.name, cost: 0, payload: 'damage', d: safeInt(ab.value), a: ab.aoe || 0, range: String(ab.range), effectName: String(ab.effect || ''), effectCore: String(getCoreState(ab.effect) || ''), elementRaw: String(ab.element || 'Kinetic'), elementCore: String(getCoreElement(ab.element) || 'Kinetic'), terrain: String(ab.terrain || ''), isBasic: false, isImprovised: false, originalCost: 0, m: 0, coreMobility: '', u: 0, desc: '', isEcho: false, isBlinkCast: false } })); }}>{String(ab.name)}</button> );
                                 })}
                             </div>
                         </div>
@@ -894,11 +931,11 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                 )}
 
                 {activeAction && activeAction.type !== 'hijack_select' && (
-                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.isHijacked ? 'bg-purple-950 border-purple-500 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : activeAction.type === 'move' || activeAction.type === 'blink' ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
+                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 border-2 px-6 py-3 z-50 flex items-center gap-6 shadow-lg animate-pulse ${activeAction.isHijacked ? 'bg-purple-950 border-purple-500 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.3)]' : activeAction.type === 'move' || activeAction.isBlinkCast ? 'bg-[#064e3b] border-[#22c55e] text-[#bbf7d0] shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-red-950 border-red-500 text-red-200 shadow-[0_0_20px_rgba(255,0,0,0.3)]'}`}>
                         <div className="font-mono">
-                            <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.isHijacked ? 'text-purple-400' : activeAction.type === 'move' || activeAction.type === 'blink' ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>{activeAction.isHijacked ? 'Neural Hijack Active' : activeAction.type === 'move' ? 'Movement Array Active' : activeAction.type === 'blink' ? 'Displacement Array Active' : 'Targeting Array Active'} // Source: {String(activeAction.source || 'Player')}</span>
-                            <span className="font-bold text-xl uppercase tracking-wider block mb-1">{activeAction.type === 'move' ? 'Repositioning' : activeAction.type === 'blink' ? `Blinking [${safeInt(activeAction.m) || 1} Hexes]` : String(activeAction.name || 'Action')}</span>
-                            {activeAction.type !== 'move' && activeAction.type !== 'blink' && (
+                            <span className={`text-xs uppercase tracking-widest mb-1 ${activeAction.isHijacked ? 'text-purple-400' : activeAction.type === 'move' || activeAction.isBlinkCast ? 'text-[#4ade80]' : 'text-red-400'} flex items-center gap-2`}>{activeAction.isHijacked ? 'Neural Hijack Active' : activeAction.type === 'move' ? 'Movement Array Active' : activeAction.isBlinkCast ? 'Displacement Array Active' : 'Targeting Array Active'} // Source: {String(activeAction.source || 'Player')}</span>
+                            <span className="font-bold text-xl uppercase tracking-wider block mb-1">{activeAction.type === 'move' ? 'Repositioning' : activeAction.isBlinkCast ? `Blinking [${safeInt(activeAction.blinkRange) || 1} Hexes]` : String(activeAction.name || 'Action')}</span>
+                            {activeAction.type !== 'move' && (
                                 <div className="text-[10px] mt-1 flex gap-3 flex-wrap font-bold text-gray-400 items-center">
                                     {activeAction.isImprovised && <span className="text-[#ff6600] animate-pulse uppercase">⚠ IMPROVISED (1d6) ⚠</span>}
                                     {activeAction.payload === 'heal' && <span className="text-[#22c55e]">PAYLOAD: RESTORATIVE</span>}
@@ -909,14 +946,14 @@ function GridBoardInner({ players = {}, grid = [], tokens = [], encounter = {}, 
                                     {activeAction.a !== undefined && <span>AoE: {(activeAction.isEcho && !activeAction.isEchoSpellCast) ? '0 (SINGLE TILE ANCHOR)' : (activeAction.a === 'line3' ? '3-HEX LINE' : activeAction.a === 'cluster3' ? '3-HEX CLUSTER' : `${activeAction.a} RADIUS`)}</span>}
                                     {activeAction.effectName && <span className="text-purple-400">STATE: [{(String(activeAction.effectName).toLowerCase() !== String(activeAction.effectCore || '').toLowerCase() && activeAction.effectCore) ? `${activeAction.effectName} : ${activeAction.effectCore}` : String(activeAction.effectName)}]</span>}
                                     {activeAction.terrain && <span className="text-yellow-400">TERRAIN: [{String(activeAction.terrain).toUpperCase()}]</span>}
-                                    {safeInt(activeAction.m) > 0 && <span className="text-blue-400">MOBILITY: {safeInt(activeAction.m)} [{String(activeAction.coreMobility || '').toUpperCase()}]</span>}
-                                    {(activeAction.a === 'line3' || activeAction.a === 'cluster3') && (
+                                    {safeInt(activeAction.m) > 0 && !activeAction.isBlinkCast && <span className="text-blue-400">MOBILITY: {safeInt(activeAction.m)} [{String(activeAction.coreMobility || '').toUpperCase()}]</span>}
+                                    {(activeAction.a === 'line3' || activeAction.a === 'cluster3' || activeAction.coreMobility === 'Push' || activeAction.coreMobility === 'Pull') && (
                                         <div className="flex gap-2 ml-4"> <button className="bg-gray-800 text-white px-2 py-1 text-[10px] font-bold border border-gray-600 hover:bg-white hover:text-black uppercase cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); setAoeRotation(r => (r - 1 + 6) % 6); }}>↶ Rotate (Q)</button> <button className="bg-gray-800 text-white px-2 py-1 text-[10px] font-bold border border-gray-600 hover:bg-white hover:text-black uppercase cursor-pointer pointer-events-auto" onClick={(e) => { e.stopPropagation(); setAoeRotation(r => (r + 1) % 6); }}>↷ Rotate (R)</button> </div>
                                     )}
                                 </div>
                             )}
                         </div>
-                        <button className={`font-bold px-4 py-2 uppercase tracking-wider text-sm border transition-colors cursor-pointer pointer-events-auto ${activeAction.type === 'move' || activeAction.type === 'blink' ? 'bg-[#166534] text-white border-[#22c55e] hover:bg-white hover:text-[#166534]' : 'bg-red-600 text-white border-red-500 hover:bg-white hover:text-red-600'}`} onClick={clearActiveAction}>Clear</button>
+                        <button className={`font-bold px-4 py-2 uppercase tracking-wider text-sm border transition-colors cursor-pointer pointer-events-auto ${activeAction.type === 'move' || activeAction.isBlinkCast ? 'bg-[#166534] text-white border-[#22c55e] hover:bg-white hover:text-[#166534]' : 'bg-red-600 text-white border-red-500 hover:bg-white hover:text-red-600'}`} onClick={clearActiveAction}>Clear</button>
                     </div>
                 )}
                 

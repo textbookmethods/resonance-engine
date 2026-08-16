@@ -1,3 +1,4 @@
+// src/components/Spellbook.jsx
 /* eslint-disable */
 import React from 'react';
 
@@ -71,7 +72,6 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                         const dispRaw = skill.elementRaw || skill.element || 'Kinetic'; 
                         const dispCore = skill.elementCore || 'Kinetic'; 
                         const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                        const isBlink = safeInt(skill.m) > 0 && String(skill.mobilityName || '').toLowerCase().includes('blink');
 
                         return (
                             <div key={skill.id} className="bg-[#0f172a] border border-gray-700 p-4 relative group flex flex-col shadow-lg hover:border-[#a855f7] transition-colors duration-300">
@@ -98,6 +98,7 @@ export default function Spellbook({ players = {}, localId, pushUpdate }) {
                                         {skill.effectName && <div className="text-purple-400 text-[10px] font-bold uppercase tracking-wider">STATE: [{skill.effectName}]</div>}
                                         {skill.terrain && <div className="text-yellow-500 text-[10px] font-bold uppercase tracking-wider">TERRAIN: [{String(skill.terrain).toUpperCase()}]</div>}
                                         {safeInt(skill.m) > 0 && <div className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">MOBILITY: {safeInt(skill.m)} [{String(skill.mobilityName || skill.mobility || '').toUpperCase()}]</div>}
+                                        {skill.rangeMode === 'custom' && <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">RANGE: {safeInt(skill.customRange)} HEXES</div>}
                                         
                                         {skill.a !== undefined && skill.a !== 0 && skill.a !== '0' && (
                                             <div className="text-gray-500 text-[10px] uppercase font-bold tracking-wider pt-1">

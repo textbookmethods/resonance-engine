@@ -1,19 +1,18 @@
+// src/components/PlayerHUD.jsx
 /* eslint-disable */
 import React, { useState } from 'react';
 import { armory } from '../data/armory';
 
-// MINIFIED DICTIONARIES & CONSTANTS
 const safeArmory = (Array.isArray(armory) && armory.length > 0) ? armory : [{ id: 'w01', name: 'System Fallback', range: '1', baseDmg: 3 }];
 const ELEMENT_DICTIONARY = { 'thermal': ['fire', 'heat', 'magma', 'lava', 'ash', 'plasma', 'steam', 'solar', 'sun', 'flame', 'pyro', 'scorch', 'burn', 'inferno', 'ignition'], 'cryo': ['ice', 'cold', 'frost', 'snow', 'water', 'liquid', 'ocean', 'glacier', 'hydro', 'aqua', 'chill', 'blizzard', 'freeze', 'arctic'], 'electro': ['lightning', 'electric', 'spark', 'thunder', 'magnetic', 'storm', 'volt', 'shock', 'galvanic', 'energy', 'emp'], 'toxic': ['poison', 'acid', 'venom', 'decay', 'rot', 'radiation', 'bio', 'gas', 'smog', 'plague', 'blight', 'corrosive', 'noxious', 'viral', 'chemical'], 'radiant': ['light', 'holy', 'divine', 'healing', 'spirit', 'luminous', 'glow', 'life', 'order', 'sacred', 'blessed', 'purify', 'stellar'], 'void': ['dark', 'shadow', 'space', 'gravity', 'time', 'cosmic', 'null', 'psychic', 'mind', 'mental', 'chaos', 'entropy', 'abyss', 'astral', 'telekinetic', 'warp'], 'kinetic': ['physical', 'force', 'bludgeoning', 'piercing', 'slashing', 'earth', 'stone', 'rock', 'wind', 'air', 'pressure', 'metal', 'steel', 'sand', 'dust', 'aero', 'geo', 'sound', 'sonic', 'acoustic', 'seismic', 'blood'] };
 const STATE_DICTIONARY = { 'Hijacked': ['hijack', 'mind control', 'dominate', 'possess', 'control'], 'Execute': ['execute', 'erase', 'delete'], 'Bleed': ['bleed', 'hemorrhage', 'lacerate'], 'Burn': ['burn', 'ignite', 'scorch'], 'Poisoned': ['poison', 'venom', 'decay'], 'Immobilized': ['immobilize', 'root', 'snare'], 'Stunned': ['stun', 'paralyze', 'petrify'], 'Shielded': ['shield', 'protect', 'barrier'], 'Vulnerable': ['vulnerable', 'expose', 'sunder'], 'Knockdown': ['knockdown', 'trip', 'shove'], 'Blind': ['blind', 'obscure', 'smoke'], 'Haste': ['haste', 'speed', 'quick'], 'Slowed': ['slow', 'sluggish', 'chill'], 'Shocked': ['shock', 'glitch', 'jolt'], 'Evasive': ['evade', 'dodge', 'blur'], 'Invulnerable': ['invulnerable', 'stasis', 'immune'] };
 const MOBILITY_DICTIONARY = { 'Blink': ['blink', 'teleport', 'jump'], 'Push': ['push', 'repel', 'throw'], 'Pull': ['pull', 'attract', 'draw'] };
 const CLASS_AFFINITIES = { 'Vanguard': { states: ['Knockdown', 'Bleed', 'Shielded', 'Burn', 'Execute'] }, 'Sniper': { states: ['Vulnerable', 'Blind', 'Bleed', 'Execute', 'Evasive'] }, 'Conduit': { states: ['Stunned', 'Shocked', 'Shielded', 'Haste', 'Immobilized'] }, 'Paladin': { states: ['Shielded', 'Burn', 'Knockdown', 'Invulnerable'] }, 'Saboteur': { states: ['Immobilized', 'Blind', 'Slowed', 'Shocked', 'Vulnerable', 'Poisoned'] }, 'Skirmisher': { states: ['Haste', 'Evasive', 'Bleed', 'Slowed'] }, 'Rookie': { states: ['Haste', 'Bleed'] } };
 const ELEMENT_DESCRIPTIONS = { 'Kinetic': 'Physical force, bludgeoning, slashing, earth, wind.', 'Thermal': 'Heat, fire, plasma, magma.', 'Cryo': 'Cold, ice, water, frost.', 'Electro': 'Lightning, electricity, magnetic.', 'Toxic': 'Poison, acid, radiation, decay.', 'Radiant': 'Light, holy, healing, order.', 'Void': 'Dark, gravity, space, psychic.' };
-const STATE_DESCRIPTIONS = { 'Hijacked': 'Unit is controlled by opposing network.', 'Execute': 'Instantly reduces HP to 0. Bypasses Invulnerable/Shields.', 'Bleed': 'Takes 1 True Damage at start of turn.', 'Burn': 'Takes 2 Thermal Damage at start of turn. Water/Cryo cancels.', 'Poisoned': 'Healing received halved. Takes 1 Toxic Damage at start of turn.', 'Immobilized': 'Movement reduced to 0. Cannot be pushed/pulled.', 'Stunned': 'Movement reduced to 0. Cannot act. Evasion drops to 0.', 'Shielded': 'Energy barrier mitigating incoming payloads.', 'Vulnerable': 'Takes 1.5x damage from all sources.', 'Knockdown': 'Movement points halved next turn. Melee attacks against unit gain Flanking.', 'Blind': 'Targeting range reduced to 1. AoE radius becomes 0.', 'Haste': '+2 Movement Points.', 'Slowed': '-2 Movement Points.', 'Shocked': 'Cannot use abilities costing >2 Res.', 'Evasive': 'Automatically mitigates next non-Flanking/non-AoE attack.', 'Invulnerable': 'Negates all incoming damage.' };
+const STATE_DESCRIPTIONS = { 'Hijacked': 'Unit is controlled by opposing network.', 'Execute': 'Instantly reduces HP to 0. Bypasses Invulnerable/Shields.', 'Bleed': 'Takes 1 True Damage at End of Turn.', 'Burn': 'Takes 2 Thermal Damage at End of Turn. Water/Cryo cancels.', 'Poisoned': 'Healing received halved. Takes 1 Toxic Damage at End of Turn.', 'Immobilized': 'Movement reduced to 0. Cannot be pushed/pulled.', 'Stunned': 'Movement reduced to 0. Cannot act. Evasion drops to 0.', 'Shielded': 'Energy barrier mitigating incoming payloads.', 'Vulnerable': 'Takes 1.5x damage from all sources.', 'Knockdown': 'Movement points halved next turn. Melee attacks against unit gain Flanking.', 'Blind': 'Targeting range reduced to 1. AoE radius becomes 0.', 'Haste': '+2 Movement Points.', 'Slowed': '-2 Movement Points.', 'Shocked': 'Cannot use abilities costing >2 Res.', 'Evasive': 'Automatically mitigates next non-Flanking/non-AoE attack.', 'Invulnerable': 'Negates all incoming damage.' };
 const ELEMENT_STATE_MAP = { 'Kinetic': ['Bleed', 'Immobilized', 'Stunned', 'Shielded', 'Vulnerable', 'Knockdown', 'Evasive'], 'Thermal': ['Burn', 'Blind', 'Vulnerable', 'Execute'], 'Cryo': ['Slowed', 'Immobilized', 'Stunned', 'Shielded'], 'Electro': ['Shocked', 'Stunned', 'Haste', 'Blind', 'Hijacked'], 'Toxic': ['Poisoned', 'Blind', 'Vulnerable'], 'Radiant': ['Blind', 'Haste', 'Shielded', 'Invulnerable'], 'Void': ['Execute', 'Evasive', 'Blind', 'Slowed', 'Immobilized', 'Hijacked'] };
 const STATE_TIERS = { 'Bleed': 1, 'Burn': 1, 'Poisoned': 1, 'Haste': 1, 'Slowed': 1, 'Knockdown': 3, 'Blind': 3, 'Shielded': 3, 'Vulnerable': 3, 'Shocked': 3, 'Evasive': 3, 'Immobilized': 5, 'Stunned': 5, 'Invulnerable': 5, 'Execute': 10, 'Hijacked': 10 };
 
-// UTILS
 const safeInt = (val) => isNaN(parseInt(val)) ? 0 : parseInt(val);
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 const safeArray = (arr) => { if (!arr) return []; if (Array.isArray(arr)) return arr.filter(i => i !== null && i !== undefined); if (typeof arr === 'object') return Object.values(arr).filter(i => i !== null && i !== undefined); return []; };
@@ -31,7 +30,7 @@ const getAutomatedAffinity = (playerAffinity, activeClass, wpnElement, spellElem
 const getAoeCost = (a) => { if (a === 'line3' || a === 'cluster3') return 1; const n = parseInt(a) || 0; return n * n; };
 
 export default function PlayerHUD({ players = {}, localId, encounter = {}, tokens = [], pushUpdate }) {
-    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', payload: 'damage', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '', isEcho: false });
+    const [builder, setBuilder] = useState({ name: '', elementRaw: 'Kinetic', payload: 'damage', d: 0, u: 0, a: 0, effectName: '', desc: '', terrain: '', m: 0, mobilityName: '', isEcho: false, rangeMode: 'weapon', customRange: 1 });
     const [riftValue, setRiftValue] = useState(1);
 
     const rawPlayer = players[localId];
@@ -65,7 +64,8 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     const activeAffinity = player.affinityLocked ? (player.affinity || 'Kinetic') : getCoreElement(player.affinityRaw || 'Kinetic');
     const affinityData = getAutomatedAffinity(activeAffinity, activeClass, weaponCoreElement, builderCoreElement, builderCoreState, safeInt(builder.u));
     const tCost = builder.terrain === 'minor' ? 1 : builder.terrain === 'clear' ? 2 : builder.terrain === 'major' ? 3 : builder.terrain === 'severe' ? 5 : 0;
-    const calcCost = Math.ceil(affinityData.alpha * ((safeInt(builder.d) || 0) + (safeInt(builder.u) || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a)));
+    const rCost = builder.rangeMode === 'custom' ? safeInt(builder.customRange) : 0;
+    const calcCost = Math.ceil(affinityData.alpha * ((safeInt(builder.d) || 0) + (safeInt(builder.u) || 0) + tCost + safeInt(builder.m) + getAoeCost(builder.a) + rCost));
     
     const statuses = safeArray(player.statuses); const activeCoreStates = statuses.map(st => getCoreState(st));
     const isStunned = activeCoreStates.includes('Stunned'); const isShocked = activeCoreStates.includes('Shocked'); const isImmobilized = activeCoreStates.includes('Immobilized'); const isBlind = activeCoreStates.includes('Blind');
@@ -117,7 +117,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
     };
 
     const editCardFromHUD = (card) => {
-        setBuilder({ name: card.name || '', elementRaw: card.elementRaw || 'Kinetic', payload: card.payload || 'damage', d: safeInt(card.d), u: safeInt(card.u), a: card.a || 0, effectName: card.effectName || '', desc: card.desc || '', terrain: card.terrain || '', m: safeInt(card.m), mobilityName: card.mobilityName || '', isEcho: card.isEcho || false });
+        setBuilder({ name: card.name || '', elementRaw: card.elementRaw || 'Kinetic', payload: card.payload || 'damage', d: safeInt(card.d), u: safeInt(card.u), a: card.a || 0, effectName: card.effectName || '', desc: card.desc || '', terrain: card.terrain || '', m: safeInt(card.m), mobilityName: card.mobilityName || '', isEcho: card.isEcho || false, rangeMode: card.rangeMode || 'weapon', customRange: safeInt(card.customRange) || 1 });
         updatePlayer('customCards', safeArray(player.customCards).filter(c => String(c.id) !== String(card.id))); window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -127,7 +127,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         if (!isMyTurn) return alert("System Locked: Not your active turn."); if (player.usedBasicAttack) return alert("System Locked: Basic attack already executed this turn."); if (disableAttacks) return alert("System Locked: Agent is STUNNED."); if (!isSynergy) return alert("System Locked: DP Requirements not met for equipped weapon.");
         let finalRange = isBlind ? '1' : (activeWeapon.range || '1'); if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes.");
         const rawWpn = activeWeapon.element || 'Kinetic'; const coreWpn = getCoreElement(rawWpn);
-        safePush(s => ({ ...s, activeAction: { type: 'target', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false, isBasic: true, isImprovised: false, originalCost: 0, cost: 0, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), a: 0, u: 0, m: 0, coreMobility: '', range: String(finalRange), effectName: '', effectCore: '', elementRaw: String(rawWpn), elementCore: String(coreWpn), terrain: '', desc: '', isEcho: false } })); 
+        safePush(s => ({ ...s, activeAction: { type: 'target', source: String(player.name || 'Player'), sourceId: String(localId), isEnemy: false, isBasic: true, isImprovised: false, originalCost: 0, cost: 0, name: String(activeWeapon.name || 'Weapon Attack'), payload: 'damage', d: safeInt(calcBaseDmg), a: 0, u: 0, m: 0, coreMobility: '', range: String(finalRange), effectName: '', effectCore: '', elementRaw: String(rawWpn), elementCore: String(coreWpn), terrain: '', desc: '', isEcho: false, isBlinkCast: false } })); 
     };
     
     const primeCard = (c, isImprovised = false, originalCost = 0) => { 
@@ -135,14 +135,17 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
         const requiredRes = isImprovised ? 1 : safeInt(c.cost); if (currentRes < requiredRes) return alert(`System Locked: Insufficient Resonance. Required: ${requiredRes}.`);
         if (disableAttacks) return alert("System Locked: Agent is STUNNED.");
         
-        let finalRange = isBlind ? '1' : (activeWeapon.range || '1-3'); 
+        let finalRange = isBlind ? '1' : (c.rangeMode === 'custom' ? String(c.customRange || 1) : (activeWeapon.range || '1-3')); 
         let finalAoe = isBlind ? 0 : (c.isEcho ? 0 : (c.a !== undefined ? c.a : 0)); 
+        
+        const mobilityRaw = c.mobilityName || c.mobility || ''; const coreMobility = getCoreMobility(mobilityRaw); 
+        const isBlinkCast = safeInt(c.m) > 0 && coreMobility === 'Blink';
+        
+        if (isBlinkCast) finalRange = String(c.m);
         if (isBlind) alert("Warning: BLIND state active. Targeting optics restricted to adjacent hexes and AoE is zeroed.");
-        
-        const mobilityRaw = c.mobilityName || c.mobility || ''; const coreMobility = getCoreMobility(mobilityRaw); const isBlink = safeInt(c.m) > 0 && coreMobility === 'Blink';
-        
+
         safePush(s => ({ ...s, activeAction: { 
-            type: isBlink ? 'blink' : 'target', 
+            type: 'target', 
             source: String(player.name || 'Player'), 
             sourceId: String(localId), 
             casterTokenId: null,
@@ -166,7 +169,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
             terrain: String(c.terrain || ''), 
             desc: String(c.desc || ''), 
             cardId: c.id ? String(c.id) : null,
-            isEcho: c.isEcho || false 
+            isEcho: c.isEcho || false,
+            isBlinkCast: isBlinkCast,
+            blinkRange: isBlinkCast ? safeInt(c.m) : 0
         } })); 
     };
 
@@ -330,6 +335,21 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         </select>
                     </div>
 
+                    <div className="flex flex-col gap-1 mt-2">
+                        <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Targeting Range (r):</span>
+                        <select className="w-full bg-[#0f172a] border border-gray-600 p-2 text-white outline-none text-[10px] cursor-pointer" value={builder.rangeMode || 'weapon'} onChange={e => setBuilder({...builder, rangeMode: e.target.value})}>
+                            <option value="weapon">Weapon Range (Free)</option>
+                            <option value="custom">Custom Range (+1u per Hex)</option>
+                        </select>
+                        {builder.rangeMode === 'custom' && (
+                            <div className="flex items-center justify-center gap-1 bg-[#0f172a] border border-gray-600 p-1 mt-1">
+                                <button className="text-white px-3 py-1 font-bold hover:bg-gray-800 transition-colors" onClick={() => setBuilder({...builder, customRange: Math.max(1, (builder.customRange||1) - 1)})}>-</button>
+                                <span className="text-white font-bold w-6 text-center text-xs">{builder.customRange || 1}</span>
+                                <button className="text-white px-3 py-1 font-bold hover:bg-gray-800 transition-colors" onClick={() => setBuilder({...builder, customRange: Math.min(10, (builder.customRange||1) + 1)})}>+</button>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="flex justify-between items-center mt-2">
                         <span className="text-gray-300 text-[10px] uppercase font-bold tracking-wider">Payload Value (v):</span>
                         <div className="flex items-center justify-center gap-1 bg-[#0f172a] border border-gray-600 p-1">
@@ -397,9 +417,9 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                         {builder.m > 0 && (
                             <select className="w-full bg-[#0f172a] border border-blue-500 p-2 text-white outline-none text-[10px] cursor-pointer animate-fade-in mt-1" value={builder.mobilityName || ''} onChange={e=>setBuilder({...builder, mobilityName: e.target.value})}>
                                 <option value="">-- SELECT MOBILITY --</option>
-                                <option value="Blink">[BLINK] - Teleport Self (Ignores pathing)</option>
-                                <option value="Push">[PUSH] - Force target away</option>
-                                <option value="Pull">[PULL] - Force target closer</option>
+                                <option value="Blink">[BLINK] - Teleport Self + Trigger Payload at Dest.</option>
+                                <option value="Push">[PUSH] - Force target away (Q/R vector)</option>
+                                <option value="Pull">[PULL] - Force target closer (Q/R vector)</option>
                             </select>
                         )}
                     </div>
@@ -435,7 +455,7 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                 <div className="grid grid-cols-2 gap-2 border-t border-gray-700 pt-4">
                     {customCards.map(c => {
                         const dispRaw = c.elementRaw || c.element || 'Kinetic'; const dispCore = c.elementCore || getCoreElement(c.elementRaw || 'Kinetic'); const showType = (String(dispRaw).toLowerCase() !== String(dispCore).toLowerCase()) ? `${dispRaw} [Core: ${dispCore}]` : dispCore;
-                        const cardCost = parseInt(c.cost) || 0; const isNoFuel = currentRes < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlink = safeInt(c.m) > 0 && coreMob === 'Blink';
+                        const cardCost = parseInt(c.cost) || 0; const isNoFuel = currentRes < cardCost; const coreMob = getCoreMobility(c.mobilityName || c.mobility || ''); const isBlinkCast = safeInt(c.m) > 0 && coreMob === 'Blink';
                         return (
                             <div key={c.id || Math.random()} className="bg-[#0f172a] border border-[#d1d5db] p-2 text-xs relative group flex flex-col">
                                 <div className="flex-1 pr-12 pb-2">
@@ -448,9 +468,10 @@ export default function PlayerHUD({ players = {}, localId, encounter = {}, token
                                     {c.effectName && <div title={STATE_DESCRIPTIONS[getCoreState(c.effectName)] || 'Active Status Check'} className="absolute top-2 right-12 text-purple-400 text-[10px] font-bold cursor-help">[{c.effectName}]</div>}
                                     {c.terrain && <div className="text-yellow-500 text-[10px] font-bold mt-1">Terrain: [{String(c.terrain).toUpperCase()}]</div>}
                                     {safeInt(c.m) > 0 && <div className="text-blue-400 text-[10px] font-bold mt-1">Mobility: {safeInt(c.m)} [{coreMob.toUpperCase()}]</div>}
+                                    {c.rangeMode === 'custom' && <div className="text-gray-400 text-[10px] font-bold mt-1">Range: {c.customRange} Hexes</div>}
                                     
                                     <button className={`mt-auto w-full font-bold py-1 uppercase transition-colors ${(isNoFuel || disableAttacks || !isMyTurn) ? 'bg-[#1e293b] text-gray-500 cursor-not-allowed border border-gray-700' : 'bg-[#d1d5db] text-black hover:bg-white'}`} disabled={isNoFuel || disableAttacks || !isMyTurn} onClick={() => primeCard(c)}>
-                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlink ? 'BLINK / DASH' : 'TARGET SKILL'))}
+                                        {disableAttacks ? 'LOCKED' : (isNoFuel ? 'NO FUEL' : (isBlinkCast ? 'BLINK CAST' : 'TARGET SKILL'))}
                                     </button>
                                 </div>
                                 <button className="absolute top-0 right-6 w-6 h-6 flex items-center justify-center bg-[#1e293b] border-l border-b border-gray-700 text-[#d1d5db] hover:text-black hover:bg-[#d1d5db] transition-colors" onClick={(e) => { e.stopPropagation(); editCardFromHUD(c); }} title="Edit Skill in Matrix">✎</button>
